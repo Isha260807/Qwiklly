@@ -50,10 +50,6 @@ const NotificationWindow = ({
         navigate(`/admin/bookings`);
       }
     }
-
-    if (notification.relatedType === 'scrap') {
-      navigate('/admin/scrap');
-    }
     onClose();
   };
 

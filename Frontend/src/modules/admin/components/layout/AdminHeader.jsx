@@ -67,7 +67,6 @@ const AdminHeader = ({ onMenuClick }) => {
       { path: '/admin/settlements/history', title: 'Settlement History', description: 'View past transaction records' },
       { path: '/admin/settlements', title: 'Settlements', description: 'Manage financial settlements' },
       { path: '/admin/reviews', title: 'Reviews', description: 'Manage platform reviews and ratings' },
-      { path: '/admin/scrap', title: 'Scrap Orders', description: 'Manage platform scrap collection orders' },
     ];
 
     const match = mappings.find(m => pathname === m.path || pathname.startsWith(m.path + '/'));

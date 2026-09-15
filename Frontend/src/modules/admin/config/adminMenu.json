@@ -61,15 +61,6 @@
     ]
   },
   {
-    "title": "Scrap Items",
-    "route": "/admin/scrap",
-    "allowedRoles": [
-      "super_admin",
-      "admin"
-    ],
-    "children": []
-  },
-  {
     "title": "Payments",
     "route": "/admin/payments",
     "allowedRoles": [

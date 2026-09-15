@@ -25,7 +25,6 @@ import CategoryModal from './components/CategoryModal';
 import SearchOverlay from './components/SearchOverlay';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
-import ScrapPromotionCard from './components/ScrapPromotionCard';
 import DebugConsole from '../../components/common/DebugConsole';
 
 
@@ -532,11 +531,6 @@ const Home = () => {
                   />
                 </motion.section>
               )}
-
-              {/* Scrap Promotion Section */}
-              <motion.section variants={itemVariants}>
-                <ScrapPromotionCard onClick={() => navigate('/user/scrap')} />
-              </motion.section>
 
 
               {/* Curated Services */}

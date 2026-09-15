@@ -372,11 +372,6 @@ const Account = () => {
           <motion.div variants={itemVariants} className="mb-6">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 pl-2">Shopping</h3>
             <MenuItem
-              icon={FiShoppingBag}
-              label="Scrap Deals"
-              onClick={() => navigate('/user/scrap')}
-            />
-            <MenuItem
               icon={FiFileText}
               label="My Plans"
               onClick={() => navigate('/user/my-plan')}
