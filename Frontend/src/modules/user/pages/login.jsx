@@ -1,30 +1,102 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FiPhone, FiArrowRight, FiCheckCircle, FiChevronLeft } from 'react-icons/fi';
+import { FiPhone, FiCheckCircle, FiChevronLeft, FiGift } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
-import { themeColors } from '../../../theme';
 import { userAuthService } from '../../../services/authService';
-import Logo from '../../../components/common/Logo';
 import LogoLoader from '../../../components/common/LogoLoader';
-import DebugConsole from '../components/common/DebugConsole';
+import { z } from 'zod';
 
-import { z } from "zod";
-
-// Zod schema
+// Zod schema for phone validation
 const phoneSchema = z.object({
-  phone: z.string().regex(/^[6-9]\d{9}$/, "Please enter a valid 10-digit Indian phone number"),
+  phone: z.string().regex(/^[6-9]\d{9}$/, 'Please enter a valid 10-digit Indian mobile number'),
 });
+
+// Curated high quality on-demand home service photos for 3 marquee rows
+const ROW_1_IMAGES = [
+  {
+    url: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=95',
+    alt: 'Kitchen Counter Cleaning'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?auto=format&fit=crop&w=800&q=95',
+    alt: 'Bathroom Deep Clean'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1527515637462-cff94eecc1ac?auto=format&fit=crop&w=800&q=95',
+    alt: 'Floor Sweeping & Care'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=800&q=95',
+    alt: 'Housekeeping Service'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=95',
+    alt: 'AC Maintenance & Servicing'
+  }
+];
+
+const ROW_2_IMAGES = [
+  {
+    url: 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?auto=format&fit=crop&w=800&q=95',
+    alt: 'Utensil & Sink Cleaning'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1628177142898-93e36e4e3a50?auto=format&fit=crop&w=800&q=95',
+    alt: 'Floor Mopping & Sanitation'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=95',
+    alt: 'Table & Furniture Dusting'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=800&q=95',
+    alt: 'Electrician & Switchboard Repair'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=800&q=95',
+    alt: 'Plumbing & Pipe Repair'
+  }
+];
+
+const ROW_3_IMAGES = [
+  {
+    url: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=95',
+    alt: 'Ceiling Fan & Appliance Dusting'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1527515545081-5db817172677?auto=format&fit=crop&w=800&q=95',
+    alt: 'Window Glass Spray Cleaning'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=95',
+    alt: 'Laundry & Washing Machine Help'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=95',
+    alt: 'Living Room Sofa & Upholstery Care'
+  },
+  {
+    url: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=95',
+    alt: 'Home Painting & Touchups'
+  }
+];
 
 const Login = () => {
   const navigate = useNavigate();
-  const [step, setStep] = useState('phone'); // 'phone' or 'otp'
+  const [step, setStep] = useState('phone'); // 'phone' | 'otp'
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpToken, setOtpToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
+  const [hasReferral, setHasReferral] = useState(false);
+  const [referralCode, setReferralCode] = useState('');
 
-  // Timer countdown effect
+  // Focus refs
+  const phoneInputRef = useRef(null);
+  const otpInputRefs = useRef([]);
+
+  // Timer countdown
   useEffect(() => {
     let interval;
     if (resendTimer > 0) {
@@ -35,30 +107,26 @@ const Login = () => {
     return () => clearInterval(interval);
   }, [resendTimer]);
 
-  // Refs for focus management
-  const phoneInputRef = useRef(null);
-  const otpInputRefs = useRef([]);
-
-  // Auto-focus logic
+  // Auto-focus logic & authenticated redirect
   useEffect(() => {
-    // Redirect if already logged in
     if (localStorage.getItem('accessToken')) {
       navigate('/user', { replace: true });
       return;
     }
 
     if (step === 'phone' && phoneInputRef.current) {
-      setTimeout(() => phoneInputRef.current.focus(), 100);
+      setTimeout(() => phoneInputRef.current?.focus(), 150);
     } else if (step === 'otp' && otpInputRefs.current[0]) {
-      setTimeout(() => otpInputRefs.current[0].focus(), 100);
+      setTimeout(() => otpInputRefs.current[0]?.focus(), 150);
     }
   }, [step, navigate]);
 
+  // Handle phone submit / Send OTP
   const handlePhoneSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
 
-    // Zod Validation
-    const validationResult = phoneSchema.safeParse({ phone: phoneNumber });
+    const cleanPhone = phoneNumber.replace(/\D/g, '');
+    const validationResult = phoneSchema.safeParse({ phone: cleanPhone });
     if (!validationResult.success) {
       toast.error(validationResult.error.errors[0].message);
       return;
@@ -66,19 +134,17 @@ const Login = () => {
 
     setIsLoading(true);
     try {
-      // Clean phone number
-      const cleanPhone = phoneNumber.replace(/\D/g, '');
       const response = await userAuthService.sendOTP(cleanPhone);
 
       if (response.success) {
-        setOtpToken(response.token);
+        setOtpToken(response.token || 'verification-pending');
         setIsLoading(false);
         setStep('otp');
-        setResendTimer(120); // Start 2 min timer
+        setResendTimer(120);
         toast.success(
           <div className="flex items-center gap-2">
-            <FiCheckCircle className="text-green-500" />
-            <span>OTP sent successfully!</span>
+            <FiCheckCircle className="text-emerald-500 text-lg" />
+            <span className="font-semibold">OTP sent successfully!</span>
           </div>
         );
       } else {
@@ -91,16 +157,14 @@ const Login = () => {
     }
   };
 
+  // OTP inputs handling
   const handleOtpChange = (index, value) => {
-    // Allow only numbers
     if (value && !/^\d+$/.test(value)) return;
 
     if (value.length > 1) {
-      // Handle paste of full OTP
       if (index === 0 && value.length === 6) {
         const chars = value.split('');
         setOtp(chars);
-        // Focus the last input or verify button
         otpInputRefs.current[5]?.focus();
         return;
       }
@@ -111,7 +175,6 @@ const Login = () => {
     newOtp[index] = value;
     setOtp(newOtp);
 
-    // Auto focus next input
     if (value && index < 5) {
       otpInputRefs.current[index + 1]?.focus();
     }
@@ -123,7 +186,7 @@ const Login = () => {
     }
   };
 
-  // Auto-verify as last digit enters
+  // Auto-verify as 6th digit is entered
   useEffect(() => {
     const otpValue = otp.join('');
     if (otpValue.length === 6 && !isLoading && otpToken) {
@@ -131,21 +194,24 @@ const Login = () => {
     }
   }, [otp]);
 
+  // Handle OTP Verification
   const handleOtpSubmit = async (e) => {
     if (e) e.preventDefault();
     const otpValue = otp.join('');
     if (otpValue.length !== 6) {
-      toast.error('Please enter complete OTP');
+      toast.error('Please enter complete 6-digit OTP');
       return;
     }
     if (!otpToken) {
       toast.error('Please request OTP first');
       return;
     }
+
     setIsLoading(true);
     try {
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
       const response = await userAuthService.verifyLogin({
-        phone: phoneNumber.replace(/\D/g, ''),
+        phone: cleanPhone,
         otp: otpValue
       });
 
@@ -154,12 +220,13 @@ const Login = () => {
           toast.success('Phone verified! Please complete your registration.');
           navigate('/user/signup', {
             state: {
-              phone: phoneNumber,
-              verificationToken: response.verificationToken
+              phone: cleanPhone,
+              verificationToken: response.verificationToken,
+              referralCode: referralCode.trim() || undefined
             }
           });
         } else {
-          toast.success('Welcome back!');
+          toast.success('Welcome back to Qwiklly!');
           navigate('/user', { replace: true });
         }
       } else {
@@ -172,46 +239,101 @@ const Login = () => {
     }
   };
 
-  // Brand Colors from theme
-  const brandColor = themeColors.brand?.teal || '#347989';
+  // Helper render for Marquee Row
+  const renderMarqueeRow = (images, animationClass) => {
+    // Duplicate array to achieve infinite seamless loop
+    const doubledImages = [...images, ...images, ...images];
+    return (
+      <div className="overflow-hidden w-full flex items-center py-1">
+        <div className={animationClass}>
+          {doubledImages.map((img, idx) => (
+            <div
+              key={`${idx}-${img.alt}`}
+              className="flex-shrink-0 mx-1 sm:mx-1.5 rounded-2xl overflow-hidden shadow-xs border-[1.5px] border-white/90 bg-white/60 transition-transform duration-300 hover:scale-105"
+            >
+              <img
+                src={img.url}
+                alt={img.alt}
+                loading="eager"
+                decoding="async"
+                className="w-28 h-20 sm:w-32 sm:h-22 object-cover rounded-2xl contrast-[1.08] saturate-[1.10] brightness-[1.03]"
+                style={{ imageRendering: '-webkit-optimize-contrast' }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="min-h-[100dvh] bg-gray-50 flex flex-col justify-start sm:justify-center py-12 sm:px-6 lg:px-8 relative overflow-x-hidden">
-      {/* Decorative Background Elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#347989] opacity-[0.03] rounded-full blur-3xl animate-floating" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#D68F35] opacity-[0.03] rounded-full blur-3xl animate-floating" style={{ animationDelay: '2s' }} />
+    <div className="min-h-screen bg-[#FFF7FA] flex justify-center items-center sm:py-8 sm:px-4">
+      {/* Main Container Phone Frame / Card */}
+      <div className="w-full max-w-md min-h-screen sm:min-h-[780px] bg-white sm:rounded-3xl sm:shadow-2xl sm:border sm:border-[#E8D9DF] flex flex-col justify-between overflow-hidden relative select-none">
+        
+        {/* ================= 1. HEADER SECTION ================= */}
+        <div className="bg-gradient-to-br from-[#C2457C] via-[#AB2D65] to-[#8C1B4E] text-white pt-7 pb-8 px-6 rounded-b-[40px] shadow-lg shadow-[#AB2D65]/25 relative z-20">
+          {/* Top Row: Skip login button */}
+          <div className="flex justify-end items-center mb-1">
+            <button
+              onClick={() => navigate('/user')}
+              className="bg-white/20 hover:bg-white/35 active:scale-95 text-white font-semibold text-xs px-3.5 py-1.5 rounded-full transition-all duration-200 backdrop-blur-md cursor-pointer border border-white/40 shadow-xs"
+            >
+              Skip login
+            </button>
+          </div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-8 relative z-10 animate-fade-in">
-        <div className="flex justify-center mb-6">
-          <Logo className="h-24 w-24 transform hover:scale-110 transition-transform duration-500" />
+          {/* Brand Name & Tagline */}
+          <div className="text-center">
+            <h1
+              className="text-3xl sm:text-4xl font-black tracking-tight !text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)] font-sans"
+              style={{ color: '#ffffff' }}
+            >
+              Qwiklly
+            </h1>
+            <p
+              className="text-sm sm:text-base font-semibold mt-2 leading-snug max-w-[280px] mx-auto drop-shadow-xs !text-white"
+              style={{ color: '#ffffff' }}
+            >
+              Get professional service providers in minutes!
+            </p>
+          </div>
         </div>
-        <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-          {step === 'phone' ? 'Sign in to account' : 'Verify your phone'}
-        </h2>
-        <p className="mt-2 text-sm text-gray-600 animate-stagger-1 animate-fade-in">
-          {step === 'phone'
-            ? 'Enter your mobile number to get started'
-            : `We've sent a code to +91 ${phoneNumber}`
-          }
-        </p>
-      </div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0 relative z-10">
-        <div className="bg-white py-8 px-4 shadow-2xl shadow-gray-200/50 sm:rounded-2xl sm:px-10 border border-gray-100 relative overflow-hidden animate-slide-in-bottom">
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#347989] via-[#D68F35] to-[#BB5F36]" />
+        {/* ================= 2. ANIMATED 3-ROW IMAGE MARQUEE ================= */}
+        <div className="relative pt-3 pb-2 overflow-hidden flex flex-col gap-2">
+          {/* Top Soft Blend Gradient */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-[#FFF7FA] to-transparent z-10" />
+
+          {/* Row 1: Right to Left */}
+          {renderMarqueeRow(ROW_1_IMAGES, 'animate-marquee-left')}
+
+          {/* Row 2: Left to Right */}
+          {renderMarqueeRow(ROW_2_IMAGES, 'animate-marquee-right')}
+
+          {/* Row 3: Right to Left */}
+          {renderMarqueeRow(ROW_3_IMAGES, 'animate-marquee-left')}
+        </div>
+
+        {/* ================= 3. BOTTOM LOGIN / SIGNUP CARD ================= */}
+        <div className="px-6 pb-8 pt-2 relative z-20 bg-white -mt-6">
+          {/* Soft White Gradient Shadow Veil Rising from Top of Card */}
+          <div className="pointer-events-none absolute -top-20 inset-x-0 h-20 bg-gradient-to-t from-white via-white/80 to-transparent" />
 
           {step === 'phone' ? (
-            <form className="space-y-6" onSubmit={handlePhoneSubmit}>
-              <div className="animate-stagger-1 animate-fade-in">
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                  Mobile Number
-                </label>
-                <div className="relative rounded-xl shadow-sm group">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none group-focus-within:text-[#347989] transition-colors">
-                    <FiPhone className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <div className="absolute inset-y-0 left-10 flex items-center pointer-events-none">
-                    <span className="text-gray-500 font-medium border-r pr-2 border-gray-300 sm:text-sm">+91</span>
+            /* PHONE ENTRY STEP */
+            <form onSubmit={handlePhoneSubmit} className="space-y-4 relative z-10">
+              <div className="text-left mb-3">
+                <h2 className="text-2xl sm:text-3xl font-black text-[#24151D] tracking-tight">
+                  Log in or Sign up
+                </h2>
+              </div>
+
+              {/* Mobile Input Field */}
+              <div className="relative">
+                <div className="flex items-center bg-white border-2 border-[#E8D9DF] focus-within:border-[#720C3E] rounded-2xl shadow-sm overflow-hidden transition-all duration-300">
+                  <div className="px-4 py-3.5 bg-transparent border-r border-[#E8D9DF] text-[#24151D] font-bold text-base flex items-center gap-1.5">
+                    <span className="text-[#24151D]">+91</span>
                   </div>
                   <input
                     ref={phoneInputRef}
@@ -219,59 +341,90 @@ const Login = () => {
                     inputMode="numeric"
                     autoComplete="tel"
                     id="phone"
-                    className="block w-full pl-24 pr-4 py-3.5 border-gray-300 rounded-xl focus:ring-[#347989] focus:border-[#347989] sm:text-sm transition-all duration-300 ease-in-out hover:border-gray-400"
-                    placeholder="98765 43210"
+                    maxLength={10}
+                    className="w-full px-4 py-3.5 text-base font-semibold text-[#24151D] placeholder:text-[#6F5A64]/45 focus:outline-none bg-transparent"
+                    placeholder="Enter mobile number"
                     value={phoneNumber}
                     onChange={(e) => {
                       const val = e.target.value.replace(/\D/g, '');
                       if (val.length <= 10) setPhoneNumber(val);
                     }}
-                    style={{ '--tw-ring-color': brandColor }}
                   />
                 </div>
               </div>
 
-              <div className="animate-stagger-2 animate-fade-in">
-                <button
-                  type="submit"
-                  disabled={isLoading || phoneNumber.length < 10}
-                  className="group relative w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl text-sm font-bold text-white transition-all duration-500 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#347989] disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-1 transform shadow-lg shadow-[#347989]/30 hover:shadow-[#347989]/40 overflow-hidden"
-                  style={{ backgroundColor: brandColor }}
-                >
-                  <span className="absolute inset-0 w-full h-full bg-white/10 group-hover:translate-x-full transition-transform duration-700 -translate-x-full" />
-                  {isLoading ? (
-                    <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
-                  ) : (
-                    <span className="flex items-center gap-2 relative z-10">
-                      Get OTP <FiArrowRight className="group-hover:translate-x-1 transition-transform" />
-                    </span>
-                  )}
-                </button>
+              {/* Continue Button */}
+              <button
+                type="submit"
+                disabled={isLoading || phoneNumber.length < 10}
+                className={`w-full py-3.5 px-4 rounded-2xl text-base font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md ${
+                  phoneNumber.length === 10 && !isLoading
+                    ? 'bg-[#720C3E] hover:bg-[#4D082A] text-white shadow-[#720C3E]/25 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
+                    : 'bg-[#6F5A64]/20 text-[#6F5A64]/60 cursor-not-allowed shadow-none'
+                }`}
+              >
+                {isLoading ? (
+                  <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
+                ) : (
+                  <span>Continue</span>
+                )}
+              </button>
+
+              {/* Referral Code Checkbox */}
+              <div className="pt-1">
+                <label className="flex items-center justify-center gap-2 text-xs font-semibold text-[#24151D] cursor-pointer hover:text-[#720C3E] transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={hasReferral}
+                    onChange={(e) => setHasReferral(e.target.checked)}
+                    className="w-4 h-4 rounded border-[#E8D9DF] text-[#720C3E] focus:ring-[#720C3E] accent-[#720C3E] cursor-pointer"
+                  />
+                  <span>Have a referral code?</span>
+                </label>
+
+                {/* Optional Referral Code Slide-In */}
+                {hasReferral && (
+                  <div className="mt-2.5 animate-fade-in">
+                    <div className="flex items-center bg-white border border-[#E8D9DF] focus-within:border-[#720C3E] rounded-xl px-3 py-2 shadow-xs">
+                      <FiGift className="text-[#720C3E] mr-2" />
+                      <input
+                        type="text"
+                        placeholder="Enter referral code"
+                        value={referralCode}
+                        onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                        className="w-full text-xs font-semibold uppercase tracking-wider text-[#24151D] placeholder:text-[#6F5A64]/40 focus:outline-none bg-transparent"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="mt-6 animate-stagger-3 animate-fade-in">
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-200" />
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">New to Cleaning Expert Services?</span>
-                  </div>
-                </div>
-
-                <div className="mt-6">
-                  <Link
-                    to="/user/signup"
-                    className="w-full inline-flex justify-center py-3 px-4 rounded-xl shadow-sm bg-white text-sm font-medium text-gray-500 hover:text-[#347989] hover:bg-gray-50 border border-gray-200 transition-all duration-300 hover:border-[#347989]/30"
-                  >
-                    Create an account
-                  </Link>
-                </div>
-              </div>
+              {/* Terms and Privacy Policy */}
+              <p className="text-[11px] text-center text-[#6F5A64] pt-2 leading-relaxed">
+                By continuing, you agree to our{' '}
+                <Link to="/terms" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
+                  Terms of Service
+                </Link>{' '}
+                &{' '}
+                <Link to="/privacy" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
+                  Privacy Policy
+                </Link>
+              </p>
             </form>
           ) : (
-            <form className="space-y-6" onSubmit={handleOtpSubmit}>
-              <div className="flex justify-center gap-2 sm:gap-3 py-4 animate-stagger-1 animate-fade-in">
+            /* OTP VERIFICATION STEP */
+            <form onSubmit={handleOtpSubmit} className="space-y-4 animate-fade-in">
+              <div className="text-left mb-2">
+                <h2 className="text-2xl font-black text-[#24151D] tracking-tight">
+                  Verify OTP
+                </h2>
+                <p className="text-xs text-[#6F5A64] mt-0.5">
+                  Enter 6-digit code sent to <strong className="text-[#24151D]">+91 {phoneNumber}</strong>
+                </p>
+              </div>
+
+              {/* 6 Digit Inputs */}
+              <div className="flex justify-between gap-1.5 sm:gap-2 py-2">
                 {otp.map((digit, index) => (
                   <input
                     key={index}
@@ -283,25 +436,24 @@ const Login = () => {
                     value={digit}
                     onChange={(e) => handleOtpChange(index, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                    className="w-11 h-12 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-bold border-gray-300 rounded-xl focus:ring-[#347989] focus:border-[#347989] transition-all duration-300 shadow-sm border focus:-translate-y-1 hover:border-gray-400"
-                    style={{ caretColor: brandColor }}
+                    className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black border-2 border-[#E8D9DF] rounded-2xl focus:border-[#720C3E] focus:ring-2 focus:ring-[#720C3E]/20 bg-white text-[#24151D] transition-all duration-200 shadow-sm"
                   />
                 ))}
               </div>
 
-              <div className="flex items-center justify-between text-sm animate-stagger-2 animate-fade-in">
+              {/* Resend & Change Phone Number Links */}
+              <div className="flex items-center justify-between text-xs font-semibold pt-1">
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
+                  onClick={() => {
                     setOtp(['', '', '', '', '', '']);
                     setOtpToken('');
                     setStep('phone');
                     setResendTimer(0);
                   }}
-                  className="flex items-center font-medium text-gray-600 hover:text-[#347989] transition-colors"
+                  className="flex items-center text-[#6F5A64] hover:text-[#720C3E] transition-colors cursor-pointer"
                 >
-                  <FiChevronLeft className="mr-1" /> Change Number
+                  <FiChevronLeft className="mr-0.5 text-sm" /> Change Number
                 </button>
 
                 <button
@@ -312,9 +464,9 @@ const Login = () => {
                       setIsLoading(true);
                       const response = await userAuthService.sendOTP(phoneNumber.replace(/\D/g, ''));
                       if (response.success) {
-                        setOtpToken(response.token);
+                        setOtpToken(response.token || 'verification-pending');
                         setResendTimer(120);
-                        toast.success('OTP resent!');
+                        toast.success('OTP resent successfully!');
                       }
                     } catch (err) {
                       toast.error('Error sending OTP');
@@ -323,7 +475,7 @@ const Login = () => {
                     }
                   }}
                   disabled={isLoading || resendTimer > 0}
-                  className="font-medium text-[#347989] hover:text-[#D68F35] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="text-[#720C3E] hover:text-[#4D082A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {resendTimer > 0
                     ? `Resend in ${Math.floor(resendTimer / 60)}:${String(resendTimer % 60).padStart(2, '0')}`
@@ -331,32 +483,26 @@ const Login = () => {
                 </button>
               </div>
 
-              <div className="animate-stagger-3 animate-fade-in">
-                <button
-                  type="submit"
-                  disabled={isLoading || otp.join('').length !== 6}
-                  className="group relative w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl text-sm font-bold text-white transition-all duration-500 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#347989] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#347989]/30 hover:shadow-[#347989]/40 hover:-translate-y-1 transform overflow-hidden"
-                  style={{ backgroundColor: brandColor }}
-                >
-                  <span className="absolute inset-0 w-full h-full bg-white/10 group-hover:translate-x-full transition-transform duration-700 -translate-x-full" />
-                  {isLoading ? (
-                    <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
-                  ) : (
-                    <span className="flex items-center gap-2 relative z-10">
-                      Verify & Continue <FiArrowRight className="group-hover:translate-x-1 transition-transform" />
-                    </span>
-                  )}
-                </button>
-              </div>
+              {/* Verify & Continue Button */}
+              <button
+                type="submit"
+                disabled={isLoading || otp.join('').length !== 6}
+                className={`w-full py-3.5 px-4 rounded-2xl text-base font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md ${
+                  otp.join('').length === 6 && !isLoading
+                    ? 'bg-[#720C3E] hover:bg-[#4D082A] text-white shadow-[#720C3E]/25 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
+                    : 'bg-[#6F5A64]/20 text-[#6F5A64]/60 cursor-not-allowed shadow-none'
+                }`}
+              >
+                {isLoading ? (
+                  <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
+                ) : (
+                  <span>Verify & Continue</span>
+                )}
+              </button>
             </form>
           )}
         </div>
       </div>
-
-      <div className="mt-8 text-center text-xs text-gray-400 animate-fade-in animate-stagger-4">
-        &copy; {new Date().getFullYear()} Cleaning Expert Services. All rights reserved.
-      </div>
-      <DebugConsole />
     </div>
   );
 };
