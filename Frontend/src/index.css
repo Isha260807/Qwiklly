@@ -103,6 +103,36 @@
   filter: drop-shadow(0 0 16px rgba(114, 12, 62, 0.5)) drop-shadow(0 6px 12px rgba(0, 0, 0, 0.15));
 }
 
+/* Infinite Marquee Rows */
+@keyframes marquee-scroll-left {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes marquee-scroll-right {
+  0% { transform: translate3d(-50%, 0, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+.animate-marquee-left {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: marquee-scroll-left 32s linear infinite;
+}
+
+.animate-marquee-right {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: marquee-scroll-right 32s linear infinite;
+}
+
+.animate-marquee-left:hover,
+.animate-marquee-right:hover {
+  animation-play-state: paused;
+}
+
 /* Category Icon Animations */
 @keyframes category-slide-in {
   from {
@@ -205,10 +235,10 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
-}
-
-h1, h2, h3, h4, h5, h6 {
-  color: #24151D;
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    color: #24151D;
+  }
 }
 
 #root {
