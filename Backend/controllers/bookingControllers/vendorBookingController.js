@@ -1,10 +1,9 @@
 const mongoose = require('mongoose');
 const Booking = require('../../models/Booking');
-const Worker = require('../../models/Worker');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
-const { sendNotificationToUser, sendNotificationToVendor, sendNotificationToWorker } = require('../../services/firebaseAdmin');
+const { sendNotificationToUser, sendNotificationToVendor } = require('../../services/firebaseAdmin');
 
 /**
  * Get vendor bookings with filters

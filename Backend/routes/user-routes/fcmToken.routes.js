@@ -9,7 +9,6 @@ const { authenticate } = require('../../middleware/authMiddleware');
 const { sendPushNotification } = require('../../services/firebaseAdmin');
 const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
-const Worker = require('../../models/Worker');
 
 const MAX_TOKENS = 10; // Maximum tokens per platform
 

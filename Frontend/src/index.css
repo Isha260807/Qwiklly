@@ -1,9 +1,25 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand: #347989;
-  --color-brand-light: #f0fbfc;
-  --color-brand-dark: #2d6977;
+  --color-primary: #720C3E;
+  --color-primary-dark: #4D082A;
+  --color-primary-light: #9A2459;
+  --color-accent: #E8A0B8;
+
+  --color-bg-app: #FFF7FA;
+  --color-card: #FFFFFF;
+
+  --color-heading: #24151D;
+  --color-body: #6F5A64;
+  --color-border-custom: #E8D9DF;
+
+  --color-success: #2E8B57;
+  --color-warning: #D99A2B;
+  --color-error: #C0394B;
+
+  --color-brand: #720C3E;
+  --color-brand-light: #FFF7FA;
+  --color-brand-dark: #4D082A;
 }
 
 /* Slide up animation for modal */
@@ -37,7 +53,6 @@
 }
 
 /* Modern fade-in page transition - smooth and fast */
-/* Using opacity only to avoid transform stacking context issues that break fixed positioning */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -55,9 +70,9 @@
 }
 
 @keyframes pulse-subtle {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.1); }
-  70% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(0, 0, 0, 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.1); }
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(114, 12, 62, 0.1); }
+  70% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(114, 12, 62, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(114, 12, 62, 0.1); }
 }
 
 .animate-fade-in {
@@ -85,7 +100,7 @@
 
 .logo-animated:hover {
   transform: scale(1.15);
-  filter: drop-shadow(0 0 16px rgba(245, 158, 11, 0.7)) drop-shadow(0 6px 12px rgba(0, 0, 0, 0.2));
+  filter: drop-shadow(0 0 16px rgba(114, 12, 62, 0.5)) drop-shadow(0 6px 12px rgba(0, 0, 0, 0.15));
 }
 
 /* Category Icon Animations */
@@ -132,9 +147,9 @@
 
 .category-card-icon-wrapper:hover {
   transform: scale(1.1) translateY(-2px);
-  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
-  border-color: #FCD34D !important;
-  background-color: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 8px 20px rgba(114, 12, 62, 0.25), 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+  border-color: #E8A0B8 !important;
+  background-color: rgba(255, 255, 255, 0.95) !important;
 }
 
 .category-card-icon-wrapper:active {
@@ -144,7 +159,7 @@
 .category-card-ripple {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.4) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(232, 160, 184, 0.4) 0%, transparent 70%);
   pointer-events: none;
   animation: category-ripple 0.6s ease-out;
 }
@@ -177,9 +192,10 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background-color: #ffffff !important;
-  background: linear-gradient(to bottom, rgba(52, 121, 137, 0.03) 0%, rgba(187, 95, 54, 0.02) 10%, #ffffff 20%) !important;
+  background-color: #FFF7FA !important;
+  background: linear-gradient(to bottom, #FFF7FA 0%, #FFFFFF 20%, #FFF7FA 100%) !important;
   background-attachment: fixed;
+  color: #6F5A64;
 }
 
 body {
@@ -191,9 +207,12 @@ body {
   overflow-x: hidden;
 }
 
+h1, h2, h3, h4, h5, h6 {
+  color: #24151D;
+}
+
 #root {
-  background-color: #ffffff !important;
-  background: linear-gradient(to bottom, rgba(52, 121, 137, 0.03) 0%, rgba(187, 95, 54, 0.02) 10%, #ffffff 20%) !important;
+  background-color: #FFF7FA !important;
   min-height: 100vh;
 }
 
@@ -226,100 +245,96 @@ html {
   transform: scale(0.98);
 }
 
-/* Custom brand color - Homestr Update */
+/* Custom brand color - Customized Palette */
 .bg-brand {
-  background-color: #347989;
+  background-color: #720C3E;
 }
 
 .bg-brand-hover:hover {
-  background-color: #2d6977;
+  background-color: #4D082A;
 }
 
 .text-brand {
-  color: #347989;
+  color: #720C3E;
 }
 
 .border-brand {
-  border-color: #347989;
+  border-color: #720C3E;
 }
 
 .bg-brand-light {
-  background-color: rgba(52, 121, 137, 0.1);
+  background-color: rgba(114, 12, 62, 0.08);
 }
 
 .hover\:bg-brand-light:hover {
-  background-color: rgba(52, 121, 137, 0.15);
+  background-color: rgba(114, 12, 62, 0.12);
 }
 
 /* Admin Panel Styles */
 .scrollbar-admin::-webkit-scrollbar {
   width: 6px;
-  /* Slightly thinner for elegance */
   height: 6px;
 }
 
 .scrollbar-admin::-webkit-scrollbar-track {
-  background: #1e293b;
-  /* slate-800 to match sidebar bg */
+  background: #24151D;
 }
 
 .scrollbar-admin::-webkit-scrollbar-thumb {
-  background: #334155;
-  /* slate-700 */
+  background: #4D082A;
   border-radius: 4px;
 }
 
 .scrollbar-admin::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-  /* slate-600 */
+  background: #720C3E;
 }
 
-/* Primary color utilities for admin panel */
+/* Primary color utilities */
 .bg-primary-50 {
-  background-color: rgba(40, 116, 240, 0.1);
+  background-color: #FFF7FA;
 }
 
 .bg-primary-100 {
-  background-color: rgba(40, 116, 240, 0.2);
+  background-color: rgba(114, 12, 62, 0.1);
 }
 
 .bg-primary-500 {
-  background-color: #2874F0;
+  background-color: #720C3E;
 }
 
 .bg-primary-600 {
-  background-color: #1e5fd4;
+  background-color: #720C3E;
 }
 
 .bg-primary-700 {
-  background-color: #1a4fb8;
+  background-color: #4D082A;
 }
 
 .text-primary-600 {
-  color: #2874F0;
+  color: #720C3E;
 }
 
 .text-primary-700 {
-  color: #1e5fd4;
+  color: #4D082A;
 }
 
 /* Opacity helper used by admin sidebar child items */
 .bg-primary-50\/20 {
-  background-color: rgba(40, 116, 240, 0.2);
+  background-color: rgba(114, 12, 62, 0.15);
 }
 
 .border-primary-300 {
-  border-color: rgba(40, 116, 240, 0.3);
+  border-color: #E8D9DF;
 }
 
 .border-primary-600 {
-  border-color: #2874F0;
+  border-color: #720C3E;
 }
 
 .hover\:border-primary-300:hover {
-  border-color: rgba(40, 116, 240, 0.3);
+  border-color: #E8A0B8;
 }
 
 .focus\:ring-primary-500:focus {
-  --tw-ring-color: #2874F0;
+  --tw-ring-color: #720C3E;
 }

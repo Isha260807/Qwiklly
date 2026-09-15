@@ -1,7 +1,6 @@
 const { verifyAccessToken } = require('../utils/tokenService');
 const User = require('../models/User');
 const Vendor = require('../models/Vendor');
-const Worker = require('../models/Worker');
 const Admin = require('../models/Admin');
 const { USER_ROLES } = require('../utils/constants');
 
@@ -66,13 +65,7 @@ const authenticate = async (req, res, next) => {
           });
         }
         break;
-      case USER_ROLES.WORKER:
-        user = await Worker.findById(decoded.userId).select('-password').lean();
-        // SINGLE DEVICE LOGOUT Logic
-        if (user && user.loginSessionId && decoded.loginSessionId && user.loginSessionId !== decoded.loginSessionId) {
-          return res.status(401).json({ success: false, message: 'Account logged in on another device. Please login again.' });
-        }
-        break;
+
       case USER_ROLES.ADMIN:
       case 'super_admin':
       case 'admin':

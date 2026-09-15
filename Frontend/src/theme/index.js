@@ -3,10 +3,10 @@
  * Import this file to use centralized theme colors
  */
 
-import themeColors, { userTheme, vendorTheme, workerTheme } from './colors';
+import themeColors, { userTheme, vendorTheme, brand } from './colors';
 
 // Re-export all themes
-export { themeColors, userTheme, vendorTheme, workerTheme };
+export { themeColors, userTheme, vendorTheme, brand };
 
 // Helper functions for common theme usage
 export const getThemeColor = (colorPath) => {
@@ -17,7 +17,7 @@ export const getThemeColor = (colorPath) => {
     value = value[path];
     if (value === undefined) {
       console.warn(`Theme color path "${colorPath}" not found`);
-      return '#000000'; // Fallback to black
+      return '#720C3E'; // Fallback to primary
     }
   }
 
@@ -28,7 +28,7 @@ export const getThemeColor = (colorPath) => {
 export const theme = {
   colors: themeColors,
   getColor: getThemeColor,
+  brand
 };
 
 export default theme;
-

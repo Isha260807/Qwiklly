@@ -10,17 +10,9 @@ const {
   requestSettlement,
   getSettlements,
   getWalletSummary,
-  payWorker,
   requestWithdrawal,
   getWithdrawals
 } = require('../../controllers/vendorControllers/vendorWalletController');
-
-// Validation rules
-const payWorkerValidation = [
-  body('bookingId').notEmpty().withMessage('Booking ID is required'),
-  body('amount').isNumeric().withMessage('Amount must be a number'),
-  body('notes').optional().trim()
-];
 
 // Validation rules
 const cashCollectionValidation = [
@@ -48,9 +40,6 @@ router.post('/wallet/cash-collection', authenticate, isVendor, cashCollectionVal
 
 // Request settlement (vendor pays admin)
 router.post('/wallet/settlement', authenticate, isVendor, settlementValidation, requestSettlement);
-
-// Pay worker for a booking
-router.post('/wallet/pay-worker', authenticate, isVendor, payWorkerValidation, payWorker);
 
 // Get settlement history
 router.get('/wallet/settlements', authenticate, isVendor, getSettlements);

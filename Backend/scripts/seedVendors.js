@@ -1,8 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const Vendor = require('../models/Vendor');
-const Worker = require('../models/Worker');
-const Booking = require('../models/Booking');
+const User = require('../models/User');
 const Service = require('../models/Service');
 const Category = require('../models/Category');
 const { VENDOR_STATUS, BOOKING_STATUS, PAYMENT_STATUS, USER_ROLES } = require('../utils/constants');

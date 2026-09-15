@@ -1,9 +1,8 @@
 const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
-const Worker = require('../../models/Worker');
 const Service = require('../../models/UserService');
 const Settings = require('../../models/Settings');
-const { BOOKING_STATUS, PAYMENT_STATUS, WORKER_STATUS } = require('../../utils/constants');
+const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 
 /**
  * Get vendor dashboard stats
@@ -122,8 +121,8 @@ const getDashboardStats = async (req, res) => {
         }
       ]),
 
-      // 2. Workers online count
-      Worker.countDocuments({ vendorId: vId, status: WORKER_STATUS.ONLINE }),
+      // 2. Workers online count (module deprecated)
+      Promise.resolve(0),
 
       // 3. Earnings (Simplified)
       VendorBill.aggregate([

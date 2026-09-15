@@ -3,7 +3,6 @@ const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
 const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
-const Worker = require('../../models/Worker');
 const PlatformEarning = require('../../models/PlatformEarning');
 
 /**

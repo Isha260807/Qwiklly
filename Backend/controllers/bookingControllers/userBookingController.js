@@ -5,12 +5,11 @@ const Category = require('../../models/Category');
 const Cart = require('../../models/Cart');
 const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
-const Worker = require('../../models/Worker');
 const Review = require('../../models/Review');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
-const { sendNotificationToUser, sendNotificationToVendor, sendNotificationToWorker } = require('../../services/firebaseAdmin');
+const { sendNotificationToUser, sendNotificationToVendor } = require('../../services/firebaseAdmin');
 
 /**
  * Create a new booking

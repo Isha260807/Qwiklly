@@ -1,7 +1,4 @@
-const mongoose = require('mongoose');
-const Booking = require('../models/Booking');
 const Vendor = require('../models/Vendor');
-const Worker = require('../models/Worker');
 const User = require('../models/User');
 const Service = require('../models/Service');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../utils/constants');

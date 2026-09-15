@@ -1,6 +1,5 @@
 const Booking = require('../../models/Booking');
 const Vendor = require('../../models/Vendor');
-const Worker = require('../../models/Worker');
 const User = require('../../models/User');
 const Service = require('../../models/UserService');
 const { BOOKING_STATUS, PAYMENT_STATUS, VENDOR_STATUS } = require('../../utils/constants');
