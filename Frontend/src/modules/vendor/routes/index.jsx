@@ -45,9 +45,6 @@ const BookingAlerts = lazyLoad(() => import('../pages/BookingAlerts'));
 const BookingDetails = lazyLoad(() => import('../pages/BookingDetails'));
 const BookingTimeline = lazyLoad(() => import('../pages/BookingTimeline'));
 const ActiveJobs = lazyLoad(() => import('../pages/ActiveJobs'));
-const WorkersList = lazyLoad(() => import('../pages/WorkersList'));
-const AddEditWorker = lazyLoad(() => import('../pages/AddEditWorker'));
-const AssignWorker = lazyLoad(() => import('../pages/AssignWorker'));
 const Earnings = lazyLoad(() => import('../pages/Earnings'));
 const Wallet = lazyLoad(() => import('../pages/Wallet'));
 const WithdrawalRequest = lazyLoad(() => import('../pages/WithdrawalRequest'));
@@ -104,10 +101,6 @@ const VendorRoutes = () => {
               <Route path="/booking/:id/billing" element={<ProtectedRoute userType="vendor"><BillingPage /></ProtectedRoute>} />
               <Route path="/booking/:id/timeline" element={<ProtectedRoute userType="vendor"><BookingTimeline /></ProtectedRoute>} />
               <Route path="/jobs" element={<ProtectedRoute userType="vendor"><ActiveJobs /></ProtectedRoute>} />
-              <Route path="/workers" element={<ProtectedRoute userType="vendor"><WorkersList /></ProtectedRoute>} />
-              <Route path="/workers/add" element={<ProtectedRoute userType="vendor"><AddEditWorker /></ProtectedRoute>} />
-              <Route path="/workers/:id/edit" element={<ProtectedRoute userType="vendor"><AddEditWorker /></ProtectedRoute>} />
-              <Route path="/booking/:id/assign-worker" element={<ProtectedRoute userType="vendor"><AssignWorker /></ProtectedRoute>} />
               <Route path="/earnings" element={<ProtectedRoute userType="vendor"><Earnings /></ProtectedRoute>} />
               <Route path="/wallet" element={<ProtectedRoute userType="vendor"><Wallet /></ProtectedRoute>} />
               <Route path="/wallet/withdraw" element={<ProtectedRoute userType="vendor"><WithdrawalRequest /></ProtectedRoute>} />

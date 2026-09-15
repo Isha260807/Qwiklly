@@ -180,18 +180,9 @@ app.use('/api/vendors', require('./routes/vendor-routes/wallet.routes'));
 app.use('/api/vendors', require('./routes/vendor-routes/dashboard.routes'));
 app.use('/api/vendors', require('./routes/vendor-routes/service.routes'));
 app.use('/api/vendors/bookings', require('./routes/vendor-routes/booking.routes'));
-app.use('/api/vendors/workers', require('./routes/vendor-routes/worker.routes'));
 app.use('/api/vendors/fcm-tokens', require('./routes/vendor-routes/fcmToken.routes'));
 app.use('/api/vendors', require('./routes/vendor-routes/vendorBill.routes'));
 app.use('/api/vendors/catalog', require('./routes/vendor-routes/catalog.routes'));
-
-// Worker routes
-app.use('/api/workers/auth', require('./routes/worker-routes/auth.routes'));
-app.use('/api/workers', require('./routes/worker-routes/profile.routes'));
-app.use('/api/workers', require('./routes/worker-routes/job.routes'));
-app.use('/api/workers', require('./routes/worker-routes/dashboard.routes'));
-app.use('/api/workers/wallet', require('./routes/worker-routes/wallet.routes'));
-app.use('/api/workers/fcm-tokens', require('./routes/worker-routes/fcmToken.routes'));
 
 // Admin routes
 app.use('/api/admin/auth', require('./routes/admin-routes/adminAuth.routes'));
@@ -199,7 +190,6 @@ app.use('/api/admin', require('./routes/admin-routes/cityManagement.routes.js'))
 app.use('/api/admin', require('./routes/admin-routes/dashboard.routes'));
 app.use('/api/admin', require('./routes/admin-routes/userManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/vendorManagement.routes'));
-app.use('/api/admin', require('./routes/admin-routes/workerManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/categoryManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/brandManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/serviceManagement.routes'));

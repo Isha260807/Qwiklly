@@ -14,11 +14,8 @@ import {
   verifySelfVisit,
   completeSelfJob
 } from '../../services/bookingService';
-import vendorBillService from '../../../../services/vendorBillService';
-import { CashCollectionModal, ConfirmDialog, WorkerPaymentModal, OtpVerificationModal } from '../../components/common';
+import { CashCollectionModal, ConfirmDialog, WorkerPaymentModal, OtpVerificationModal, WorkCompletionModal } from '../../components/common';
 import VisitVerificationModal from '../../components/common/VisitVerificationModal';
-// Import shared WorkCompletionModal from worker directory or move to shared
-import { WorkCompletionModal } from '../../../worker/components/common';
 // import BillingModal from '../../components/bookings/BillingModal'; // Consumed by page now
 import vendorWalletService from '../../../../services/vendorWalletService';
 import { toast } from 'react-hot-toast';

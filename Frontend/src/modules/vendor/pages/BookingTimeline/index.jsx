@@ -5,8 +5,7 @@ import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import { getBookingById, updateBookingStatus, startSelfJob, verifySelfVisit, completeSelfJob, collectSelfCash, payWorker } from '../../services/bookingService';
-import { CashCollectionModal, ConfirmDialog } from '../../components/common';
-import { WorkCompletionModal } from '../../../worker/components/common';
+import { CashCollectionModal, ConfirmDialog, WorkCompletionModal } from '../../components/common';
 import vendorWalletService from '../../../../services/vendorWalletService';
 import { toast } from 'react-hot-toast';
 

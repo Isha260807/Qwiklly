@@ -35,19 +35,6 @@
     ]
   },
   {
-    "title": "Workers",
-    "route": "/admin/workers",
-    "allowedRoles": [
-      "super_admin",
-      "admin"
-    ],
-    "children": [
-      "All Workers",
-      "Worker Jobs",
-      "Worker Analytics"
-    ]
-  },
-  {
     "title": "Bookings",
     "route": "/admin/bookings",
     "allowedRoles": [
@@ -69,7 +56,6 @@
     "children": [
       "Payment Overview",
       "User Payments",
-      "Worker Payments",
       "Vendor Payments",
       "Admin Revenue",
       "Payment Reports"

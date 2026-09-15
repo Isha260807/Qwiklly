@@ -25,7 +25,6 @@ const iconMap = {
   Dashboard: FiHome,
   Users: FiUsers,
   Vendors: FiBriefcase,
-  Workers: FiUser,
   Bookings: FiShoppingBag,
   "User Catalog": FiGrid,
   "Vendor Services": FiGrid,

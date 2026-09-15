@@ -1,6 +1,5 @@
 const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
-const Worker = require('../../models/Worker');
 const Booking = require('../../models/Booking');
 const Withdrawal = require('../../models/Withdrawal');
 const Settlement = require('../../models/Settlement');
@@ -38,7 +37,6 @@ const getDashboardStats = async (req, res) => {
     // Total counts (filtered by creation date if provided)
     const totalUsers = await User.countDocuments({ isActive: true, ...dateFilter });
     const totalVendors = await Vendor.countDocuments({ isActive: true, ...dateFilter });
-    const totalWorkers = await Worker.countDocuments({ isActive: true, ...dateFilter });
     const totalBookings = await Booking.countDocuments(dateFilter);
 
     // Booking stats
@@ -113,7 +111,6 @@ const getDashboardStats = async (req, res) => {
         stats: {
           totalUsers,
           totalVendors,
-          totalWorkers,
           totalBookings,
           pendingBookings,
           completedBookings,

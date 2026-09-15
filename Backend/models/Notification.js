@@ -18,12 +18,6 @@ const notificationSchema = new mongoose.Schema({
     default: null,
     index: true
   },
-  workerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Worker',
-    default: null,
-    index: true
-  },
   adminId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin',
@@ -88,7 +82,7 @@ const notificationSchema = new mongoose.Schema({
   },
   relatedType: {
     type: String,
-    enum: ['booking', 'payment', 'user', 'vendor', 'worker', 'service', 'withdrawal'],
+    enum: ['booking', 'payment', 'user', 'vendor', 'service', 'withdrawal'],
     default: null
   },
   // Notification Status
@@ -113,7 +107,6 @@ const notificationSchema = new mongoose.Schema({
 // Indexes for faster queries
 notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
 notificationSchema.index({ vendorId: 1, isRead: 1, createdAt: -1 });
-notificationSchema.index({ workerId: 1, isRead: 1, createdAt: -1 });
 notificationSchema.index({ adminId: 1, isRead: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Notification', notificationSchema);
