@@ -147,7 +147,7 @@ const AdminHeader = ({ onMenuClick }) => {
 
   return (
     <header
-      className="bg-white fixed top-0 left-0 right-0 z-30 transition-all duration-300 lg:left-[278px] border-b border-gray-100 shadow-sm"
+      className="bg-white fixed top-0 left-0 right-0 z-30 transition-all duration-300 lg:left-[315px] border-b border-gray-100 shadow-sm"
       style={{
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}

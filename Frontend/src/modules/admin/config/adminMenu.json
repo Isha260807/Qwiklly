@@ -1,5 +1,6 @@
 [
   {
+    "section": "MAIN",
     "title": "Dashboard",
     "route": "/admin/dashboard",
     "allowedRoles": [
@@ -9,6 +10,7 @@
     "children": []
   },
   {
+    "section": "USER MANAGEMENT",
     "title": "Users",
     "route": "/admin/users",
     "allowedRoles": [
@@ -22,6 +24,7 @@
     ]
   },
   {
+    "section": "VENDOR MANAGEMENT",
     "title": "Vendors",
     "route": "/admin/vendors",
     "allowedRoles": [
@@ -35,6 +38,36 @@
     ]
   },
   {
+    "section": "VENDOR MANAGEMENT",
+    "title": "Vendor Services",
+    "route": "/admin/user-categories/vendor-services",
+    "allowedRoles": [
+      "super_admin",
+      "admin"
+    ],
+    "children": []
+  },
+  {
+    "section": "VENDOR MANAGEMENT",
+    "title": "Vendor Parts",
+    "route": "/admin/user-categories/vendor-parts",
+    "allowedRoles": [
+      "super_admin",
+      "admin"
+    ],
+    "children": []
+  },
+  {
+    "section": "VENDOR MANAGEMENT",
+    "title": "Plans",
+    "route": "/admin/plans",
+    "allowedRoles": [
+      "super_admin"
+    ],
+    "children": []
+  },
+  {
+    "section": "OPERATIONS & CATALOG",
     "title": "Bookings",
     "route": "/admin/bookings",
     "allowedRoles": [
@@ -48,33 +81,7 @@
     ]
   },
   {
-    "title": "Payments",
-    "route": "/admin/payments",
-    "allowedRoles": [
-      "super_admin"
-    ],
-    "children": [
-      "Payment Overview",
-      "User Payments",
-      "Vendor Payments",
-      "Admin Revenue",
-      "Payment Reports"
-    ]
-  },
-  {
-    "title": "Settlements",
-    "route": "/admin/settlements",
-    "allowedRoles": [
-      "super_admin"
-    ],
-    "children": [
-      "Pending",
-      "Withdrawals",
-      "Vendors with Due",
-      "History"
-    ]
-  },
-  {
+    "section": "OPERATIONS & CATALOG",
     "title": "User Catalog",
     "route": "/admin/user-categories",
     "allowedRoles": [
@@ -89,24 +96,45 @@
     ]
   },
   {
-    "title": "Vendor Services",
-    "route": "/admin/user-categories/vendor-services",
+    "section": "OPERATIONS & CATALOG",
+    "title": "Reviews",
+    "route": "/admin/reviews",
     "allowedRoles": [
-      "super_admin",
-      "admin"
+      "super_admin"
     ],
     "children": []
   },
   {
-    "title": "Vendor Parts",
-    "route": "/admin/user-categories/vendor-parts",
+    "section": "FINANCE & SETTLEMENTS",
+    "title": "Payments",
+    "route": "/admin/payments",
     "allowedRoles": [
-      "super_admin",
-      "admin"
+      "super_admin"
     ],
-    "children": []
+    "children": [
+      "Payment Overview",
+      "User Payments",
+      "Vendor Payments",
+      "Admin Revenue",
+      "Payment Reports"
+    ]
   },
   {
+    "section": "FINANCE & SETTLEMENTS",
+    "title": "Settlements",
+    "route": "/admin/settlements",
+    "allowedRoles": [
+      "super_admin"
+    ],
+    "children": [
+      "Pending",
+      "Withdrawals",
+      "Vendors with Due",
+      "History"
+    ]
+  },
+  {
+    "section": "SYSTEM & SETTINGS",
     "title": "Reports",
     "route": "/admin/reports",
     "allowedRoles": [
@@ -119,22 +147,7 @@
     ]
   },
   {
-    "title": "Reviews",
-    "route": "/admin/reviews",
-    "allowedRoles": [
-      "super_admin"
-    ],
-    "children": []
-  },
-  {
-    "title": "Plans",
-    "route": "/admin/plans",
-    "allowedRoles": [
-      "super_admin"
-    ],
-    "children": []
-  },
-  {
+    "section": "SYSTEM & SETTINGS",
     "title": "Settings",
     "route": "/admin/settings",
     "allowedRoles": [

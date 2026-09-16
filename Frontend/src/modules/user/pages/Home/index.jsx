@@ -171,7 +171,7 @@ const Home = () => {
                 const { latitude, longitude } = position.coords;
                 const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
                 const response = await fetch(
-                  `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}`
+                  `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}&language=en`
                 );
                 const data = await response.json();
 

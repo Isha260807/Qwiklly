@@ -11,74 +11,48 @@ const phoneSchema = z.object({
   phone: z.string().regex(/^[6-9]\d{9}$/, 'Please enter a valid 10-digit Indian mobile number'),
 });
 
+// Local image assets for marquee rows
+import row1_1 from '../../../assets/images/login/row1_1.jpg';
+import row1_2 from '../../../assets/images/login/row1_2.jpg';
+import row1_3 from '../../../assets/images/login/row1_3.jpg';
+import row1_4 from '../../../assets/images/login/row1_4.jpg';
+import row1_5 from '../../../assets/images/login/row1_5.jpg';
+
+import row2_1 from '../../../assets/images/login/row2_1.jpg';
+import row2_2 from '../../../assets/images/login/row2_2.jpg';
+import row2_3 from '../../../assets/images/login/row2_3.jpg';
+import row2_4 from '../../../assets/images/login/row2_4.jpg';
+import row2_5 from '../../../assets/images/login/row2_5.jpg';
+
+import row3_1 from '../../../assets/images/login/row3_1.jpg';
+import row3_2 from '../../../assets/images/login/row3_2.jpg';
+import row3_3 from '../../../assets/images/login/row3_3.jpg';
+import row3_4 from '../../../assets/images/login/row3_4.jpg';
+import row3_5 from '../../../assets/images/login/row3_5.jpg';
+
 // Curated high quality on-demand home service photos for 3 marquee rows
 const ROW_1_IMAGES = [
-  {
-    url: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=95',
-    alt: 'Kitchen Counter Cleaning'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?auto=format&fit=crop&w=800&q=95',
-    alt: 'Bathroom Deep Clean'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1527515637462-cff94eecc1ac?auto=format&fit=crop&w=800&q=95',
-    alt: 'Floor Sweeping & Care'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=800&q=95',
-    alt: 'Housekeeping Service'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=800&q=95',
-    alt: 'AC Maintenance & Servicing'
-  }
+  { url: row1_1, alt: 'Kitchen Counter Cleaning' },
+  { url: row1_2, alt: 'Bathroom Deep Clean' },
+  { url: row1_3, alt: 'Floor Sweeping & Care' },
+  { url: row1_4, alt: 'Housekeeping Service' },
+  { url: row1_5, alt: 'AC Maintenance & Servicing' }
 ];
 
 const ROW_2_IMAGES = [
-  {
-    url: 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?auto=format&fit=crop&w=800&q=95',
-    alt: 'Utensil & Sink Cleaning'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1628177142898-93e36e4e3a50?auto=format&fit=crop&w=800&q=95',
-    alt: 'Floor Mopping & Sanitation'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=95',
-    alt: 'Table & Furniture Dusting'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?auto=format&fit=crop&w=800&q=95',
-    alt: 'Electrician & Switchboard Repair'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1607472586893-edb57bdc0e39?auto=format&fit=crop&w=800&q=95',
-    alt: 'Plumbing & Pipe Repair'
-  }
+  { url: row2_1, alt: 'Utensil & Sink Cleaning' },
+  { url: row2_2, alt: 'Floor Mopping & Sanitation' },
+  { url: row2_3, alt: 'Table & Furniture Dusting' },
+  { url: row2_4, alt: 'Electrician & Switchboard Repair' },
+  { url: row2_5, alt: 'Plumbing & Pipe Repair' }
 ];
 
 const ROW_3_IMAGES = [
-  {
-    url: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=800&q=95',
-    alt: 'Ceiling Fan & Appliance Dusting'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1527515545081-5db817172677?auto=format&fit=crop&w=800&q=95',
-    alt: 'Window Glass Spray Cleaning'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?auto=format&fit=crop&w=800&q=95',
-    alt: 'Laundry & Washing Machine Help'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=95',
-    alt: 'Living Room Sofa & Upholstery Care'
-  },
-  {
-    url: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=95',
-    alt: 'Home Painting & Touchups'
-  }
+  { url: row3_1, alt: 'Ceiling Fan & Appliance Dusting' },
+  { url: row3_2, alt: 'Window Glass Spray Cleaning' },
+  { url: row3_3, alt: 'Laundry & Washing Machine Help' },
+  { url: row3_4, alt: 'Living Room Sofa & Upholstery Care' },
+  { url: row3_5, alt: 'Home Painting & Touchups' }
 ];
 
 const Login = () => {
@@ -241,21 +215,22 @@ const Login = () => {
 
   // Helper render for Marquee Row
   const renderMarqueeRow = (images, animationClass) => {
-    // Duplicate array to achieve infinite seamless loop
-    const doubledImages = [...images, ...images, ...images];
+    // Duplicate array twice for seamless 50% loop
+    const loopedImages = [...images, ...images];
     return (
       <div className="overflow-hidden w-full flex items-center py-1">
         <div className={animationClass}>
-          {doubledImages.map((img, idx) => (
+          {loopedImages.map((img, idx) => (
             <div
               key={`${idx}-${img.alt}`}
-              className="flex-shrink-0 mx-1 sm:mx-1.5 rounded-2xl overflow-hidden shadow-xs border-[1.5px] border-white/90 bg-white/60 transition-transform duration-300 hover:scale-105"
+              className="flex-shrink-0 mx-1 sm:mx-1.5 rounded-2xl overflow-hidden shadow-xs border-[1.5px] border-white/90 bg-[#F5E6ED] transition-transform duration-300 hover:scale-105"
             >
               <img
                 src={img.url}
                 alt={img.alt}
                 loading="eager"
                 decoding="async"
+                fetchPriority="high"
                 className="w-28 h-20 sm:w-32 sm:h-22 object-cover rounded-2xl contrast-[1.08] saturate-[1.10] brightness-[1.03]"
                 style={{ imageRendering: '-webkit-optimize-contrast' }}
               />
@@ -276,7 +251,7 @@ const Login = () => {
           {/* Top Row: Skip login button */}
           <div className="flex justify-end items-center mb-1">
             <button
-              onClick={() => navigate('/user')}
+              onClick={() => navigate('/user/location')}
               className="bg-white/20 hover:bg-white/35 active:scale-95 text-white font-semibold text-xs px-3.5 py-1.5 rounded-full transition-all duration-200 backdrop-blur-md cursor-pointer border border-white/40 shadow-xs"
             >
               Skip login

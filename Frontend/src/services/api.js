@@ -201,8 +201,13 @@ export const handleLogout = (role = null) => {
     localStorage.removeItem('userData');
     sessionStorage.removeItem('accessToken');
     sessionStorage.removeItem('refreshToken');
-    sessionStorage.removeItem('userData');
-    if (!window.location.pathname.includes('/login')) {
+    const isGuestAllowedPage =
+      window.location.pathname === '/user' ||
+      window.location.pathname === '/user/' ||
+      window.location.pathname.includes('/location') ||
+      window.location.pathname.includes('/login');
+
+    if (!isGuestAllowedPage) {
       window.location.href = '/user/login';
     }
   }

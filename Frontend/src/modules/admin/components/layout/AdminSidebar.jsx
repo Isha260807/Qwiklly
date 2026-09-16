@@ -16,6 +16,7 @@ import {
   FiX,
   FiPackage,
   FiStar,
+  FiSearch,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
 import dashboardService from "../../services/dashboardService";
@@ -53,12 +54,6 @@ const getChildRoute = (parentRoute, childName) => {
       "Vendor Analytics": "/admin/vendors/analytics",
       "Vendor Payments": "/admin/vendors/payments",
     },
-    "/admin/workers": {
-      "All Workers": "/admin/workers/all",
-      "Worker Jobs": "/admin/workers/jobs",
-      "Worker Analytics": "/admin/workers/analytics",
-      "Worker Payments": "/admin/workers/payments",
-    },
     "/admin/bookings": {
       "All Bookings": "/admin/bookings",
       "Booking Tracking": "/admin/bookings/tracking",
@@ -73,7 +68,6 @@ const getChildRoute = (parentRoute, childName) => {
     "/admin/payments": {
       "Payment Overview": "/admin/payments/overview",
       "User Payments": "/admin/payments/users",
-      "Worker Payments": "/admin/payments/workers",
       "Vendor Payments": "/admin/payments/vendors",
       "Admin Revenue": "/admin/payments/revenue",
       "Payment Reports": "/admin/payments/reports",
@@ -90,7 +84,6 @@ const getChildRoute = (parentRoute, childName) => {
     },
     "/admin/settings": {
       "General Settings": "/admin/settings/general",
-      "Worker Assignment": "/admin/settings/worker-assignment",
       "Service Configuration": "/admin/settings/service-config",
       "System Settings": "/admin/settings/system",
     },
@@ -108,6 +101,7 @@ const getChildRoute = (parentRoute, childName) => {
 const AdminSidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedItems, setExpandedItems] = useState({});
   const [isMobile, setIsMobile] = useState(false);
   const [adminUser, setAdminUser] = useState({ name: 'Admin', email: '', role: 'admin' });
@@ -135,11 +129,34 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     }
   }, []);
 
-  // Filter menu items by role
-  const filteredMenu = useMemo(() => adminMenu.filter(item => {
-    if (!item.allowedRoles) return true;
-    return item.allowedRoles.includes(adminUser.role);
-  }), [adminUser.role]);
+  // Filter menu items by role and search query
+  const filteredMenu = useMemo(() => {
+    return adminMenu.filter(item => {
+      // Role filter
+      if (item.allowedRoles && !item.allowedRoles.includes(adminUser.role)) {
+        return false;
+      }
+      // Search filter
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      const titleMatch = item.title.toLowerCase().includes(q);
+      const childMatch = item.children && item.children.some(c => c.toLowerCase().includes(q));
+      return titleMatch || childMatch;
+    });
+  }, [adminUser.role, searchQuery]);
+
+  // Group filtered menu by section
+  const groupedSections = useMemo(() => {
+    const groups = {};
+    filteredMenu.forEach(item => {
+      const section = item.section || "MAIN";
+      if (!groups[section]) {
+        groups[section] = [];
+      }
+      groups[section].push(item);
+    });
+    return groups;
+  }, [filteredMenu]);
 
   // Fetch pending counts for badges
   useEffect(() => {
@@ -161,7 +178,6 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     };
 
     fetchCounts();
-    // Refresh every 30 seconds
     const interval = setInterval(fetchCounts, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -177,17 +193,26 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   }, []);
 
   // Auto-close sidebar on mobile when route changes
-  // Auto-close sidebar on mobile when route changes
   useEffect(() => {
-    // Only close if screen is small (mobile)
     if (window.innerWidth < 1024) {
       onClose();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]); // Remove onClose to prevent re-triggering when parent re-renders
+  }, [location.pathname]);
 
-  // Auto-expand menu items when their route is active
+  // Auto-expand menu items when their route is active or during search
   useEffect(() => {
+    if (searchQuery.trim()) {
+      // Auto expand all with children during search
+      const newExpanded = {};
+      filteredMenu.forEach(item => {
+        if (item.children && item.children.length > 0) {
+          newExpanded[item.title] = true;
+        }
+      });
+      setExpandedItems(newExpanded);
+      return;
+    }
+
     const activeItem = filteredMenu.find((item) => {
       if (item.route === "/admin/dashboard") {
         return location.pathname === "/admin/dashboard";
@@ -207,7 +232,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
         };
       });
     }
-  }, [location.pathname, filteredMenu]);
+  }, [location.pathname, filteredMenu, searchQuery]);
 
   // Check if a menu item is active
   const isActive = (route) => {
@@ -215,21 +240,19 @@ const AdminSidebar = ({ isOpen, onClose }) => {
       return location.pathname === "/admin/dashboard";
     }
 
-    // Special case for User Catalog to avoid overlap with Vendor Services/Parts
     if (route === "/admin/user-categories") {
       if (location.pathname.startsWith("/admin/user-categories/vendor-")) {
         return false;
       }
     }
 
-    // Strict prefix check: either exact match OR followed by a slash
     return location.pathname === route || location.pathname.startsWith(route + '/');
   };
 
   // Toggle expanded state for menu items with children
   const toggleExpand = (title, closeOthers = true) => {
     setExpandedItems((prev) => {
-      if (closeOthers) {
+      if (closeOthers && !searchQuery.trim()) {
         return {
           [title]: !prev[title],
         };
@@ -245,11 +268,10 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   // Handle menu item click
   const handleMenuItemClick = (route, parentTitle = null) => {
     if (parentTitle) {
-      setExpandedItems((prev) => {
-        return {
-          [parentTitle]: true,
-        };
-      });
+      setExpandedItems((prev) => ({
+        ...prev,
+        [parentTitle]: true,
+      }));
     }
     navigate(route);
     if (window.innerWidth < 1024) {
@@ -269,10 +291,10 @@ const AdminSidebar = ({ isOpen, onClose }) => {
         {/* Main Menu Item */}
         <div
           className={`
-            flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 cursor-pointer
+            flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-200 cursor-pointer select-none
             ${active
-              ? "bg-primary-600 text-white shadow-sm"
-              : "text-gray-300 hover:bg-slate-700"
+              ? "bg-[#720C3E] text-white shadow-md font-semibold"
+              : "text-slate-300 hover:bg-slate-700/80 hover:text-white font-medium"
             }
           `}
           onClick={() => {
@@ -283,24 +305,23 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             }
           }}>
           <Icon
-            className={`text-xl flex-shrink-0 ${active ? "text-white" : "text-gray-400"
-              }`}
+            className={`text-lg flex-shrink-0 ${active ? "text-white" : "text-slate-400"}`}
           />
-          <span className="font-semibold flex-1 text-base">{item.title}</span>
+          <span className="flex-1 text-sm">{item.title}</span>
 
-          {/* Badge Display */}
+          {/* Badges */}
           {item.title === "Bookings" && counts.bookings > 0 && (
-            <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-2">
+            <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-1">
               {counts.bookings > 99 ? '99+' : counts.bookings}
             </span>
           )}
           {item.title === "Vendors" && counts.vendors > 0 && (
-            <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-2">
+            <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-1">
               {counts.vendors > 99 ? '99+' : counts.vendors}
             </span>
           )}
           {item.title === "Settlements" && (counts.withdrawals + counts.pendingSettlements) > 0 && (
-            <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-2">
+            <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-1">
               {(counts.withdrawals + counts.pendingSettlements) > 99 ? '99+' : (counts.withdrawals + counts.pendingSettlements)}
             </span>
           )}
@@ -309,7 +330,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             <motion.div
               animate={{ rotate: isExpanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}>
-              <FiChevronDown className="text-gray-400 text-sm" />
+              <FiChevronDown className="text-slate-400 text-xs" />
             </motion.div>
           )}
         </div>
@@ -323,7 +344,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="overflow-hidden">
-              <div className="ml-4 mt-1 pl-4 border-l-2 border-slate-600 space-y-1">
+              <div className="ml-3 mt-1 pl-3 border-l-2 border-slate-700 space-y-1">
                 {item.children.map((child, index) => {
                   const childRoute = getChildRoute(item.route, child);
                   const isChildActive =
@@ -334,24 +355,22 @@ const AdminSidebar = ({ isOpen, onClose }) => {
                   return (
                     <div
                       key={index}
-                      onClick={() =>
-                        handleMenuItemClick(childRoute, item.title)
-                      }
+                      onClick={() => handleMenuItemClick(childRoute, item.title)}
                       className={`
-                        px-3 py-2 text-sm rounded-lg transition-colors cursor-pointer flex justify-between items-center
+                        px-3 py-2 text-xs sm:text-sm rounded-lg transition-colors cursor-pointer flex justify-between items-center
                         ${isChildActive
-                          ? "bg-primary-50 text-white font-medium"
-                          : "text-gray-400 hover:bg-slate-700"
+                          ? "bg-[#720C3E] text-white font-semibold shadow-sm"
+                          : "text-slate-300 hover:bg-slate-700/70 hover:text-white font-medium"
                         }
                       `}>
                       <span>{child}</span>
                       {item.title === "Settlements" && child === "Pending" && counts.pendingSettlements > 0 && (
-                        <span className="bg-red-500 text-white text-[10px] h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full">
+                        <span className="bg-red-500 text-white text-[10px] h-4 min-w-[18px] px-1.5 flex items-center justify-center rounded-full">
                           {counts.pendingSettlements}
                         </span>
                       )}
                       {item.title === "Settlements" && child === "Withdrawals" && counts.withdrawals > 0 && (
-                        <span className="bg-orange-500 text-white text-[10px] h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full">
+                        <span className="bg-orange-500 text-white text-[10px] h-4 min-w-[18px] px-1.5 flex items-center justify-center rounded-full">
                           {counts.withdrawals}
                         </span>
                       )}
@@ -368,25 +387,25 @@ const AdminSidebar = ({ isOpen, onClose }) => {
 
   // Sidebar content
   const sidebarContent = (
-    <div className="h-full w-full flex flex-col bg-slate-800">
-      {/* Header Section */}
-      <div className="px-4 py-6 border-b border-slate-700 bg-slate-900">
+    <div className="h-full w-full flex flex-col bg-slate-900 border-r border-slate-800 select-none">
+      {/* 1. Header Section */}
+      <div className="px-4 py-4 border-b border-slate-800/90 bg-slate-950">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center shadow-md flex-shrink-0"
+              className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md flex-shrink-0"
               style={{
                 background: 'linear-gradient(135deg, #2874F0 0%, #4787F7 100%)',
               }}
             >
-              <FiUser className="text-white text-xl" />
+              <FiUser className="text-white text-lg" />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="font-semibold text-white text-base truncate">
+              <h2 className="font-bold text-white text-sm truncate">
                 {adminUser.name}
               </h2>
-              <p className="text-xs text-gray-400 truncate">
-                {adminUser.role === 'super_admin' ? '⭐ Super Admin' : 'Admin'}
+              <p className="text-[11px] text-amber-400 font-semibold truncate flex items-center gap-1">
+                ⭐ {adminUser.role === 'super_admin' ? 'Super Admin' : 'Admin'}
               </p>
             </div>
           </div>
@@ -394,16 +413,56 @@ const AdminSidebar = ({ isOpen, onClose }) => {
           {/* Close Button - Mobile Only */}
           <button
             onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0 lg:hidden"
+            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0 lg:hidden text-slate-300"
             aria-label="Close sidebar">
-            <FiX className="text-xl text-gray-300" />
+            <FiX className="text-lg" />
           </button>
         </div>
       </div>
 
-      {/* Navigation Menu */}
-      <nav className="flex-1 overflow-y-auto p-3 scrollbar-admin lg:pb-3">
-        {filteredMenu.map((item) => renderMenuItem(item))}
+      {/* 2. Search Menu Box */}
+      <div className="px-3.5 pt-3 pb-1">
+        <div className="relative flex items-center">
+          <FiSearch className="absolute left-3.5 text-slate-400 text-sm pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search Menu..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#720C3E] focus:ring-1 focus:ring-[#720C3E] transition-all"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 text-slate-400 hover:text-white text-xs cursor-pointer"
+            >
+              <FiX />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Grouped Navigation Menu */}
+      <nav className="flex-1 overflow-y-auto px-3.5 py-2 scrollbar-admin space-y-4">
+        {Object.entries(groupedSections).map(([sectionName, items]) => (
+          <div key={sectionName} className="space-y-1">
+            {/* Section Heading Title */}
+            {sectionName !== "MAIN" && (
+              <div className="text-[10.5px] font-bold text-slate-400 tracking-wider uppercase px-2.5 pt-2 pb-1">
+                {sectionName}
+              </div>
+            )}
+
+            {/* Menu Items */}
+            {items.map((item) => renderMenuItem(item))}
+          </div>
+        ))}
+
+        {Object.keys(groupedSections).length === 0 && (
+          <div className="text-center text-xs text-slate-400 py-6">
+            No matching menu items found
+          </div>
+        )}
       </nav>
     </div>
   );
@@ -431,7 +490,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed left-0 top-0 bottom-0 w-[280px] z-[99999] lg:hidden shadow-2xl"
+            className="fixed left-0 top-0 bottom-0 w-[315px] z-[99999] lg:hidden shadow-2xl"
           >
             {sidebarContent}
           </motion.div>
@@ -440,8 +499,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
 
       {/* Sidebar - Desktop Fixed */}
       <div
-        className="hidden lg:flex fixed left-0 top-0 bottom-0 z-30"
-        style={{ width: '278px' }}
+        className="hidden lg:flex fixed left-0 top-0 bottom-0 z-30 w-[315px]"
       >
         {sidebarContent}
       </div>
@@ -450,4 +508,3 @@ const AdminSidebar = ({ isOpen, onClose }) => {
 };
 
 export default AdminSidebar;
-

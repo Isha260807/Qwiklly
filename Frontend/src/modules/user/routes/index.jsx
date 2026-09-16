@@ -73,6 +73,7 @@ const PlanDetails = lazyLoad(() => import('../pages/MyPlan/PlanDetails'));
 const MyRating = lazyLoad(() => import('../pages/MyRating'));
 const AboutHomestr = lazyLoad(() => import('../pages/AboutHomster'));
 const UpdateProfile = lazyLoad(() => import('../pages/UpdateProfile'));
+const SelectLocation = lazyLoad(() => import('../pages/SelectLocation'));
 const Login = lazyLoad(() => import('../pages/login'));
 const Signup = lazyLoad(() => import('../pages/signup'));
 const Notifications = lazyLoad(() => import('../pages/Notifications'));
@@ -105,8 +106,11 @@ const UserRoutes = () => {
   const isBookingConfirmationPage = location.pathname.includes('/booking-confirmation');
 
 
-  // Check if we are on public pages (login/signup) where we shouldn't fetch bookings
-  const isPublicPage = location.pathname.includes('/login') || location.pathname.includes('/signup');
+  // Check if we are on public pages (login/signup/location) where we shouldn't fetch bookings
+  const isPublicPage =
+    location.pathname.includes('/login') ||
+    location.pathname.includes('/signup') ||
+    location.pathname.includes('/location');
 
   return (
     <ErrorBoundary>
@@ -118,9 +122,10 @@ const UserRoutes = () => {
               {/* Public routes */}
               <Route path="/login" element={<PublicRoute userType="user"><Login /></PublicRoute>} />
               <Route path="/signup" element={<PublicRoute userType="user"><Signup /></PublicRoute>} />
+              <Route path="/location" element={<SelectLocation />} />
 
-              {/* Protected routes (auth required) */}
-              <Route path="/" element={<ProtectedRoute userType="user"><Home /></ProtectedRoute>} />
+              {/* Home is accessible for guests and logged-in users */}
+              <Route path="/" element={<Home />} />
               <Route path="/native" element={<ProtectedRoute userType="user"><Native /></ProtectedRoute>} />
 
               <Route path="/rewards" element={<ProtectedRoute userType="user"><Rewards /></ProtectedRoute>} />
