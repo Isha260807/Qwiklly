@@ -1,118 +1,88 @@
-import React, { useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { HiLocationMarker } from 'react-icons/hi';
-import { gsap } from 'gsap';
-import LocationSelector from '../common/LocationSelector';
-import { animateLogo } from '../../../../utils/gsapAnimations';
-import Logo from '../../../../components/common/Logo';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { themeColors } from '../../../../theme';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { HiChevronDown, HiUser } from 'react-icons/hi';
+import { FiSearch } from 'react-icons/fi';
 
-import CitySelectorModal from '../common/CitySelectorModal';
-import { useCity } from '../../../../context/CityContext';
-import { HiChevronDown } from 'react-icons/hi';
-
-const Header = ({ location, onLocationClick }) => {
-  const logoRef = useRef(null);
-  const { currentCity } = useCity();
-  const [isCityModalOpen, setIsCityModalOpen] = React.useState(false);
+const Header = ({ location, onLocationClick, onSearchClick }) => {
+  const navigate = useNavigate();
+  const [userData, setUserData] = useState(null);
 
   useEffect(() => {
-    if (logoRef.current) {
-      animateLogo(logoRef.current);
+    try {
+      const stored = localStorage.getItem('userData');
+      if (stored) {
+        setUserData(JSON.parse(stored));
+      }
+    } catch (e) {
+      // ignore
     }
   }, []);
 
+  // Parse location into title and detailed subtitle
+  const cleanLocation = location && location !== '...' ? location : 'Select Location';
+  const locationParts = cleanLocation.split(/[,-]/);
+  const primaryTitle = locationParts[0]?.trim() || 'Select Location';
+  const subtitle = cleanLocation;
+
   return (
-    <header className="relative overflow-hidden">
-      {/* Content wrapper with relative positioning */}
-      <div className="relative z-10">
-        <div className="w-full">
-          {/* Top Row: Logo (Left) and Location (Right) */}
-          <div className="px-4 py-3 flex items-center justify-between">
-            {/* Left: Logo */}
-            <Link
-              to="/user"
-              className="cursor-pointer shrink-0"
-              onMouseEnter={() => {
-                if (logoRef.current) {
-                  gsap.to(logoRef.current, {
-                    scale: 1.1,
-                    filter: `drop-shadow(0 0 16px ${themeColors.brand.teal}40)`,
-                    duration: 0.3,
-                    ease: 'power2.out',
-                  });
-                }
-              }}
-              onMouseLeave={() => {
-                if (logoRef.current) {
-                  gsap.to(logoRef.current, {
-                    scale: 1,
-                    filter: '',
-                    duration: 0.3,
-                    ease: 'power2.out',
-                  });
-                }
-              }}
-            >
-              <Logo
-                ref={logoRef}
-                className="h-9 sm:h-12 w-auto"
-              />
-            </Link>
-
-            {/* Desktop Navigation - Hidden on Mobile */}
-            <nav className="hidden lg:flex items-center gap-8 ml-10">
-              <Link to="/user" className="text-gray-700 font-semibold hover:text-[#347989] transition-colors">Home</Link>
-              <Link to="/user/my-bookings" className="text-gray-700 font-semibold hover:text-[#347989] transition-colors">Bookings</Link>
-              <Link to="/user/cart" className="text-gray-700 font-semibold hover:text-[#347989] transition-colors">Cart</Link>
-              <Link to="/user/account" className="text-gray-700 font-semibold hover:text-[#347989] transition-colors">Account</Link>
-            </nav>
-
-            {/* Right: City & Location */}
-            <div className="flex flex-col items-end gap-1 flex-1 min-w-0 ml-4">
-
-
-
-              {/* Location Selector */}
-              <div className="flex flex-col items-end cursor-pointer" onClick={onLocationClick}>
-                <div className="flex items-center gap-1 mb-0.5">
-                  {/* Gradient Definition for Icons */}
-                  <svg width="0" height="0" className="absolute">
-                    <linearGradient id="homestr-location-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor={themeColors.brand.teal} />
-                      <stop offset="50%" stopColor={themeColors.brand.yellow} />
-                      <stop offset="100%" stopColor={themeColors.brand.orange} />
-                    </linearGradient>
-                  </svg>
-                  <HiLocationMarker
-                    className="w-4 h-4 shrink-0"
-                    style={{ fill: 'url(#homestr-location-gradient)' }}
-                  />
-                  <span className="text-sm font-bold truncate max-w-[160px]" style={{
-                    background: themeColors.gradient,
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                  }}>
-                    {location && location !== '...' ? location.split('-')[0].trim() : 'Select Location'}
-                  </span>
-                </div>
-                <LocationSelector
-                  location={location}
-                  onLocationClick={onLocationClick}
-                />
-              </div>
-            </div>
+    <header 
+      className="text-white shadow-md select-none sticky top-0 z-50 transition-all duration-300"
+      style={{
+        background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)'
+      }}
+    >
+      <div className="max-w-7xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between gap-3">
+        {/* Left Side: Address Section with Dropdown Chevron */}
+        <div
+          className="flex flex-col cursor-pointer max-w-[65%] xs:max-w-[70%] sm:max-w-md group"
+          onClick={onLocationClick}
+        >
+          <div className="flex items-center gap-1 text-white">
+            <span className="font-bold text-[17px] sm:text-lg tracking-tight truncate leading-tight group-hover:opacity-90">
+              {primaryTitle}
+            </span>
+            <HiChevronDown className="w-4 h-4 text-white shrink-0 stroke-[1.5] transition-transform duration-200 group-hover:translate-y-0.5" />
           </div>
+          <span className="text-[11px] sm:text-xs text-pink-100/90 font-normal truncate mt-0.5 opacity-90 leading-tight">
+            {subtitle}
+          </span>
+        </div>
+
+        {/* Right Side: Search & Profile Avatar */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Search Trigger Button */}
+          <button
+            type="button"
+            onClick={onSearchClick}
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all duration-200 backdrop-blur-sm border border-white/20 shadow-sm"
+            aria-label="Search services"
+            title="Search"
+          >
+            <FiSearch className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+          </button>
+
+          {/* Profile Avatar Button */}
+          <Link
+            to="/user/account"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white text-[#720C3E] flex items-center justify-center shadow-md overflow-hidden border border-white/40 hover:opacity-95 active:scale-95 transition-all duration-200"
+            aria-label="User Account"
+            title="Account"
+          >
+            {userData?.profilePhoto ? (
+              <img
+                src={userData.profilePhoto}
+                alt={userData.name || 'User Profile'}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <HiUser className="w-5 h-5 sm:w-6 sm:h-6 text-[#720C3E]" />
+            )}
+          </Link>
         </div>
       </div>
-
-      <CitySelectorModal
-        isOpen={isCityModalOpen}
-        onClose={() => setIsCityModalOpen(false)}
-      />
     </header>
   );
 };
 
 export default Header;
+

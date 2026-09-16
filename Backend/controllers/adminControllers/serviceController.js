@@ -4,21 +4,34 @@ const { validationResult } = require('express-validator');
 const { SERVICE_STATUS } = require('../../utils/constants');
 
 /**
- * Get all services (with filter by brandId)
+ * Get all services (with optional filters)
  * GET /api/admin/services
  */
 const getAllServices = async (req, res) => {
   try {
-    const { status, brandId } = req.query;
+    const { status, brandId, categoryId, cityId, search } = req.query;
 
     const query = {};
     if (status) query.status = status;
     if (brandId) query.brandId = brandId;
+    if (categoryId) query.categoryId = categoryId;
+    if (cityId) {
+      query.$or = [
+        { cityId: cityId },
+        { cityIds: cityId },
+        { cityIds: { $size: 0 } },
+        { cityIds: { $exists: false } }
+      ];
+    }
+    if (search) {
+      query.title = { $regex: search, $options: 'i' };
+    }
 
     const services = await Service.find(query)
       .populate('brandId', 'title')
       .populate('categoryId', 'title')
-      .sort({ createdAt: -1 });
+      .populate('cityId', 'name')
+      .sort({ displayOrder: 1, createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -42,7 +55,8 @@ const getServiceById = async (req, res) => {
   try {
     const service = await Service.findById(req.params.id)
       .populate('brandId', 'title')
-      .populate('categoryId', 'title');
+      .populate('categoryId', 'title')
+      .populate('cityId', 'name');
 
     if (!service) {
       return res.status(404).json({
@@ -65,7 +79,7 @@ const getServiceById = async (req, res) => {
 };
 
 /**
- * Create new service
+ * Create new service (Direct Service)
  * POST /api/admin/services
  */
 const createService = async (req, res) => {
@@ -84,32 +98,46 @@ const createService = async (req, res) => {
       categoryId,
       title,
       basePrice,
+      originalPrice,
+      discountPrice,
       gstPercentage,
+      rating,
+      ratingCount,
+      badge,
+      tagline,
+      inclusions,
+      cityIds,
+      cityId,
       description,
       status,
       iconUrl
     } = req.body;
 
-    // Verify brand exists
-    const brand = await Brand.findById(brandId);
-    if (!brand) {
-      return res.status(404).json({
-        success: false,
-        message: 'Brand not found'
-      });
+    // Optional: If brandId is provided, verify it exists
+    let validBrandId = null;
+    if (brandId) {
+      const brand = await Brand.findById(brandId);
+      if (brand) validBrandId = brand._id;
     }
 
-    // Try to create service
-    // If slug collision happens within same brand, mongoose throws duplicate key error
     const service = await Service.create({
-      brandId,
-      categoryId,
-      title,
-      basePrice,
-      gstPercentage: gstPercentage || 18,
-      description,
+      brandId: validBrandId,
+      categoryId: categoryId || null,
+      title: title.trim(),
+      basePrice: Number(basePrice),
+      originalPrice: originalPrice ? Number(originalPrice) : 0,
+      discountPrice: discountPrice ? Number(discountPrice) : null,
+      gstPercentage: gstPercentage !== undefined ? Number(gstPercentage) : 18,
+      rating: rating !== undefined ? Number(rating) : 4.9,
+      ratingCount: ratingCount || '4.9 (237.6k)',
+      badge: badge ? badge.trim() : null,
+      tagline: tagline ? tagline.trim() : null,
+      inclusions: Array.isArray(inclusions) ? inclusions : [],
+      cityIds: Array.isArray(cityIds) ? cityIds : (cityId ? [cityId] : []),
+      cityId: cityId || (Array.isArray(cityIds) && cityIds.length > 0 ? cityIds[0] : null),
+      description: description ? description.trim() : '',
       status: status || SERVICE_STATUS.ACTIVE,
-      iconUrl
+      iconUrl: iconUrl || null
     });
 
     res.status(201).json({
@@ -118,18 +146,10 @@ const createService = async (req, res) => {
       service
     });
   } catch (error) {
-    // Handle duplicate slug error specifically
-    if (error.code === 11000 && error.keyPattern && error.keyPattern.slug) {
-      return res.status(409).json({
-        success: false,
-        message: 'A service with this name already exists for this brand.'
-      });
-    }
-
     console.error('Create service error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to create service'
+      message: error.message || 'Failed to create service'
     });
   }
 };
@@ -151,37 +171,23 @@ const updateService = async (req, res) => {
       });
     }
 
-    // If brandId is being updated, verify it exists
-    if (updates.brandId) {
-      const brand = await Brand.findById(updates.brandId);
-      if (!brand) {
-        return res.status(404).json({
-          success: false,
-          message: 'Brand not found'
-        });
-      }
-    }
-
-    // Update fields
-    if (updates.title) service.title = updates.title;
-    if (updates.categoryId) service.categoryId = updates.categoryId;
-    if (updates.basePrice !== undefined) service.basePrice = updates.basePrice;
-    if (updates.gstPercentage !== undefined) service.gstPercentage = updates.gstPercentage;
+    if (updates.title !== undefined) service.title = updates.title.trim();
+    if (updates.basePrice !== undefined) service.basePrice = Number(updates.basePrice);
+    if (updates.originalPrice !== undefined) service.originalPrice = Number(updates.originalPrice);
+    if (updates.discountPrice !== undefined) service.discountPrice = updates.discountPrice ? Number(updates.discountPrice) : null;
+    if (updates.gstPercentage !== undefined) service.gstPercentage = Number(updates.gstPercentage);
+    if (updates.rating !== undefined) service.rating = Number(updates.rating);
+    if (updates.ratingCount !== undefined) service.ratingCount = updates.ratingCount;
+    if (updates.badge !== undefined) service.badge = updates.badge;
+    if (updates.tagline !== undefined) service.tagline = updates.tagline;
+    if (updates.inclusions !== undefined) service.inclusions = updates.inclusions;
+    if (updates.cityIds !== undefined) service.cityIds = updates.cityIds;
+    if (updates.cityId !== undefined) service.cityId = updates.cityId;
     if (updates.description !== undefined) service.description = updates.description;
-    if (updates.status) service.status = updates.status;
+    if (updates.status !== undefined) service.status = updates.status;
     if (updates.iconUrl !== undefined) service.iconUrl = updates.iconUrl;
-    if (updates.brandId) service.brandId = updates.brandId;
-
-    // Slugs are auto-updated if title changes via pre-save hook? 
-    // Wait, the pre-save hook only runs if slug is empty or we explicitly modify it?
-    // In Mongoose schemas, I usually rely on logic. 
-    // My previous Service.js schema had logic: if (this.isModified('title') && !this.slug)
-    // This implies slug is created once.
-    // If user changes title, slug might remain old? 
-    // If they want to regenerate usage, they should clear slug?
-    // UserService.js has: if (this.isModified('title') && !this.slug)
-    // So updating title WON'T update slug unless slug is cleared.
-    // This is generally safer for URLs.
+    if (updates.categoryId !== undefined) service.categoryId = updates.categoryId;
+    if (updates.brandId !== undefined) service.brandId = updates.brandId;
 
     await service.save();
 
@@ -191,18 +197,10 @@ const updateService = async (req, res) => {
       service
     });
   } catch (error) {
-    // Handle duplicate slug error specifically
-    if (error.code === 11000 && error.keyPattern && error.keyPattern.slug) {
-      return res.status(409).json({
-        success: false,
-        message: 'A service with this name already exists for this brand.'
-      });
-    }
-
     console.error('Update service error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to update service'
+      message: error.message || 'Failed to update service'
     });
   }
 };
@@ -215,9 +213,7 @@ const deleteService = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Hard delete as requested
-    const service = await Service.findByIdAndDelete(id);
-
+    const service = await Service.findById(id);
     if (!service) {
       return res.status(404).json({
         success: false,
@@ -225,9 +221,11 @@ const deleteService = async (req, res) => {
       });
     }
 
+    await service.deleteOne();
+
     res.status(200).json({
       success: true,
-      message: 'Service deleted permanently'
+      message: 'Service deleted successfully'
     });
   } catch (error) {
     console.error('Delete service error:', error);

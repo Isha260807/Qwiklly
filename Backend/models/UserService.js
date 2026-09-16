@@ -10,15 +10,13 @@ const userServiceSchema = new mongoose.Schema({
   brandId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Brand',
-    required: [true, 'Please provide a brand ID'],
+    default: null,
     index: true
   },
-  // Added based on user request "category -> brand -> service", 
-  // ensuring we can link if needed, though brand already links to category.
-  // Making it optional for now to avoid breaking existing flows if not sent.
   categoryId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
+    default: null,
     index: true
   },
   title: {
@@ -27,7 +25,11 @@ const userServiceSchema = new mongoose.Schema({
     trim: true,
     index: true
   },
-  // Removed slug as it is not needed for internal modal-based services
+  slug: {
+    type: String,
+    lowercase: true,
+    index: true
+  },
   iconUrl: {
     type: String,
     default: null
@@ -37,11 +39,59 @@ const userServiceSchema = new mongoose.Schema({
     required: [true, 'Base price is required'],
     min: [0, 'Price cannot be negative']
   },
+  originalPrice: {
+    type: Number,
+    default: 0
+  },
+  discountPrice: {
+    type: Number,
+    default: null
+  },
   gstPercentage: {
     type: Number,
-    required: [true, 'GST percentage is required'],
+    default: 18,
+    min: 0
+  },
+  rating: {
+    type: Number,
+    default: 4.9,
     min: 0,
-    default: 18
+    max: 5
+  },
+  ratingCount: {
+    type: String,
+    default: '4.9 (237.6k)'
+  },
+  badge: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  tagline: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  inclusions: [{
+    title: { type: String, trim: true },
+    name: { type: String, trim: true },
+    duration: { type: String, trim: true },
+    iconUrl: { type: String, default: null },
+    description: { type: String, default: null }
+  }],
+  cityIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'City',
+    index: true
+  }],
+  cityId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'City',
+    index: true
+  },
+  displayOrder: {
+    type: Number,
+    default: 0
   },
   status: {
     type: String,
@@ -57,8 +107,6 @@ const userServiceSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Compound index to ensure slug is unique PER BRAND
-// Index for faster queries
-userServiceSchema.index({ brandId: 1, categoryId: 1 });
+userServiceSchema.index({ status: 1, displayOrder: 1 });
 
 module.exports = mongoose.model('UserService', userServiceSchema);

@@ -1,6 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
+  --font-sans: 'Inter', sans-serif;
+  --font-heading: 'Outfit', sans-serif;
+
   --color-primary: #720C3E;
   --color-primary-dark: #4D082A;
   --color-primary-light: #9A2459;
@@ -218,6 +222,7 @@
   box-sizing: border-box;
 }
 
+/* Base Body Font (Inter) */
 html,
 body {
   margin: 0;
@@ -226,21 +231,56 @@ body {
   background: linear-gradient(to bottom, #FFF7FA 0%, #FFFFFF 20%, #FFF7FA 100%) !important;
   background-attachment: fixed;
   color: #6F5A64;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 350;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
 
+/* Headings, Brand, Numbers & Display Font */
+h1, h2, h3, h4, h5, h6, .font-heading, .brand-font {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+}
+
+/* Utility Classes */
+.font-inter {
+  font-family: 'Inter', sans-serif;
+}
+
+.font-outfit {
+  font-family: 'Outfit', sans-serif;
+}
+
 @layer base {
   h1, h2, h3, h4, h5, h6 {
     color: #24151D;
+    font-weight: 500;
+    letter-spacing: -0.01em;
   }
+
+  b, strong {
+    font-weight: 500;
+  }
+}
+
+/* Global Font-Weight Softening - Slim, Sleek & Lightweight */
+.font-black,
+.font-extrabold {
+  font-weight: 500 !important;
+}
+
+.font-bold {
+  font-weight: 500 !important;
+}
+
+.font-semibold {
+  font-weight: 450 !important;
+}
+
+.font-medium {
+  font-weight: 400 !important;
 }
 
 #root {

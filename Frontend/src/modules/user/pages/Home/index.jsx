@@ -12,8 +12,9 @@ import { toast } from 'react-hot-toast';
 import { registerFCMToken } from '../../../../services/pushNotificationService';
 import { motion } from 'framer-motion';
 
-// Lazy load heavy components for better initial load performance
 import PromoCarousel from './components/PromoCarousel';
+import ServicesWeOffer from './components/ServicesWeOffer';
+import DirectServiceDetailModal from './components/DirectServiceDetailModal';
 // Lazy load OTHER heavy components
 const NewAndNoteworthy = lazy(() => import('./components/NewAndNoteworthy'));
 const MostBookedServices = lazy(() => import('./components/MostBookedServices'));
@@ -25,7 +26,6 @@ import CategoryModal from './components/CategoryModal';
 import SearchOverlay from './components/SearchOverlay';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
-import DebugConsole from '../../components/common/DebugConsole';
 
 
 
@@ -40,12 +40,26 @@ const toAssetUrl = (url) => {
 const Home = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [address, setAddress] = useState(localStorage.getItem('currentAddress') || 'Select Location');
+  const [address, setAddress] = useState(() => {
+    const saved = localStorage.getItem('currentAddress');
+    // If saved address contains Devanagari/Hindi characters, ignore it so fresh English is fetched
+    if (saved && !/[\u0900-\u097F]/.test(saved)) {
+      return saved;
+    }
+    if (saved && /[\u0900-\u097F]/.test(saved)) {
+      localStorage.removeItem('currentAddress');
+      localStorage.removeItem('currentCity');
+    }
+    return 'Select Location';
+  });
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [houseNumber, setHouseNumber] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isLocationSupported, setIsLocationSupported] = useState(true);
-  const [detectedCityName, setDetectedCityName] = useState(localStorage.getItem('currentCity') || null);
+  const [detectedCityName, setDetectedCityName] = useState(() => {
+    const saved = localStorage.getItem('currentCity');
+    return (saved && !/[\u0900-\u097F]/.test(saved)) ? saved : null;
+  });
 
 
   const { cartCount, addToCart } = useCart();
@@ -54,6 +68,11 @@ const Home = () => {
   // Clean up legacy storage keys on mount
   useEffect(() => {
     ['userAddress', 'detectedCity', 'user_formatted_address', 'user_city'].forEach(key => localStorage.removeItem(key));
+    const curAddr = localStorage.getItem('currentAddress');
+    if (curAddr && /[\u0900-\u097F]/.test(curAddr)) {
+      localStorage.removeItem('currentAddress');
+      localStorage.removeItem('currentCity');
+    }
   }, []);
 
   // Sync detectedCityName with Address on mount/update if not already set
@@ -113,13 +132,17 @@ const Home = () => {
 
 
   const handleAddressSave = (savedHouseNumber, locationObj) => {
-    if (locationObj) {
-      const newAddress = locationObj.address;
-      setAddress(newAddress);
-      localStorage.setItem('currentAddress', newAddress);
+    let fullAddr = locationObj?.address || savedHouseNumber || '';
+    if (savedHouseNumber && fullAddr && !fullAddr.toLowerCase().includes(savedHouseNumber.toLowerCase())) {
+      fullAddr = `${savedHouseNumber}, ${fullAddr}`;
+    }
+
+    if (fullAddr) {
+      setAddress(fullAddr);
+      localStorage.setItem('currentAddress', fullAddr);
 
       // Try to parse city from location object (Google Places)
-      const components = locationObj.components || locationObj.address_components;
+      const components = locationObj?.components || locationObj?.address_components;
       let city = '';
       if (components) {
         const getComponent = (type) => components.find(c => c.types.includes(type))?.long_name || '';
@@ -127,8 +150,8 @@ const Home = () => {
       }
 
       // Fallback city parsing from address string if components failed
-      if (!city && newAddress) {
-        const parts = newAddress.split(',').map(p => p.trim());
+      if (!city && fullAddr) {
+        const parts = fullAddr.split(',').map(p => p.trim());
         city = parts.length > 2 ? parts[parts.length - 3] : (parts.length > 1 ? parts[parts.length - 2] : parts[0]);
       }
 
@@ -151,20 +174,22 @@ const Home = () => {
         }
 
         toast.success(`Location set to ${city}`);
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+      } else {
+        toast.success(`Location updated`);
       }
     }
-    setHouseNumber(savedHouseNumber);
+    setHouseNumber(savedHouseNumber || '');
     setIsAddressModalOpen(false);
   };
 
-  // Auto-detect location on mount
+  // Auto-detect location on mount with forced English language
   useEffect(() => {
     const autoDetectLocation = async () => {
+      const curStored = localStorage.getItem('currentAddress');
+      const isHindi = curStored && /[\u0900-\u097F]/.test(curStored);
+
       if (navigator.geolocation) {
-        if (address === 'Select Location') {
+        if (address === 'Select Location' || isHindi) {
           navigator.geolocation.getCurrentPosition(
             async (position) => {
               try {
@@ -178,13 +203,17 @@ const Home = () => {
                 if (data.status === 'OK' && data.results.length > 0) {
                   const result = data.results[0];
                   const getComponent = (type) =>
-                    result.address_components.find(c => c.types.includes(type))?.long_name || '';
+                    result.address_components?.find(c => c.types.includes(type))?.long_name || '';
 
                   const area = getComponent('sublocality_level_1') || getComponent('neighborhood') || getComponent('locality');
                   const city = getComponent('locality') || getComponent('administrative_area_level_2');
                   const state = getComponent('administrative_area_level_1');
 
-                  const formattedAddress = `${area}, ${city}, ${state}`;
+                  let formattedAddress = [area, city, state].filter(Boolean).join(', ');
+                  if (!formattedAddress || /[\u0900-\u097F]/.test(formattedAddress)) {
+                    formattedAddress = result.formatted_address || `${city || 'Indore'}, Madhya Pradesh`;
+                  }
+
                   setAddress(formattedAddress);
                   localStorage.setItem('currentAddress', formattedAddress);
 
@@ -208,7 +237,21 @@ const Home = () => {
                   }
                 }
               } catch (error) {
-                // Silent fail
+                // Fallback to nominatim with en language
+                try {
+                  const nomRes = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}&zoom=18&addressdetails=1&accept-language=en`,
+                    { headers: { 'Accept-Language': 'en-US,en;q=0.9' } }
+                  );
+                  const nomData = await nomRes.json();
+                  const nomAddr = nomData.display_name?.split(',').slice(0, 3).join(', ');
+                  if (nomAddr) {
+                    setAddress(nomAddr);
+                    localStorage.setItem('currentAddress', nomAddr);
+                  }
+                } catch (e) {
+                  // silent
+                }
               }
             },
             (error) => {
@@ -231,6 +274,9 @@ const Home = () => {
   }, []);
 
   const [categories, setCategories] = useState([]);
+  const [services, setServices] = useState([]);
+  const [selectedDirectService, setSelectedDirectService] = useState(null);
+  const [isDirectServiceModalOpen, setIsDirectServiceModalOpen] = useState(false);
   const [homeContent, setHomeContent] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -245,7 +291,7 @@ const Home = () => {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
-  // Fetch categories and home content on mount (and when city changes)
+  // Fetch categories, services and home content on mount (and when city changes)
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -267,8 +313,24 @@ const Home = () => {
             setCategories(mappedCategories);
           }
 
+          if (response.services) {
+            setServices(response.services);
+          }
+
           if (response.homeContent) {
             setHomeContent(response.homeContent);
+          }
+        }
+
+        // Fallback: If services not returned in getHomeData, fetch directly
+        if (!response.services || response.services.length === 0) {
+          try {
+            const svcRes = await publicCatalogService.getServices({ cityId });
+            if (svcRes.success && svcRes.services) {
+              setServices(svcRes.services);
+            }
+          } catch (e) {
+            console.error("Direct services fetch fallback error:", e);
           }
         }
 
@@ -461,21 +523,18 @@ const Home = () => {
       >
         <motion.div
           variants={itemVariants}
-          className="backdrop-blur-xl sticky top-0 z-50 border-b border-black/[0.03] rounded-b-[24px] shadow-[0_4px_30px_rgba(0,0,0,0.03)] transition-all duration-300"
-          style={{ backgroundColor: 'rgba(255, 255, 255, 0.4)' }}
+          className="sticky top-0 z-50 transition-all duration-300 shadow-sm"
         >
           <Header
             location={address}
             onLocationClick={handleLocationClick}
+            onSearchClick={() => setIsSearchOpen(true)}
           />
-          <div className="px-5 pb-5 pt-1 max-w-lg lg:max-w-2xl mx-auto w-full">
-            <SearchBar onInputClick={() => setIsSearchOpen(true)} />
-          </div>
         </motion.div>
 
-        <main className="pt-6 space-y-8 pb-24 max-w-screen-xl mx-auto w-full">
+        <main className="pt-2 sm:pt-3 space-y-4 sm:space-y-6 pb-24 max-w-screen-xl mx-auto w-full">
           {!isLocationSupported ? (
-            <div className="flex flex-col items-center justify-center pt-20 pb-10 px-6 text-center min-h-[60vh]">
+            <div className="flex flex-col items-center justify-center pt-10 pb-10 px-6 text-center min-h-[50vh]">
               <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6">
                 <svg className="w-12 h-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -500,7 +559,7 @@ const Home = () => {
           ) : (
             <>
               {/* Hero Section - Promo Carousel */}
-              {homeContent?.isPromosVisible !== false && (
+              {homeContent?.isPromosVisible !== false && homeContent?.promos && homeContent.promos.length > 0 && (
                 <motion.section variants={itemVariants} className="relative z-0">
                   <PromoCarousel
                     promos={(homeContent?.promos || []).sort((a, b) => (a.order || 0) - (b.order || 0)).map(promo => ({
@@ -516,6 +575,19 @@ const Home = () => {
                       route: '/'
                     }))}
                     onPromoClick={handlePromoClick}
+                  />
+                </motion.section>
+              )}
+
+              {/* Direct Services We Offer Grid */}
+              {services && services.length > 0 && (
+                <motion.section variants={itemVariants}>
+                  <ServicesWeOffer
+                    services={services}
+                    onServiceClick={(svc) => {
+                      setSelectedDirectService(svc);
+                      setIsDirectServiceModalOpen(true);
+                    }}
                   />
                 </motion.section>
               )}
@@ -667,13 +739,6 @@ const Home = () => {
                   </Suspense>
                 </motion.div>
               )}
-
-              {/* Refer & Earn Section */}
-              <motion.div variants={itemVariants}>
-                <Suspense fallback={<div className="h-32 bg-gray-50 animate-pulse rounded-xl mx-4" />}>
-                  <ReferEarnSection onReferClick={handleReferClick} />
-                </Suspense>
-              </motion.div>
             </>
           )}
         </main>
@@ -712,7 +777,15 @@ const Home = () => {
         onSave={handleAddressSave}
       />
 
-      <DebugConsole />
+      {/* Direct Service Detail Modal */}
+      <DirectServiceDetailModal
+        isOpen={isDirectServiceModalOpen}
+        onClose={() => {
+          setIsDirectServiceModalOpen(false);
+          setSelectedDirectService(null);
+        }}
+        service={selectedDirectService}
+      />
     </div>
   );
 };

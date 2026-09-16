@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from '@react-google-maps/api';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { FiCrosshair } from 'react-icons/fi';
 import flutterBridge from '../../../../../utils/flutterBridge';
 import { toast } from 'react-hot-toast';
@@ -8,65 +8,84 @@ const libraries = ['places', 'geometry'];
 
 const mapContainerStyle = {
   width: '100%',
-  height: '256px'
+  height: '210px'
 };
 
 const defaultCenter = {
-  lat: 28.6139,
-  lng: 77.2090
+  lat: 22.7196,
+  lng: 75.8577
 };
 
-const LocationPicker = ({ onLocationSelect, initialPosition = null }) => {
+const LocationPicker = ({ onLocationSelect, initialPosition = null, isLoaded = false }) => {
   const [map, setMap] = useState(null);
   const [marker, setMarker] = useState(initialPosition || defaultCenter);
-  const [autocomplete, setAutocomplete] = useState(null);
   const [loading, setLoading] = useState(false);
-  const loadingRef = React.useRef(false);
+  const loadingRef = useRef(false);
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries
-  });
-
-  // Update marker when initialPosition changes (from external selection)
+  // Update marker when initialPosition changes
   useEffect(() => {
-    if (initialPosition) {
+    if (initialPosition?.lat && initialPosition?.lng) {
       setMarker(initialPosition);
       if (map) {
         map.panTo(initialPosition);
-        map.setZoom(15);
+        map.setZoom(16);
       }
     }
   }, [initialPosition, map]);
 
-  // Get user's current location on mount
-  useEffect(() => {
-    if (!initialPosition && isLoaded) {
-      handleCurrentLocation();
-    }
-  }, [isLoaded]);
-
-  // Reverse geocode to get address from coordinates
+  // Reverse geocode to get address in English from coordinates
   const reverseGeocode = async (position) => {
-    if (!window.google) return;
-
     setLoading(true);
-    const geocoder = new window.google.maps.Geocoder();
 
-    geocoder.geocode({ location: position }, (results, status) => {
+    if (window.google?.maps?.Geocoder) {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ location: position, language: 'en' }, (results, status) => {
+        setLoading(false);
+        if (status === 'OK' && results[0]) {
+          if (onLocationSelect) {
+            onLocationSelect({
+              lat: position.lat,
+              lng: position.lng,
+              address: results[0].formatted_address,
+              components: results[0].address_components
+            });
+          }
+          return;
+        }
+        // Fallback to nominatim
+        fallbackNominatim(position.lat, position.lng);
+      });
+    } else {
+      fallbackNominatim(position.lat, position.lng);
+    }
+  };
+
+  const fallbackNominatim = async (lat, lng) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`,
+        { headers: { 'Accept-Language': 'en-US,en;q=0.9' } }
+      );
+      const data = await res.json();
       setLoading(false);
-      if (status === 'OK' && results[0]) {
+      if (data) {
+        const addrObj = data.address || {};
+        const city = addrObj.city || addrObj.town || addrObj.village || addrObj.suburb || 'Indore';
+        const area = addrObj.suburb || addrObj.neighbourhood || addrObj.road || addrObj.residential || '';
+        const readable = [area, city, addrObj.state || 'Madhya Pradesh'].filter(Boolean).join(', ') || data.display_name?.split(',').slice(0, 3).join(', ');
+
         if (onLocationSelect) {
           onLocationSelect({
-            lat: position.lat,
-            lng: position.lng,
-            address: results[0].formatted_address,
-            components: results[0].address_components
+            lat,
+            lng,
+            address: readable,
+            components: []
           });
         }
       }
-    });
+    } catch (e) {
+      setLoading(false);
+    }
   };
 
   // Handle map click
@@ -79,94 +98,74 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null }) => {
     reverseGeocode(newPos);
   }, []);
 
-  // Handle autocomplete place selection
-  const onPlaceChanged = () => {
-    if (autocomplete !== null) {
-      const place = autocomplete.getPlace();
-      if (place.geometry) {
-        const newPos = {
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng()
-        };
-        setMarker(newPos);
-        if (map) {
-          map.panTo(newPos);
-          map.setZoom(15);
-        }
-        if (onLocationSelect) {
-          onLocationSelect({
-            lat: newPos.lat,
-            lng: newPos.lng,
-            address: place.formatted_address
-          });
-        }
-      }
-    }
-  };
-
-  // Handle current location button
+  // Handle Detect Current Location
   const handleCurrentLocation = async () => {
     setLoading(true);
     loadingRef.current = true;
-    
-    // Safety timer: If it takes more than 5 seconds, prompt user to check GPS
-    const slowLocationTimer = setTimeout(() => {
-      if (loadingRef.current) {
-        window.dispatchEvent(new CustomEvent('requestLocationPrompt'));
-        toast('Location taking too long. Please ensure GPS is ON.', { icon: '📍' });
-      }
-    }, 5000);
 
     try {
       const pos = await flutterBridge.getCurrentLocation();
-      clearTimeout(slowLocationTimer);
       setLoading(false);
       loadingRef.current = false;
-      
-      const newPos = {
-        lat: pos.latitude,
-        lng: pos.longitude
-      };
-      
-      setMarker(newPos);
-      if (map) {
-        map.panTo(newPos);
-        map.setZoom(17);
-      }
-      reverseGeocode(newPos);
-    } catch (error) {
-      clearTimeout(slowLocationTimer);
-      setLoading(false);
-      loadingRef.current = false;
-      console.error("Geolocation error:", error);
-      
-      // Trigger the specialized "Allow GPS" popup
-      window.dispatchEvent(new CustomEvent('requestLocationPrompt'));
-      
-      let errorMessage = 'Unable to get location.';
-      if (error.code === 1) errorMessage = 'Location permission denied.';
-      else if (error.code === 2) errorMessage = 'GPS is turned off.';
-      else if (error.code === 3) errorMessage = 'Location request timed out.';
 
-      toast.error(`${errorMessage} Please select manually on the map.`);
+      const newPos = {
+        lat: pos?.latitude || pos?.coords?.latitude,
+        lng: pos?.longitude || pos?.coords?.longitude
+      };
+
+      if (newPos.lat && newPos.lng) {
+        setMarker(newPos);
+        if (map) {
+          map.panTo(newPos);
+          map.setZoom(17);
+        }
+        reverseGeocode(newPos);
+        return;
+      }
+    } catch (e) {
+      // silent
+    }
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (p) => {
+          setLoading(false);
+          loadingRef.current = false;
+          const newPos = {
+            lat: p.coords.latitude,
+            lng: p.coords.longitude
+          };
+          setMarker(newPos);
+          if (map) {
+            map.panTo(newPos);
+            map.setZoom(17);
+          }
+          reverseGeocode(newPos);
+        },
+        (err) => {
+          setLoading(false);
+          loadingRef.current = false;
+          toast.error('Unable to get GPS location. Please select manually on map.');
+        }
+      );
+    } else {
+      setLoading(false);
+      loadingRef.current = false;
+      toast.error('Location service not supported.');
     }
   };
 
-  if (loadError) {
-    return <div className="h-64 bg-gray-200 flex items-center justify-center">
-      <p className="text-red-600">Error loading Google Maps</p>
-    </div>;
-  }
-
   if (!isLoaded) {
-    return <div className="h-64 bg-gray-200 flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent"></div>
-    </div>;
+    return (
+      <div className="w-full h-[210px] bg-gray-100 rounded-2xl flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-3 border-[#720C3E] border-t-transparent"></div>
+      </div>
+    );
   }
 
   return (
-    <div className="w-full">
-      <div className="relative h-64 bg-gray-200">
+    <div className="w-full relative rounded-2xl overflow-hidden shadow-inner border border-gray-200">
+      <div className="relative h-[210px] w-full bg-gray-100">
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
           center={marker}
@@ -177,27 +176,29 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null }) => {
             streetViewControl: false,
             mapTypeControl: false,
             fullscreenControl: false,
+            clickableIcons: false,
             gestureHandling: 'greedy',
-            rotateControl: true,
-            tiltControl: true,
+            rotateControl: false,
+            tiltControl: false,
             zoomControl: false
           }}
         >
           {marker && <Marker position={marker} />}
         </GoogleMap>
 
-        {/* Pin Instruction Overlay */}
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-4 py-2 rounded-lg text-sm z-10">
-          {loading ? 'Fetching address...' : 'Place the pin accurately on map'}
-        </div>
+        {loading && (
+          <div className="absolute top-3 left-1/2 transform -translate-x-1/2 bg-black/75 backdrop-blur-sm text-white px-3 py-1 rounded-full text-xs font-medium z-10 shadow-md animate-pulse">
+            Fetching address...
+          </div>
+        )}
 
-        {/* Locate Me Button */}
-        {/* Locate Me Button - Now on right */}
         <button
+          type="button"
           onClick={handleCurrentLocation}
-          className="absolute bottom-16 right-4 p-3 bg-white rounded-xl shadow-lg flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all z-10"
+          className="absolute bottom-3 right-3 p-2.5 bg-white rounded-xl shadow-lg flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all z-10 border border-gray-200 cursor-pointer"
+          title="Detect Current Location"
         >
-          <FiCrosshair className="w-6 h-6 text-gray-700" />
+          <FiCrosshair className="w-5 h-5 text-[#720C3E]" />
         </button>
       </div>
     </div>

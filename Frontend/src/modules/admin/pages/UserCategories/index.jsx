@@ -91,9 +91,10 @@ const UserCategories = () => {
         <Routes>
           <Route index element={<Navigate to="home" replace />} />
           <Route path="home" element={<HomePage catalog={catalog} setCatalog={setCatalog} selectedCity={selectedCity} />} />
-          <Route path="categories" element={<CategoriesPage catalog={catalog} setCatalog={setCatalog} selectedCity={selectedCity} />} />
-          <Route path="sections" element={<ServicesPage catalog={catalog} setCatalog={setCatalog} selectedCity={selectedCity} />} />
-          <Route path="brands" element={<BrandsPage catalog={catalog} setCatalog={setCatalog} selectedCity={selectedCity} />} />
+          <Route path="sections" element={<ServicesPage selectedCity={selectedCity} />} />
+          <Route path="services" element={<ServicesPage selectedCity={selectedCity} />} />
+          <Route path="categories" element={<Navigate to="services" replace />} />
+          <Route path="brands" element={<Navigate to="services" replace />} />
           <Route path="vendor-services" element={<VendorServicesPage />} />
           <Route path="vendor-parts" element={<VendorPartsPage />} />
           <Route path="*" element={<Navigate to="home" replace />} />

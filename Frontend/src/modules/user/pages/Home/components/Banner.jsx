@@ -3,8 +3,10 @@ import homepageBanner from '../../../../../assets/images/pages/Home/Banner/homep
 import { optimizeCloudinaryUrl } from '../../../../../utils/cloudinaryOptimize';
 
 const Banner = React.memo(({ imageUrl, onClick }) => {
+  if (!imageUrl) return null;
+
   // Optimize Cloudinary URLs for faster loading
-  const optimizedUrl = imageUrl ? optimizeCloudinaryUrl(imageUrl, { quality: 'auto' }) : homepageBanner;
+  const optimizedUrl = optimizeCloudinaryUrl(imageUrl, { quality: 'auto' });
 
   return (
     <div className="mb-8 px-4 cursor-pointer group" onClick={onClick}>

@@ -226,9 +226,18 @@ const getPublicBrandBySlug = async (req, res) => {
  */
 const getPublicServices = async (req, res) => {
   try {
-    const { brandId, brandSlug, categoryId } = req.query;
+    const { brandId, brandSlug, categoryId, cityId, search } = req.query;
 
     const query = { status: 'active' };
+
+    if (cityId) {
+      query.$or = [
+        { cityId: cityId },
+        { cityIds: cityId },
+        { cityIds: { $size: 0 } },
+        { cityIds: { $exists: false } }
+      ];
+    }
 
     if (brandId) {
       query.brandId = brandId;
@@ -245,14 +254,14 @@ const getPublicServices = async (req, res) => {
       query.categoryId = categoryId;
     }
 
-    if (req.query.search) {
-      const escapedSearch = req.query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (search) {
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.title = { $regex: escapedSearch, $options: 'i' };
     }
 
     const services = await Service.find(query)
       .populate('brandId', 'title iconUrl')
-      .sort({ createdAt: 1 })
+      .sort({ displayOrder: 1, createdAt: -1 })
       .lean();
 
     res.status(200).json({
@@ -261,10 +270,22 @@ const getPublicServices = async (req, res) => {
         id: svc._id.toString(),
         title: svc.title,
         slug: svc.slug,
-        icon: svc.iconUrl,
+        tagline: svc.tagline || '',
+        description: svc.description || '',
+        icon: svc.iconUrl || '',
+        iconUrl: svc.iconUrl || '',
+        image: svc.iconUrl || '',
+        imageUrl: svc.iconUrl || '',
+        price: svc.basePrice,
         basePrice: svc.basePrice,
-        gstPercentage: svc.gstPercentage,
-        description: svc.description,
+        originalPrice: svc.originalPrice || 0,
+        discountPrice: svc.discountPrice || null,
+        gstPercentage: svc.gstPercentage ?? 18,
+        rating: svc.rating || 4.9,
+        reviews: svc.ratingCount || '4.9 (237.6k)',
+        ratingCount: svc.ratingCount || '4.9 (237.6k)',
+        badge: svc.badge || null,
+        inclusions: svc.inclusions || [],
         brandId: svc.brandId?._id,
         brandName: svc.brandId?.title,
         brandIcon: svc.brandId?.iconUrl
@@ -373,17 +394,30 @@ const getPublicHomeContent = async (req, res) => {
 };
 
 /**
- * Get consolidated home data (Categories + Content)
+ * Get consolidated home data (Categories + Services + Content)
  */
 const getPublicHomeData = async (req, res) => {
   try {
     const { cityId } = req.query;
 
-    // Fetch both in parallel
-    const [categoriesRes, homeContent] = await Promise.all([
+    const serviceQuery = { status: 'active' };
+    if (cityId) {
+      serviceQuery.$or = [
+        { cityId: cityId },
+        { cityIds: cityId },
+        { cityIds: { $size: 0 } },
+        { cityIds: { $exists: false } }
+      ];
+    }
+
+    // Fetch all in parallel
+    const [categoriesRes, servicesRes, homeContent] = await Promise.all([
       Category.find({ status: 'active', cityIds: cityId ? cityId : { $exists: true } })
         .select('title slug homeIconUrl homeBadge hasSaleBadge')
         .sort({ homeOrder: 1 })
+        .lean(),
+      Service.find(serviceQuery)
+        .sort({ displayOrder: 1, createdAt: -1 })
         .lean(),
       HomeContent.getHomeContent(cityId)
     ]);
@@ -395,6 +429,28 @@ const getPublicHomeData = async (req, res) => {
       icon: cat.homeIconUrl || '',
       badge: cat.homeBadge || '',
       hasSaleBadge: cat.hasSaleBadge || false
+    }));
+
+    const formattedServices = servicesRes.map(svc => ({
+      id: svc._id.toString(),
+      title: svc.title,
+      slug: svc.slug,
+      tagline: svc.tagline || '',
+      description: svc.description || '',
+      icon: svc.iconUrl || '',
+      iconUrl: svc.iconUrl || '',
+      image: svc.iconUrl || '',
+      imageUrl: svc.iconUrl || '',
+      price: svc.basePrice,
+      basePrice: svc.basePrice,
+      originalPrice: svc.originalPrice || 0,
+      discountPrice: svc.discountPrice || null,
+      gstPercentage: svc.gstPercentage ?? 18,
+      rating: svc.rating || 4.9,
+      reviews: svc.ratingCount || '4.9 (237.6k)',
+      ratingCount: svc.ratingCount || '4.9 (237.6k)',
+      badge: svc.badge || null,
+      inclusions: svc.inclusions || []
     }));
 
     let formattedContent = null;
@@ -458,6 +514,7 @@ const getPublicHomeData = async (req, res) => {
     res.status(200).json({
       success: true,
       categories: formattedCategories,
+      services: formattedServices,
       homeContent: formattedContent
     });
   } catch (error) {
