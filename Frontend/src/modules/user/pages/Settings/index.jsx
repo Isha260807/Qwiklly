@@ -85,84 +85,102 @@ const Settings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white pb-20">
+    <div className="min-h-screen bg-gray-50/50 pb-12">
       {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-30">
-        <div className="px-4 pt-4 pb-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <FiArrowLeft className="w-5 h-5 text-black" />
-            </button>
-            <h1 className="text-xl font-bold text-black">Settings</h1>
-          </div>
+      <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
+        <div className="px-3.5 py-2.5 flex items-center gap-2.5 max-w-lg mx-auto">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors active:scale-95"
+          >
+            <FiArrowLeft className="w-4 h-4 text-gray-800" />
+          </button>
+          <h1 className="text-sm font-bold text-gray-900 tracking-tight">Settings</h1>
         </div>
       </header>
 
-      <main className="px-4 py-4">
-        {/* Order Related Messages Section */}
-        <div className="mb-6">
-          <h2 className="text-base font-bold text-black mb-2">Order related messages</h2>
-          <p className="text-sm text-gray-600 leading-relaxed">
-            Order related messages can't be turned off as they are important for service experience.
-          </p>
+      <main className="px-3.5 py-3 max-w-lg mx-auto">
+        {/* Order Related Messages Notice */}
+        <div className="mb-3.5 p-2.5 bg-pink-50/50 rounded-xl border border-pink-100/60 flex items-start gap-2">
+          <FiMessageCircle className="w-3.5 h-3.5 text-[#720C3E] shrink-0 mt-0.5" />
+          <div className="text-[11px] leading-relaxed text-gray-600">
+            <span className="font-bold text-gray-800">Order messages: </span>
+            Cannot be turned off as they are required for active booking updates and service experience.
+          </div>
         </div>
 
         {/* Notifications & Reminders Section */}
-        <div className="mb-6">
-          <h2 className="text-base font-bold text-black mb-4">Notifications & reminders</h2>
+        <div className="mb-3.5">
+          <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Notifications & Reminders</h2>
 
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100 shadow-2xs overflow-hidden">
             {/* Push Notifications */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(0, 166, 166, 0.1)' }}>
-                  <FiBell className="w-5 h-5" style={{ color: themeColors.button }} />
+            <div className="flex items-center justify-between p-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-pink-50 text-[#720C3E]">
+                  <FiBell className="w-3.5 h-3.5" />
                 </div>
-                <span className="text-sm font-medium text-black">Push Notifications</span>
+                <span className="text-xs font-semibold text-gray-800">Push Notifications</span>
               </div>
               <button
                 onClick={() => handleToggle('push')}
-                className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${notifications.push ? 'bg-green-700' : 'bg-gray-300'
-                  }`}
-                style={notifications.push ? { backgroundColor: '#15803d' } : {}}
+                className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
+                  notifications.push ? 'bg-[#720C3E]' : 'bg-gray-200'
+                }`}
               >
                 <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform duration-200 ${notifications.push ? 'translate-x-6' : 'translate-x-0'
-                    }`}
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-xs transition-transform duration-200 ${
+                    notifications.push ? 'translate-x-4' : 'translate-x-0'
+                  }`}
                 />
               </button>
             </div>
 
             {/* Email */}
-            <div className="flex items-center justify-between p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(0, 166, 166, 0.1)' }}>
-                  <FiMail className="w-5 h-5" style={{ color: themeColors.button }} />
+            <div className="flex items-center justify-between p-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-pink-50 text-[#720C3E]">
+                  <FiMail className="w-3.5 h-3.5" />
                 </div>
-                <span className="text-sm font-medium text-black">Email</span>
+                <span className="text-xs font-semibold text-gray-800">Email</span>
               </div>
               <button
                 onClick={() => handleToggle('email')}
-                className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${notifications.email ? 'bg-green-700' : 'bg-gray-300'
-                  }`}
-                style={notifications.email ? { backgroundColor: '#15803d' } : {}}
+                className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
+                  notifications.email ? 'bg-[#720C3E]' : 'bg-gray-200'
+                }`}
               >
                 <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform duration-200 ${notifications.email ? 'translate-x-6' : 'translate-x-0'
-                    }`}
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-xs transition-transform duration-200 ${
+                    notifications.email ? 'translate-x-4' : 'translate-x-0'
+                  }`}
                 />
               </button>
             </div>
           </div>
         </div>
 
+        {/* Privacy & Data Section */}
+        <div className="mb-3.5">
+          <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Privacy</h2>
+          <button
+            onClick={handlePrivacyClick}
+            className="w-full bg-white rounded-xl border border-gray-100 p-2.5 flex items-center justify-between shadow-2xs hover:bg-gray-50 active:scale-[0.99] transition-all text-left"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-pink-50 text-[#720C3E]">
+                <FiShield className="w-3.5 h-3.5" />
+              </div>
+              <span className="text-xs font-semibold text-gray-800">Privacy & Data</span>
+            </div>
+            <FiChevronRight className="w-4 h-4 text-gray-400" />
+          </button>
+        </div>
+
         {/* Account Actions Section */}
-        <div className="mb-6">
-          <h2 className="text-base font-bold text-black mb-4">Account</h2>
-          <div className="space-y-3">
+        <div className="mb-3.5">
+          <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Account Actions</h2>
+          <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100 shadow-2xs overflow-hidden">
             <button
               onClick={async () => {
                 const confirmed = window.confirm('Are you sure you want to log out?');
@@ -172,57 +190,37 @@ const Settings = () => {
                   toast.success('Logged out successfully');
                 }
               }}
-              className="w-full bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3 hover:bg-gray-50 active:scale-[0.98] transition-all"
+              className="w-full p-2.5 flex items-center gap-2.5 hover:bg-rose-50/50 active:scale-[0.99] transition-all text-left"
             >
-              <div className="w-8 h-8 rounded-full flex items-center justify-center bg-red-50">
-                <FiLogOut className="w-5 h-5 text-red-500" />
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-rose-50 text-rose-600">
+                <FiLogOut className="w-3.5 h-3.5" />
               </div>
-              <span className="text-sm font-medium text-red-600">Log Out</span>
+              <span className="text-xs font-semibold text-rose-600">Log Out</span>
             </button>
 
             <button
               onClick={() => {
                 if (window.confirm('Are you sure you want to delete your account? This action is irreversible.')) {
                   toast.loading('Processing deletion...');
-                  // Add actual delete logic here or navigate to a dedicated page
                   setTimeout(() => {
                     toast.dismiss();
                     toast.error('Please contact support to delete account for security reasons.');
                   }, 1000);
                 }
               }}
-              className="w-full bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3 hover:bg-gray-50 active:scale-[0.98] transition-all"
+              className="w-full p-2.5 flex items-center gap-2.5 hover:bg-gray-50 active:scale-[0.99] transition-all text-left"
             >
-              <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100">
-                <FiTrash2 className="w-5 h-5 text-gray-500" />
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-gray-100 text-gray-500">
+                <FiTrash2 className="w-3.5 h-3.5" />
               </div>
               <div className="text-left">
-                <span className="text-sm font-medium text-gray-700 block">Delete Account</span>
-                <span className="text-xs text-gray-500">Permanently remove your data</span>
+                <span className="text-xs font-semibold text-gray-700 block">Delete Account</span>
+                <span className="text-[10px] text-gray-400">Permanently remove your data</span>
               </div>
             </button>
           </div>
         </div>
-
-        {/* Privacy & Data Section */}
-        <div className="space-y-4 mb-6">
-          <button
-            onClick={handlePrivacyClick}
-            className="w-full bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:bg-gray-50 active:scale-[0.98] transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(0, 166, 166, 0.1)' }}>
-                <FiShield className="w-5 h-5" style={{ color: themeColors.button }} />
-              </div>
-              <span className="text-sm font-medium text-black">Privacy & data</span>
-            </div>
-            <FiChevronRight className="w-5 h-5 text-gray-400" />
-          </button>
-
-        </div>
       </main>
-
-      {/* BottomNav hidden on this page */}
     </div>
   );
 };

@@ -341,7 +341,7 @@ const Account = () => {
                   <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center">
                     <Logo className="w-5 h-5" />
                   </div>
-                  <span className="text-xs font-semibold text-gray-800">About Cleaning Expert Services</span>
+                  <span className="text-xs font-semibold text-gray-800">About Qwiklly</span>
                 </div>
                 <FiChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
               </button>

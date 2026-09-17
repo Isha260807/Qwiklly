@@ -164,112 +164,117 @@ const ManageAddresses = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white pb-4">
+    <div className="min-h-screen bg-white pb-10">
       {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-30">
-        <div className="px-4 pt-4 pb-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <FiArrowLeft className="w-5 h-5 text-black" />
-            </button>
-            <h1 className="text-xl font-bold text-black">Manage Addresses</h1>
-          </div>
+      <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
+        <div className="px-3.5 py-2.5 flex items-center gap-2.5 max-w-lg mx-auto">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors active:scale-95"
+          >
+            <FiArrowLeft className="w-4 h-4 text-gray-800" />
+          </button>
+          <h1 className="text-sm font-bold text-gray-900 tracking-tight">Manage Addresses</h1>
         </div>
       </header>
 
-      <main className="px-4 py-4">
-
-
-        {/* Saved Addresses Section */}
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Saved Address</h2>
-          {addresses.length === 0 && (
-            <button
-              onClick={handleAddAddress}
-              className="flex items-center gap-1.5 text-sm font-bold text-purple-600"
-            >
-              <FiPlus className="w-4 h-4" />
-              Add Address
-            </button>
-          )}
+      <main className="px-3.5 py-3 max-w-lg mx-auto">
+        {/* Saved Addresses Section Header */}
+        <div className="mb-2.5">
+          <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Saved Address</h2>
         </div>
 
         {/* Loading State */}
         {loading && addresses.length === 0 && (
           <div className="py-10 text-center">
-            <div className="w-8 h-8 border-4 border-gray-100 border-t-purple-600 rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-sm text-gray-500">Loading your addresses...</p>
+            <div className="w-6 h-6 border-2 border-gray-100 border-t-[#720C3E] rounded-full animate-spin mx-auto mb-2"></div>
+            <p className="text-xs text-gray-400">Loading your addresses...</p>
           </div>
         )}
 
         {/* Empty State */}
         {!loading && addresses.length === 0 && (
-          <div className="py-10 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-            <FiMapPin className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm text-gray-500 font-medium">No saved addresses yet</p>
+          <div className="py-8 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+            <FiMapPin className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+            <p className="text-xs text-gray-500 font-medium mb-3">No saved addresses yet</p>
+            <button
+              onClick={handleAddAddress}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-xl shadow-xs active:scale-95 transition-all"
+              style={{ backgroundColor: '#720C3E' }}
+            >
+              <FiPlus className="w-3.5 h-3.5" />
+              <span>Add Your First Address</span>
+            </button>
           </div>
         )}
 
         {/* Address List */}
-        <div className="space-y-4">
+        <div className="space-y-2.5">
           {addresses.map((address) => (
             <div
               key={address._id || address.id}
-              className="bg-white border border-gray-200 rounded-xl p-4 relative"
+              className="bg-white border border-gray-200/80 rounded-xl p-3 relative shadow-xs hover:border-gray-300 transition-all"
             >
               {/* Menu Button */}
               <button
                 onClick={() => handleMenuToggle(address._id || address.id)}
-                className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="absolute top-2.5 right-2.5 p-1.5 hover:bg-gray-100 rounded-full transition-colors"
               >
-                <FiMoreVertical className="w-5 h-5 text-gray-600" />
+                <FiMoreVertical className="w-4 h-4 text-gray-500" />
               </button>
 
               {/* Menu Dropdown */}
               {showMenu === (address._id || address.id) && (
-                <div className="absolute top-12 right-4 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[120px]">
+                <div className="absolute top-9 right-2.5 bg-white border border-gray-200 rounded-xl shadow-lg z-20 min-w-[110px] py-1 overflow-hidden">
                   <button
                     onClick={() => handleEdit(address)}
-                    className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-50 transition-colors text-left"
+                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition-colors text-left"
                   >
-                    <FiEdit2 className="w-4 h-4 text-gray-600" />
-                    <span className="text-sm text-gray-700">Edit</span>
+                    <FiEdit2 className="w-3.5 h-3.5 text-gray-600" />
+                    <span className="text-xs font-medium text-gray-700">Edit</span>
                   </button>
                   <button
                     onClick={() => handleDelete(address._id || address.id)}
-                    className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-50 transition-colors text-left text-red-600"
+                    className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-rose-50 transition-colors text-left text-rose-600"
                   >
-                    <FiTrash2 className="w-4 h-4" />
-                    <span className="text-sm">Delete</span>
+                    <FiTrash2 className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">Delete</span>
                   </button>
                 </div>
               )}
 
               {/* Address Content */}
-              <div className="pr-12">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-bold uppercase text-gray-600">
+              <div className="pr-8">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="px-2 py-0.5 bg-gray-100 rounded text-[9px] font-bold uppercase text-gray-600">
                     {address.type || 'HOME'}
                   </span>
                   {address.isDefault && (
-                    <span className="px-2 py-0.5 bg-green-100 rounded text-xs font-bold uppercase text-green-700">
+                    <span className="px-2 py-0.5 bg-emerald-50 rounded text-[9px] font-bold uppercase text-emerald-700 border border-emerald-100">
                       Default
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-gray-700 mb-2 leading-relaxed font-medium">
-                  {/* Combined line 1 & 2 for title-like display if needed, or just full address */}
+                <p className="text-xs text-gray-800 mb-1 leading-relaxed font-medium">
                   {address.addressLine2 ? `${address.addressLine2}, ` : ''}{address.addressLine1}
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-[11px] text-gray-400">
                   {address.city}, {address.state} - {address.pincode}
                 </p>
               </div>
             </div>
           ))}
+
+          {/* Single Add New Address button */}
+          {addresses.length > 0 && (
+            <button
+              onClick={handleAddAddress}
+              className="w-full py-2.5 px-3 border border-dashed border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-50 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold text-gray-700 transition-all active:scale-[0.99] shadow-2xs"
+            >
+              <FiPlus className="w-3.5 h-3.5" style={{ color: '#720C3E' }} />
+              <span>Add New Address</span>
+            </button>
+          )}
         </div>
       </main>
 
@@ -285,7 +290,7 @@ const ManageAddresses = () => {
       {/* Close menu when clicking outside */}
       {showMenu && (
         <div
-          className="fixed inset-0 z-0"
+          className="fixed inset-0 z-10"
           onClick={() => setShowMenu(null)}
         />
       )}

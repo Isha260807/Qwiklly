@@ -10,7 +10,7 @@ const Logo = forwardRef(({ className = "h-8 w-auto", ...props }, ref) => {
     <img
       ref={ref}
       src="/cleaning-expert-logo.png"
-      alt="Cleaning Expert Services"
+      alt="Qwiklly"
       className={`${className} aspect-square object-cover rounded-full shadow-sm border border-gray-100`}
       {...props}
     />

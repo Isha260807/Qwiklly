@@ -230,31 +230,28 @@ const UpdateProfile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white pb-20">
+    <div className="min-h-screen bg-white pb-16">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
-        <div className="px-4 pt-4 pb-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleBack}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <FiArrowLeft className="w-5 h-5 text-black" />
-            </button>
-            <h1 className="text-xl font-bold text-black">Update Profile</h1>
-          </div>
+      <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
+        <div className="px-3.5 py-2.5 flex items-center gap-2.5">
+          <button
+            onClick={handleBack}
+            className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors active:scale-95"
+          >
+            <FiArrowLeft className="w-4 h-4 text-gray-800" />
+          </button>
+          <h1 className="text-sm font-bold text-gray-900 tracking-tight">Update Profile</h1>
         </div>
       </header>
 
-      <main className="px-4 py-4">
+      <main className="px-3.5 py-3 max-w-lg mx-auto">
         {/* Profile Form */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Profile Photo */}
-          <div className="flex flex-col items-center justify-center mb-6">
+          <div className="flex flex-col items-center justify-center my-1">
             <div className="relative group">
               <div
-                className="w-28 h-28 rounded-full overflow-hidden border-4 border-white shadow-xl cursor-pointer"
-                style={{ background: '#f0f0f0' }}
+                className="w-20 h-20 rounded-full overflow-hidden border-2 border-white shadow-md cursor-pointer bg-gray-100 flex items-center justify-center"
                 onClick={handleImageClick}
               >
                 {photoPreview || formData.profilePhoto ? (
@@ -265,17 +262,17 @@ const UpdateProfile = () => {
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
-                    <FiUser className="w-12 h-12" />
+                    <FiUser className="w-9 h-9" />
                   </div>
                 )}
               </div>
 
               <div
                 onClick={handleImageClick}
-                className="absolute bottom-1 right-1 p-2 rounded-full cursor-pointer shadow-lg transition-transform active:scale-95 hover:scale-105"
+                className="absolute bottom-0 right-0 p-1.5 rounded-full cursor-pointer shadow-md transition-transform active:scale-90 hover:scale-105"
                 style={{ background: themeColors.button }}
               >
-                <FiCamera className="w-5 h-5 text-white" />
+                <FiCamera className="w-3.5 h-3.5 text-white" />
                 <input
                   id="user-photo-upload"
                   type="file"
@@ -286,39 +283,28 @@ const UpdateProfile = () => {
                 />
               </div>
             </div>
-            <p className="text-gray-500 text-[10px] mt-3 font-bold uppercase tracking-wider">Tap to change photo</p>
+            <p className="text-gray-400 text-[10px] mt-1.5 font-bold uppercase tracking-wider">Tap to change photo</p>
           </div>
 
           {/* Full Name */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
               Full Name
             </label>
-            <div className="relative">
-              <div
-                className="absolute left-3 top-1/2 transform -translate-y-1/2"
+            <div className="relative flex items-center">
+              <span
+                className="absolute left-3 flex items-center justify-center pointer-events-none"
                 style={{ color: themeColors.button }}
               >
-                <FiUser className="w-5 h-5" />
-              </div>
+                <FiUser className="w-4 h-4" />
+              </span>
               <input
                 type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
                 disabled={isLoading}
-                className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:border-transparent transition-all"
-                style={{
-                  focusRingColor: themeColors.button,
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = themeColors.button;
-                  e.target.style.boxShadow = '0 0 0 3px rgba(0, 166, 166, 0.1)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '#d1d5db';
-                  e.target.style.boxShadow = 'none';
-                }}
+                className="w-full pl-9 pr-3 py-2.5 text-xs font-medium text-gray-900 rounded-xl border border-gray-200 focus:outline-none focus:ring-1 focus:ring-[#720C3E] focus:border-[#720C3E] transition-all placeholder:text-gray-400 bg-white"
                 placeholder="Enter your full name"
               />
             </div>
@@ -326,31 +312,23 @@ const UpdateProfile = () => {
 
           {/* Email Address */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
               Email Address
             </label>
-            <div className="relative">
-              <div
-                className="absolute left-3 top-1/2 transform -translate-y-1/2"
+            <div className="relative flex items-center">
+              <span
+                className="absolute left-3 flex items-center justify-center pointer-events-none"
                 style={{ color: themeColors.button }}
               >
-                <FiMail className="w-5 h-5" />
-              </div>
+                <FiMail className="w-4 h-4" />
+              </span>
               <input
                 type="email"
                 name="email"
                 value={formData.email}
                 onChange={handleInputChange}
                 disabled={isLoading}
-                className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:border-transparent transition-all"
-                onFocus={(e) => {
-                  e.target.style.borderColor = themeColors.button;
-                  e.target.style.boxShadow = '0 0 0 3px rgba(0, 166, 166, 0.1)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '#d1d5db';
-                  e.target.style.boxShadow = 'none';
-                }}
+                className="w-full pl-9 pr-3 py-2.5 text-xs font-medium text-gray-900 rounded-xl border border-gray-200 focus:outline-none focus:ring-1 focus:ring-[#720C3E] focus:border-[#720C3E] transition-all placeholder:text-gray-400 bg-white"
                 placeholder="Enter your email address"
               />
             </div>
@@ -358,50 +336,40 @@ const UpdateProfile = () => {
 
           {/* Phone Number */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
               Phone Number
             </label>
-            <div className="relative">
-              <div
-                className="absolute left-3 top-1/2 transform -translate-y-1/2"
+            <div className="relative flex items-center">
+              <span
+                className="absolute left-3 flex items-center justify-center pointer-events-none"
                 style={{ color: themeColors.button }}
               >
-                <FiPhone className="w-5 h-5" />
-              </div>
+                <FiPhone className="w-4 h-4" />
+              </span>
               <input
                 type="tel"
                 name="phone"
                 value={formatPhoneNumber(formData.phone)}
                 disabled
-                className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-300 bg-gray-50 text-gray-600 cursor-not-allowed"
+                className="w-full pl-9 pr-3 py-2.5 text-xs font-medium text-gray-600 rounded-xl border border-gray-200 bg-gray-50 cursor-not-allowed"
                 placeholder="Phone number cannot be changed"
               />
-              <p className="text-xs text-gray-500 mt-1 ml-1">
-                Phone number cannot be changed for security reasons
-              </p>
             </div>
+            <p className="text-[10px] text-gray-400 mt-1 ml-1 leading-tight">
+              Phone number cannot be changed for security reasons
+            </p>
           </div>
         </div>
 
         {/* Save Button */}
-        <div className="mt-6">
+        <div className="mt-4">
           <button
             onClick={handleSave}
             disabled={isLoading || isSaving}
-            className="w-full text-white font-bold py-3.5 rounded-xl active:scale-98 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full text-white font-bold py-2.5 px-4 text-xs uppercase tracking-wider rounded-xl active:scale-[0.99] transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              background: `linear-gradient(135deg, ${themeColors.button} 0%, ${themeColors.icon} 100%)`,
-              boxShadow: '0 4px 12px rgba(0, 166, 166, 0.4)',
-            }}
-            onMouseEnter={(e) => {
-              if (!isLoading && !isSaving) {
-                e.target.style.boxShadow = '0 6px 16px rgba(0, 166, 166, 0.5)';
-                e.target.style.transform = 'translateY(-1px)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.boxShadow = '0 4px 12px rgba(0, 166, 166, 0.4)';
-              e.target.style.transform = 'translateY(0)';
+              background: `linear-gradient(135deg, ${themeColors.button} 0%, #9A2459 100%)`,
+              boxShadow: '0 3px 10px rgba(114, 12, 62, 0.25)',
             }}
           >
             {isSaving ? 'Saving...' : 'Save Changes'}
@@ -425,20 +393,20 @@ const UpdateProfile = () => {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="relative bg-white w-full rounded-t-[32px] p-6 pb-10 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-10"
+              className="relative bg-white w-full max-w-lg rounded-t-2xl p-4 pb-6 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-10"
             >
-              <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6" />
-              <div className="flex justify-between items-center mb-6">
-                <h4 className="font-bold text-gray-900 text-lg">Select Photo Source</h4>
+              <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-3" />
+              <div className="flex justify-between items-center mb-4">
+                <h4 className="font-bold text-gray-900 text-sm">Select Photo Source</h4>
                 <button 
                   onClick={() => setShowSourceSheet(false)}
-                  className="p-2 bg-gray-100 rounded-full text-gray-500"
+                  className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500"
                 >
-                  <FiX />
+                  <FiX className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 {/* Camera Option */}
                 <button
                   type="button"
@@ -447,21 +415,19 @@ const UpdateProfile = () => {
                     if (isFlutter) {
                       handleNativeCamera();
                     } else {
-                      // On web, if they want camera specifically we'd need another input, 
-                      // but standard input with capture="environment" works for mobile browsers.
-                      // For now, let's just trigger the same input which allows both on most browsers.
                       document.getElementById('user-photo-upload')?.click();
                     }
                   }}
-                  className="flex flex-col items-center gap-3 p-6 rounded-2xl border border-teal-100 active:scale-95 transition-all"
-                  style={{ backgroundColor: `${themeColors.button}10` }}
+                  className="flex flex-col items-center gap-2 p-3.5 rounded-xl border border-pink-100 active:scale-95 transition-all"
+                  style={{ backgroundColor: `${themeColors.button}0A` }}
                 >
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg"
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-sm"
                     style={{ backgroundColor: themeColors.button }}
                   >
-                    <FiCamera className="w-6 h-6" />
+                    <FiCamera className="w-4 h-4" />
                   </div>
-                  <span className="font-bold text-teal-800 text-sm">Take Photo</span>
+                  <span className="font-bold text-xs" style={{ color: themeColors.button }}>Take Photo</span>
                 </button>
 
                 {/* Gallery Option */}
@@ -471,12 +437,12 @@ const UpdateProfile = () => {
                     setShowSourceSheet(false);
                     document.getElementById('user-photo-upload')?.click();
                   }}
-                  className="flex flex-col items-center gap-3 p-6 bg-blue-50 rounded-2xl border border-blue-100 active:scale-95 transition-all"
+                  className="flex flex-col items-center gap-2 p-3.5 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-100 active:scale-95 transition-all"
                 >
-                  <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-200">
-                    <FiImage className="w-6 h-6" />
+                  <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center text-white shadow-sm">
+                    <FiImage className="w-4 h-4" />
                   </div>
-                  <span className="font-bold text-blue-800 text-sm">Gallery</span>
+                  <span className="font-bold text-gray-800 text-xs">Gallery</span>
                 </button>
               </div>
             </motion.div>

@@ -174,41 +174,25 @@ const HelpSupport = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-6">
+    <div className="min-h-screen bg-gray-50/50 pb-12">
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-white shadow-sm">
-        <div className="px-4 py-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <FiArrowLeft className="w-5 h-5 text-gray-700" />
-            </button>
-            <h1 className="text-xl font-bold text-gray-900">Help & Support</h1>
-          </div>
+      <header className="sticky top-0 z-30 bg-white border-b border-gray-100 shadow-2xs">
+        <div className="px-3.5 py-2.5 flex items-center gap-2.5 max-w-lg mx-auto">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors active:scale-95"
+          >
+            <FiArrowLeft className="w-4 h-4 text-gray-800" />
+          </button>
+          <h1 className="text-sm font-bold text-gray-900 tracking-tight">Help & Support</h1>
         </div>
+      </header>
 
-        {/* Search Bar */}
-        <div className="px-4 pb-4">
-          <div className="relative">
-            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search for help..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-            />
-          </div>
-        </div>
-      </div>
-
-      <main className="px-4 pt-4">
-        {/* Quick Actions */}
-        <div className="mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-3">Contact Us</h2>
-          <div className="grid grid-cols-1 gap-3">
+      <main className="px-3.5 py-3 max-w-lg mx-auto">
+        {/* Quick Actions / Contact Us */}
+        <div className="mb-3.5">
+          <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Contact Us</h2>
+          <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100 shadow-2xs overflow-hidden">
             {quickActions.map(action => {
               let href = null;
               if (action.id === 'chat' && supportInfo.whatsapp) {
@@ -226,19 +210,19 @@ const HelpSupport = () => {
                   key={action.id}
                   href={href}
                   onClick={!href ? action.action : undefined}
-                  className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-all active:scale-98 border border-gray-100 flex items-center gap-4 w-full"
+                  className="p-2.5 flex items-center gap-2.5 hover:bg-gray-50 active:scale-[0.99] transition-all w-full text-left"
                 >
                   <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                     style={{ backgroundColor: `${action.color}15` }}
                   >
-                    <action.icon className="w-6 h-6" style={{ color: action.color }} />
+                    <action.icon className="w-3.5 h-3.5" style={{ color: action.color }} />
                   </div>
-                  <div className="flex-1 text-left">
-                    <h3 className="font-semibold text-gray-900">{action.title}</h3>
-                    <p className="text-sm text-gray-600">{action.subtitle}</p>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-xs font-semibold text-gray-900 truncate">{action.title}</h3>
+                    <p className="text-[10px] text-gray-500 truncate">{action.subtitle}</p>
                   </div>
-                  <FiChevronRight className="w-5 h-5 text-gray-400" />
+                  <FiChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
                 </Component>
               );
             })}
@@ -248,165 +232,131 @@ const HelpSupport = () => {
         {/* Submit a Request Button */}
         <button
           onClick={() => setShowContactForm(true)}
-          className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl p-4 font-semibold shadow-lg hover:shadow-xl transition-all active:scale-98 mb-6 flex items-center justify-center gap-2"
+          className="w-full text-white font-bold py-2.5 px-4 text-xs uppercase tracking-wider rounded-xl shadow-xs active:scale-[0.99] transition-all mb-3.5 flex items-center justify-center gap-1.5"
+          style={{
+            background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)',
+            boxShadow: '0 2px 8px rgba(114, 12, 62, 0.2)'
+          }}
         >
-          <FiSend className="w-5 h-5" />
-          Submit a Request
+          <FiSend className="w-3.5 h-3.5" />
+          <span>Submit a Request</span>
         </button>
 
         {/* FAQ Categories */}
-        {searchQuery === '' && (
-          <div className="mb-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-3">Browse by Category</h2>
-            <div className="space-y-3">
-              {categories.map(category => (
+        <div className="mb-3.5">
+          <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Browse by Category</h2>
+          <div className="space-y-2">
+            {categories.map(category => (
+              <div
+                key={category.id}
+                className="bg-white rounded-xl border border-gray-100 shadow-2xs overflow-hidden"
+              >
                 <button
-                  key={category.id}
                   onClick={() => setSelectedCategory(category.id === selectedCategory ? null : category.id)}
-                  className="w-full bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-all border border-gray-100"
+                  className="w-full p-2.5 flex items-center justify-between hover:bg-gray-50/50 transition-colors text-left"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center"
-                        style={{ backgroundColor: `${category.color}15` }}
-                      >
-                        <category.icon className="w-5 h-5" style={{ color: category.color }} />
-                      </div>
-                      <h3 className="font-semibold text-gray-900">{category.title}</h3>
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${category.color}15` }}
+                    >
+                      <category.icon className="w-3 h-3" style={{ color: category.color }} />
                     </div>
-                    <FiChevronRight
-                      className={`w-5 h-5 text-gray-400 transition-transform ${selectedCategory === category.id ? 'rotate-90' : ''}`}
-                    />
+                    <h3 className="text-xs font-semibold text-gray-900">{category.title}</h3>
                   </div>
-
-                  {/* Expanded Questions */}
-                  {selectedCategory === category.id && (
-                    <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
-                      {category.questions.map((item, idx) => (
-                        <div key={idx} className="text-left">
-                          <div className="flex items-start gap-2 mb-2">
-                            <FiHelpCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                            <p className="font-medium text-gray-900 text-sm">{item.q}</p>
-                          </div>
-                          <p className="text-sm text-gray-600 ml-6">{item.a}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <FiChevronRight
+                    className={`w-3.5 h-3.5 text-gray-400 transition-transform ${selectedCategory === category.id ? 'rotate-90' : ''}`}
+                  />
                 </button>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* Search Results */}
-        {searchQuery !== '' && (
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-3">
-              Search Results ({filteredQuestions.length})
-            </h2>
-            {filteredQuestions.length === 0 ? (
-              <div className="bg-white rounded-xl p-8 text-center">
-                <FiAlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-600">No results found for "{searchQuery}"</p>
-                <p className="text-sm text-gray-500 mt-2">Try different keywords or contact support</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {filteredQuestions.map((item, idx) => (
-                  <div key={idx} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                    <div className="flex items-start gap-2 mb-2">
-                      <span
-                        className="text-xs font-semibold px-2 py-1 rounded-full"
-                        style={{
-                          backgroundColor: `${item.color}15`,
-                          color: item.color
-                        }}
-                      >
-                        {item.category}
-                      </span>
-                    </div>
-                    <div className="flex items-start gap-2 mb-2">
-                      <FiHelpCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                      <p className="font-medium text-gray-900 text-sm">{item.q}</p>
-                    </div>
-                    <p className="text-sm text-gray-600 ml-6">{item.a}</p>
+                {/* Expanded Questions */}
+                {selectedCategory === category.id && (
+                  <div className="p-2.5 pt-0 space-y-2.5 border-t border-gray-100 mt-1 bg-gray-50/30">
+                    {category.questions.map((item, idx) => (
+                      <div key={idx} className="pt-2">
+                        <div className="flex items-start gap-1.5 mb-1">
+                          <FiHelpCircle className="w-3 h-3 text-[#720C3E] mt-0.5 shrink-0" />
+                          <p className="font-semibold text-gray-900 text-xs">{item.q}</p>
+                        </div>
+                        <p className="text-[11px] text-gray-600 pl-4.5 leading-relaxed">{item.a}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
+            ))}
           </div>
-        )}
+        </div>
       </main>
 
       {/* Contact Form Modal */}
       {showContactForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-3xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Submit a Request</h2>
-                <button
-                  onClick={() => setShowContactForm(false)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                >
-                  <FiArrowLeft className="w-5 h-5" />
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-end sm:items-center justify-center p-3">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between z-10">
+              <h2 className="text-sm font-bold text-gray-900">Submit a Request</h2>
+              <button
+                onClick={() => setShowContactForm(false)}
+                className="w-7 h-7 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors"
+              >
+                <FiArrowLeft className="w-3.5 h-3.5 text-gray-600" />
+              </button>
             </div>
 
-            <form onSubmit={handleContactSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleContactSubmit} className="p-4 space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Name</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 focus:border-[#720C3E] focus:ring-1 focus:ring-[#720C3E] outline-none"
                   placeholder="Your name"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Email</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 focus:border-[#720C3E] focus:ring-1 focus:ring-[#720C3E] outline-none"
                   placeholder="your.email@example.com"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Subject</label>
                 <input
                   type="text"
                   value={formData.subject}
                   onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 focus:border-[#720C3E] focus:ring-1 focus:ring-[#720C3E] outline-none"
                   placeholder="Brief description of your issue"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Message</label>
                 <textarea
                   value={formData.message}
                   onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                  rows={6}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none resize-none"
+                  rows={4}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 focus:border-[#720C3E] focus:ring-1 focus:ring-[#720C3E] outline-none resize-none"
                   placeholder="Describe your issue in detail..."
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl p-4 font-semibold shadow-lg hover:shadow-xl transition-all active:scale-98 flex items-center justify-center gap-2"
+                className="w-full text-white font-bold py-2.5 px-4 text-xs uppercase tracking-wider rounded-xl shadow-xs active:scale-[0.99] transition-all flex items-center justify-center gap-1.5 mt-2"
+                style={{
+                  background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)',
+                }}
               >
-                <FiSend className="w-5 h-5" />
-                Submit Request
+                <FiSend className="w-3.5 h-3.5" />
+                <span>Submit Request</span>
               </button>
             </form>
           </div>
