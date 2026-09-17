@@ -58,25 +58,58 @@
 
 /* Modern fade-in page transition - smooth and fast */
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slide-in-bottom {
-  from { transform: translateY(30px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 @keyframes floating {
-  0% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-15px) rotate(5deg); }
-  100% { transform: translateY(0px) rotate(0deg); }
+  0% {
+    transform: translateY(0px) rotate(0deg);
+  }
+
+  50% {
+    transform: translateY(-15px) rotate(5deg);
+  }
+
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
 }
 
 @keyframes pulse-subtle {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(114, 12, 62, 0.1); }
-  70% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(114, 12, 62, 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(114, 12, 62, 0.1); }
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(114, 12, 62, 0.1);
+  }
+
+  70% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 10px rgba(114, 12, 62, 0);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(114, 12, 62, 0.1);
+  }
 }
 
 .animate-fade-in {
@@ -91,11 +124,30 @@
   animation: floating 6s ease-in-out infinite;
 }
 
-.animate-stagger-1 { animation-delay: 0.1s; opacity: 0; }
-.animate-stagger-2 { animation-delay: 0.2s; opacity: 0; }
-.animate-stagger-3 { animation-delay: 0.3s; opacity: 0; }
-.animate-stagger-4 { animation-delay: 0.4s; opacity: 0; }
-.animate-stagger-5 { animation-delay: 0.5s; opacity: 0; }
+.animate-stagger-1 {
+  animation-delay: 0.1s;
+  opacity: 0;
+}
+
+.animate-stagger-2 {
+  animation-delay: 0.2s;
+  opacity: 0;
+}
+
+.animate-stagger-3 {
+  animation-delay: 0.3s;
+  opacity: 0;
+}
+
+.animate-stagger-4 {
+  animation-delay: 0.4s;
+  opacity: 0;
+}
+
+.animate-stagger-5 {
+  animation-delay: 0.5s;
+  opacity: 0;
+}
 
 .logo-animated {
   animation: logo-slide-in 0.6s ease-out, logo-pulse 3s ease-in-out infinite 0.6s;
@@ -109,13 +161,63 @@
 
 /* Infinite Marquee Rows */
 @keyframes marquee-scroll-left {
-  0% { transform: translate3d(0, 0, 0); }
-  100% { transform: translate3d(-50%, 0, 0); }
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
 }
 
 @keyframes marquee-scroll-right {
-  0% { transform: translate3d(-50%, 0, 0); }
-  100% { transform: translate3d(0, 0, 0); }
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-marquee-left {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: marquee-scroll-left 32s linear infinite;
+}
+
+.animate-marquee-right {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: marquee-scroll-right 32s linear infinite;
+}
+
+.animate-marquee-left:hover,
+.animate-marquee-right:hover {
+  animation-play-state: paused;
+}
+
+/* Infinite Marquee Rows */
+@keyframes marquee-scroll-left {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes marquee-scroll-right {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 .animate-marquee-left {
@@ -239,7 +341,14 @@ body {
 }
 
 /* Headings, Brand, Numbers & Display Font */
-h1, h2, h3, h4, h5, h6, .font-heading, .brand-font {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-heading,
+.brand-font {
   font-family: 'Inter', sans-serif;
   font-weight: 500;
 }
@@ -254,13 +363,20 @@ h1, h2, h3, h4, h5, h6, .font-heading, .brand-font {
 }
 
 @layer base {
-  h1, h2, h3, h4, h5, h6 {
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     color: #24151D;
     font-weight: 500;
     letter-spacing: -0.01em;
   }
 
-  b, strong {
+  b,
+  strong {
     font-weight: 500;
   }
 }

@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { FiPhone, FiCheckCircle, FiChevronLeft, FiGift } from 'react-icons/fi';
+import { FiPhone, FiCheckCircle, FiChevronLeft, FiGift } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { userAuthService } from '../../../services/authService';
 import LogoLoader from '../../../components/common/LogoLoader';
 import { z } from 'zod';
+import { z } from 'zod';
 
+// Zod schema for phone validation
 // Zod schema for phone validation
 const phoneSchema = z.object({
   phone: z.string().regex(/^[6-9]\d{9}$/, 'Please enter a valid 10-digit Indian mobile number'),
@@ -58,6 +61,7 @@ const ROW_3_IMAGES = [
 const Login = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState('phone'); // 'phone' | 'otp'
+  const [step, setStep] = useState('phone'); // 'phone' | 'otp'
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpToken, setOtpToken] = useState('');
@@ -69,7 +73,14 @@ const Login = () => {
   // Focus refs
   const phoneInputRef = useRef(null);
   const otpInputRefs = useRef([]);
+  const [hasReferral, setHasReferral] = useState(false);
+  const [referralCode, setReferralCode] = useState('');
 
+  // Focus refs
+  const phoneInputRef = useRef(null);
+  const otpInputRefs = useRef([]);
+
+  // Timer countdown
   // Timer countdown
   useEffect(() => {
     let interval;
@@ -82,6 +93,7 @@ const Login = () => {
   }, [resendTimer]);
 
   // Auto-focus logic & authenticated redirect
+  // Auto-focus logic & authenticated redirect
   useEffect(() => {
     if (localStorage.getItem('accessToken')) {
       navigate('/user', { replace: true });
@@ -90,15 +102,21 @@ const Login = () => {
 
     if (step === 'phone' && phoneInputRef.current) {
       setTimeout(() => phoneInputRef.current?.focus(), 150);
+      setTimeout(() => phoneInputRef.current?.focus(), 150);
     } else if (step === 'otp' && otpInputRefs.current[0]) {
+      setTimeout(() => otpInputRefs.current[0]?.focus(), 150);
       setTimeout(() => otpInputRefs.current[0]?.focus(), 150);
     }
   }, [step, navigate]);
 
   // Handle phone submit / Send OTP
+  // Handle phone submit / Send OTP
   const handlePhoneSubmit = async (e) => {
     if (e) e.preventDefault();
+    if (e) e.preventDefault();
 
+    const cleanPhone = phoneNumber.replace(/\D/g, '');
+    const validationResult = phoneSchema.safeParse({ phone: cleanPhone });
     const cleanPhone = phoneNumber.replace(/\D/g, '');
     const validationResult = phoneSchema.safeParse({ phone: cleanPhone });
     if (!validationResult.success) {
@@ -112,11 +130,15 @@ const Login = () => {
 
       if (response.success) {
         setOtpToken(response.token || 'verification-pending');
+        setOtpToken(response.token || 'verification-pending');
         setIsLoading(false);
         setStep('otp');
         setResendTimer(120);
+        setResendTimer(120);
         toast.success(
           <div className="flex items-center gap-2">
+            <FiCheckCircle className="text-emerald-500 text-lg" />
+            <span className="font-semibold">OTP sent successfully!</span>
             <FiCheckCircle className="text-emerald-500 text-lg" />
             <span className="font-semibold">OTP sent successfully!</span>
           </div>
@@ -131,6 +153,7 @@ const Login = () => {
     }
   };
 
+  // OTP inputs handling
   // OTP inputs handling
   const handleOtpChange = (index, value) => {
     if (value && !/^\d+$/.test(value)) return;
@@ -161,6 +184,7 @@ const Login = () => {
   };
 
   // Auto-verify as 6th digit is entered
+  // Auto-verify as 6th digit is entered
   useEffect(() => {
     const otpValue = otp.join('');
     if (otpValue.length === 6 && !isLoading && otpToken) {
@@ -169,10 +193,12 @@ const Login = () => {
   }, [otp]);
 
   // Handle OTP Verification
+  // Handle OTP Verification
   const handleOtpSubmit = async (e) => {
     if (e) e.preventDefault();
     const otpValue = otp.join('');
     if (otpValue.length !== 6) {
+      toast.error('Please enter complete 6-digit OTP');
       toast.error('Please enter complete 6-digit OTP');
       return;
     }
@@ -181,10 +207,13 @@ const Login = () => {
       return;
     }
 
+
     setIsLoading(true);
     try {
       const cleanPhone = phoneNumber.replace(/\D/g, '');
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
       const response = await userAuthService.verifyLogin({
+        phone: cleanPhone,
         phone: cleanPhone,
         otp: otpValue
       });
@@ -197,9 +226,13 @@ const Login = () => {
               phone: cleanPhone,
               verificationToken: response.verificationToken,
               referralCode: referralCode.trim() || undefined
+              phone: cleanPhone,
+              verificationToken: response.verificationToken,
+              referralCode: referralCode.trim() || undefined
             }
           });
         } else {
+          toast.success('Welcome back to Qwiklly!');
           toast.success('Welcome back to Qwiklly!');
           navigate('/user', { replace: true });
         }
@@ -245,7 +278,7 @@ const Login = () => {
     <div className="min-h-screen bg-[#FFF7FA] flex justify-center items-center sm:py-8 sm:px-4">
       {/* Main Container Phone Frame / Card */}
       <div className="w-full max-w-md min-h-screen sm:min-h-[780px] bg-white sm:rounded-3xl sm:shadow-2xl sm:border sm:border-[#E8D9DF] flex flex-col justify-between overflow-hidden relative select-none">
-        
+
         {/* ================= 1. HEADER SECTION ================= */}
         <div className="bg-gradient-to-br from-[#C2457C] via-[#AB2D65] to-[#8C1B4E] text-white pt-7 pb-8 px-6 rounded-b-[40px] shadow-lg shadow-[#AB2D65]/25 relative z-20">
           {/* Top Row: Skip login button */}
@@ -290,196 +323,320 @@ const Login = () => {
           {renderMarqueeRow(ROW_3_IMAGES, 'animate-marquee-left')}
         </div>
 
+        {/* ================= 2. ANIMATED 3-ROW IMAGE MARQUEE ================= */}
+        <div className="relative pt-3 pb-2 overflow-hidden flex flex-col gap-2">
+          {/* Top Soft Blend Gradient */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-[#FFF7FA] to-transparent z-10" />
+
+          {/* Row 1: Right to Left */}
+          {renderMarqueeRow(ROW_1_IMAGES, 'animate-marquee-left')}
+
+          {/* Row 2: Left to Right */}
+          {renderMarqueeRow(ROW_2_IMAGES, 'animate-marquee-right')}
+
+          {/* Row 3: Right to Left */}
+          {renderMarqueeRow(ROW_3_IMAGES, 'animate-marquee-left')}
+        </div>
+
         {/* ================= 3. BOTTOM LOGIN / SIGNUP CARD ================= */}
         <div className="px-6 pb-8 pt-2 relative z-20 bg-white -mt-6">
           {/* Soft White Gradient Shadow Veil Rising from Top of Card */}
           <div className="pointer-events-none absolute -top-20 inset-x-0 h-20 bg-gradient-to-t from-white via-white/80 to-transparent" />
+          {/* ================= 3. BOTTOM LOGIN / SIGNUP CARD ================= */}
+          <div className="px-6 pb-8 pt-2 relative z-20 bg-white -mt-6">
+            {/* Soft White Gradient Shadow Veil Rising from Top of Card */}
+            <div className="pointer-events-none absolute -top-20 inset-x-0 h-20 bg-gradient-to-t from-white via-white/80 to-transparent" />
 
-          {step === 'phone' ? (
-            /* PHONE ENTRY STEP */
-            <form onSubmit={handlePhoneSubmit} className="space-y-4 relative z-10">
-              <div className="text-left mb-3">
-                <h2 className="text-2xl sm:text-3xl font-black text-[#24151D] tracking-tight">
-                  Log in or Sign up
-                </h2>
-              </div>
-
-              {/* Mobile Input Field */}
-              <div className="relative">
-                <div className="flex items-center bg-white border-2 border-[#E8D9DF] focus-within:border-[#720C3E] rounded-2xl shadow-sm overflow-hidden transition-all duration-300">
-                  <div className="px-4 py-3.5 bg-transparent border-r border-[#E8D9DF] text-[#24151D] font-bold text-base flex items-center gap-1.5">
-                    <span className="text-[#24151D]">+91</span>
-                  </div>
-                  <input
-                    ref={phoneInputRef}
-                    type="tel"
-                    inputMode="numeric"
-                    autoComplete="tel"
-                    id="phone"
-                    maxLength={10}
-                    className="w-full px-4 py-3.5 text-base font-semibold text-[#24151D] placeholder:text-[#6F5A64]/45 focus:outline-none bg-transparent"
-                    placeholder="Enter mobile number"
-                    value={phoneNumber}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '');
-                      if (val.length <= 10) setPhoneNumber(val);
-                    }}
-                  />
+            {step === 'phone' ? (
+              /* PHONE ENTRY STEP */
+              <form onSubmit={handlePhoneSubmit} className="space-y-4 relative z-10">
+                <div className="text-left mb-3">
+                  <h2 className="text-2xl sm:text-3xl font-black text-[#24151D] tracking-tight">
+                    Log in or Sign up
+                  </h2>
                 </div>
-              </div>
 
-              {/* Continue Button */}
-              <button
-                type="submit"
-                disabled={isLoading || phoneNumber.length < 10}
-                className={`w-full py-3.5 px-4 rounded-2xl text-base font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md ${
-                  phoneNumber.length === 10 && !isLoading
-                    ? 'bg-[#720C3E] hover:bg-[#4D082A] text-white shadow-[#720C3E]/25 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
-                    : 'bg-[#6F5A64]/20 text-[#6F5A64]/60 cursor-not-allowed shadow-none'
-                }`}
-              >
-                {isLoading ? (
-                  <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
-                ) : (
-                  <span>Continue</span>
+                {/* Mobile Input Field */}
+                <div className="relative">
+                  <div className="flex items-center bg-white border-2 border-[#E8D9DF] focus-within:border-[#720C3E] rounded-2xl shadow-sm overflow-hidden transition-all duration-300">
+                    <div className="px-4 py-3.5 bg-transparent border-r border-[#E8D9DF] text-[#24151D] font-bold text-base flex items-center gap-1.5">
+                      <span className="text-[#24151D]">+91</span>
+            /* PHONE ENTRY STEP */
+                      <form onSubmit={handlePhoneSubmit} className="space-y-4 relative z-10">
+                        <div className="text-left mb-3">
+                          <h2 className="text-2xl sm:text-3xl font-black text-[#24151D] tracking-tight">
+                            Log in or Sign up
+                          </h2>
+                        </div>
+
+                        {/* Mobile Input Field */}
+                        <div className="relative">
+                          <div className="flex items-center bg-white border-2 border-[#E8D9DF] focus-within:border-[#720C3E] rounded-2xl shadow-sm overflow-hidden transition-all duration-300">
+                            <div className="px-4 py-3.5 bg-transparent border-r border-[#E8D9DF] text-[#24151D] font-bold text-base flex items-center gap-1.5">
+                              <span className="text-[#24151D]">+91</span>
+                            </div>
+                            <input
+                              ref={phoneInputRef}
+                              type="tel"
+                              inputMode="numeric"
+                              autoComplete="tel"
+                              id="phone"
+                              maxLength={10}
+                              className="w-full px-4 py-3.5 text-base font-semibold text-[#24151D] placeholder:text-[#6F5A64]/45 focus:outline-none bg-transparent"
+                              placeholder="Enter mobile number"
+                              maxLength={10}
+                              className="w-full px-4 py-3.5 text-base font-semibold text-[#24151D] placeholder:text-[#6F5A64]/45 focus:outline-none bg-transparent"
+                              placeholder="Enter mobile number"
+                              value={phoneNumber}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                if (val.length <= 10) setPhoneNumber(val);
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Continue Button */}
+                        <button
+                          type="submit"
+                          disabled={isLoading || phoneNumber.length < 10}
+                          className={`w-full py-3.5 px-4 rounded-2xl text-base font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md ${phoneNumber.length === 10 && !isLoading
+                              ? 'bg-[#720C3E] hover:bg-[#4D082A] text-white shadow-[#720C3E]/25 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
+                              : 'bg-[#6F5A64]/20 text-[#6F5A64]/60 cursor-not-allowed shadow-none'
+                            }`}
+                        >
+                          {isLoading ? (
+                            <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
+                          ) : (
+                            <span>Continue</span>
+                          )}
+                        </button>
+
+                        {/* Referral Code Checkbox */}
+                        <div className="pt-1">
+                          <label className="flex items-center justify-center gap-2 text-xs font-semibold text-[#24151D] cursor-pointer hover:text-[#720C3E] transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={hasReferral}
+                              onChange={(e) => setHasReferral(e.target.checked)}
+                              className="w-4 h-4 rounded border-[#E8D9DF] text-[#720C3E] focus:ring-[#720C3E] accent-[#720C3E] cursor-pointer"
+                            />
+                            <span>Have a referral code?</span>
+                          </label>
+
+                          {/* Optional Referral Code Slide-In */}
+                          {hasReferral && (
+                            <div className="mt-2.5 animate-fade-in">
+                              <div className="flex items-center bg-white border border-[#E8D9DF] focus-within:border-[#720C3E] rounded-xl px-3 py-2 shadow-xs">
+                                <FiGift className="text-[#720C3E] mr-2" />
+                                <input
+                                  type="text"
+                                  placeholder="Enter referral code"
+                                  value={referralCode}
+                                  onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                                  className="w-full text-xs font-semibold uppercase tracking-wider text-[#24151D] placeholder:text-[#6F5A64]/40 focus:outline-none bg-transparent"
+                                />
+                              </div>
+                              {/* Continue Button */}
+                              <button
+                                type="submit"
+                                disabled={isLoading || phoneNumber.length < 10}
+                                className={`w-full py-3.5 px-4 rounded-2xl text-base font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md ${phoneNumber.length === 10 && !isLoading
+                                    ? 'bg-[#720C3E] hover:bg-[#4D082A] text-white shadow-[#720C3E]/25 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
+                                    : 'bg-[#6F5A64]/20 text-[#6F5A64]/60 cursor-not-allowed shadow-none'
+                                  }`}
+                              >
+                                {isLoading ? (
+                                  <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
+                                ) : (
+                                  <span>Continue</span>
+                                )}
+                              </button>
+
+                              {/* Referral Code Checkbox */}
+                              <div className="pt-1">
+                                <label className="flex items-center justify-center gap-2 text-xs font-semibold text-[#24151D] cursor-pointer hover:text-[#720C3E] transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={hasReferral}
+                                    onChange={(e) => setHasReferral(e.target.checked)}
+                                    className="w-4 h-4 rounded border-[#E8D9DF] text-[#720C3E] focus:ring-[#720C3E] accent-[#720C3E] cursor-pointer"
+                                  />
+                                  <span>Have a referral code?</span>
+                                </label>
+
+                                {/* Optional Referral Code Slide-In */}
+                                {hasReferral && (
+                                  <div className="mt-2.5 animate-fade-in">
+                                    <div className="flex items-center bg-white border border-[#E8D9DF] focus-within:border-[#720C3E] rounded-xl px-3 py-2 shadow-xs">
+                                      <FiGift className="text-[#720C3E] mr-2" />
+                                      <input
+                                        type="text"
+                                        placeholder="Enter referral code"
+                                        value={referralCode}
+                                        onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                                        className="w-full text-xs font-semibold uppercase tracking-wider text-[#24151D] placeholder:text-[#6F5A64]/40 focus:outline-none bg-transparent"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
                 )}
-              </button>
+                              </div>
 
-              {/* Referral Code Checkbox */}
-              <div className="pt-1">
-                <label className="flex items-center justify-center gap-2 text-xs font-semibold text-[#24151D] cursor-pointer hover:text-[#720C3E] transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={hasReferral}
-                    onChange={(e) => setHasReferral(e.target.checked)}
-                    className="w-4 h-4 rounded border-[#E8D9DF] text-[#720C3E] focus:ring-[#720C3E] accent-[#720C3E] cursor-pointer"
-                  />
-                  <span>Have a referral code?</span>
-                </label>
+                              {/* Terms and Privacy Policy */}
+                              <p className="text-[11px] text-center text-[#6F5A64] pt-2 leading-relaxed">
+                                By continuing, you agree to our{' '}
+                                <Link to="/terms" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
+                                  Terms of Service
+                                </Link>{' '}
+                                &{' '}
+                                <Link to="/privacy" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
+                                  Privacy Policy
+                                </Link>
+                              </p>
 
-                {/* Optional Referral Code Slide-In */}
-                {hasReferral && (
-                  <div className="mt-2.5 animate-fade-in">
-                    <div className="flex items-center bg-white border border-[#E8D9DF] focus-within:border-[#720C3E] rounded-xl px-3 py-2 shadow-xs">
-                      <FiGift className="text-[#720C3E] mr-2" />
-                      <input
-                        type="text"
-                        placeholder="Enter referral code"
-                        value={referralCode}
-                        onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                        className="w-full text-xs font-semibold uppercase tracking-wider text-[#24151D] placeholder:text-[#6F5A64]/40 focus:outline-none bg-transparent"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
+                              {/* Terms and Privacy Policy */}
+                              <p className="text-[11px] text-center text-[#6F5A64] pt-2 leading-relaxed">
+                                By continuing, you agree to our{' '}
+                                <Link to="/terms" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
+                                  Terms of Service
+                                </Link>{' '}
+                                &{' '}
+                                <Link to="/privacy" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
+                                  Privacy Policy
+                                </Link>
+                              </p>
+                            </form>
+                          ) : (
+                          /* OTP VERIFICATION STEP */
+                          <form onSubmit={handleOtpSubmit} className="space-y-4 animate-fade-in">
+                            <div className="text-left mb-2">
+                              <h2 className="text-2xl font-black text-[#24151D] tracking-tight">
+                                Verify OTP
+                              </h2>
+                              <p className="text-xs text-[#6F5A64] mt-0.5">
+                                Enter 6-digit code sent to <strong className="text-[#24151D]">+91 {phoneNumber}</strong>
+                              </p>
+                            </div>
 
-              {/* Terms and Privacy Policy */}
-              <p className="text-[11px] text-center text-[#6F5A64] pt-2 leading-relaxed">
-                By continuing, you agree to our{' '}
-                <Link to="/terms" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
-                  Terms of Service
-                </Link>{' '}
-                &{' '}
-                <Link to="/privacy" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
-                  Privacy Policy
-                </Link>
-              </p>
-            </form>
-          ) : (
+                            {/* 6 Digit Inputs */}
+                            <div className="flex justify-between gap-1.5 sm:gap-2 py-2">
             /* OTP VERIFICATION STEP */
-            <form onSubmit={handleOtpSubmit} className="space-y-4 animate-fade-in">
-              <div className="text-left mb-2">
-                <h2 className="text-2xl font-black text-[#24151D] tracking-tight">
-                  Verify OTP
-                </h2>
-                <p className="text-xs text-[#6F5A64] mt-0.5">
-                  Enter 6-digit code sent to <strong className="text-[#24151D]">+91 {phoneNumber}</strong>
-                </p>
-              </div>
+                              <form onSubmit={handleOtpSubmit} className="space-y-4 animate-fade-in">
+                                <div className="text-left mb-2">
+                                  <h2 className="text-2xl font-black text-[#24151D] tracking-tight">
+                                    Verify OTP
+                                  </h2>
+                                  <p className="text-xs text-[#6F5A64] mt-0.5">
+                                    Enter 6-digit code sent to <strong className="text-[#24151D]">+91 {phoneNumber}</strong>
+                                  </p>
+                                </div>
 
-              {/* 6 Digit Inputs */}
-              <div className="flex justify-between gap-1.5 sm:gap-2 py-2">
-                {otp.map((digit, index) => (
-                  <input
-                    key={index}
-                    ref={(el) => (otpInputRefs.current[index] = el)}
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleOtpChange(index, e.target.value)}
-                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                    className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black border-2 border-[#E8D9DF] rounded-2xl focus:border-[#720C3E] focus:ring-2 focus:ring-[#720C3E]/20 bg-white text-[#24151D] transition-all duration-200 shadow-sm"
-                  />
-                ))}
-              </div>
+                                {/* 6 Digit Inputs */}
+                                <div className="flex justify-between gap-1.5 sm:gap-2 py-2">
+                                  {otp.map((digit, index) => (
+                                    <input
+                                      key={index}
+                                      ref={(el) => (otpInputRefs.current[index] = el)}
+                                      type="text"
+                                      inputMode="numeric"
+                                      autoComplete="one-time-code"
+                                      maxLength={1}
+                                      value={digit}
+                                      onChange={(e) => handleOtpChange(index, e.target.value)}
+                                      onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                                      className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black border-2 border-[#E8D9DF] rounded-2xl focus:border-[#720C3E] focus:ring-2 focus:ring-[#720C3E]/20 bg-white text-[#24151D] transition-all duration-200 shadow-sm"
+                                      className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black border-2 border-[#E8D9DF] rounded-2xl focus:border-[#720C3E] focus:ring-2 focus:ring-[#720C3E]/20 bg-white text-[#24151D] transition-all duration-200 shadow-sm"
+                                    />
+                                  ))}
+                                </div>
 
-              {/* Resend & Change Phone Number Links */}
-              <div className="flex items-center justify-between text-xs font-semibold pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOtp(['', '', '', '', '', '']);
-                    setOtpToken('');
-                    setStep('phone');
-                    setResendTimer(0);
+                                {/* Resend & Change Phone Number Links */}
+                                <div className="flex items-center justify-between text-xs font-semibold pt-1">
+                                  {/* Resend & Change Phone Number Links */}
+                                  <div className="flex items-center justify-between text-xs font-semibold pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onClick = {() => {
+                                      setOtp(['', '', '', '', '', '']);
+                                    setOtpToken('');
+                                    setStep('phone');
+                                    setResendTimer(0);
                   }}
-                  className="flex items-center text-[#6F5A64] hover:text-[#720C3E] transition-colors cursor-pointer"
+                                    className="flex items-center text-[#6F5A64] hover:text-[#720C3E] transition-colors cursor-pointer"
+                                    className="flex items-center text-[#6F5A64] hover:text-[#720C3E] transition-colors cursor-pointer"
                 >
-                  <FiChevronLeft className="mr-0.5 text-sm" /> Change Number
-                </button>
+                                    <FiChevronLeft className="mr-0.5 text-sm" /> Change Number
+                                    <FiChevronLeft className="mr-0.5 text-sm" /> Change Number
+                                  </button>
 
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (isLoading || resendTimer > 0) return;
-                    try {
-                      setIsLoading(true);
-                      const response = await userAuthService.sendOTP(phoneNumber.replace(/\D/g, ''));
-                      if (response.success) {
-                        setOtpToken(response.token || 'verification-pending');
-                        setResendTimer(120);
-                        toast.success('OTP resent successfully!');
-                      }
-                    } catch (err) {
-                      toast.error('Error sending OTP');
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  disabled={isLoading || resendTimer > 0}
-                  className="text-[#720C3E] hover:text-[#4D082A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {resendTimer > 0
-                    ? `Resend in ${Math.floor(resendTimer / 60)}:${String(resendTimer % 60).padStart(2, '0')}`
-                    : 'Resend OTP'}
-                </button>
-              </div>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (isLoading || resendTimer > 0) return;
+                                      try {
+                                        setIsLoading(true);
+                                        const response = await userAuthService.sendOTP(phoneNumber.replace(/\D/g, ''));
+                                        if (response.success) {
+                                          setOtpToken(response.token || 'verification-pending');
+                                          setOtpToken(response.token || 'verification-pending');
+                                          setResendTimer(120);
+                                          toast.success('OTP resent successfully!');
+                                          toast.success('OTP resent successfully!');
+                                        }
+                                      } catch (err) {
+                                        toast.error('Error sending OTP');
+                                      } finally {
+                                        setIsLoading(false);
+                                      }
+                                    }}
+                                    disabled={isLoading || resendTimer > 0}
+                                    className="text-[#720C3E] hover:text-[#4D082A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                    className="text-[#720C3E] hover:text-[#4D082A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                  >
+                                    {resendTimer > 0
+                                      ? `Resend in ${Math.floor(resendTimer / 60)}:${String(resendTimer % 60).padStart(2, '0')}`
+                                      : 'Resend OTP'}
+                                  </button>
+                                </div>
 
-              {/* Verify & Continue Button */}
-              <button
-                type="submit"
-                disabled={isLoading || otp.join('').length !== 6}
-                className={`w-full py-3.5 px-4 rounded-2xl text-base font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md ${
-                  otp.join('').length === 6 && !isLoading
-                    ? 'bg-[#720C3E] hover:bg-[#4D082A] text-white shadow-[#720C3E]/25 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
-                    : 'bg-[#6F5A64]/20 text-[#6F5A64]/60 cursor-not-allowed shadow-none'
-                }`}
-              >
-                {isLoading ? (
-                  <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
-                ) : (
-                  <span>Verify & Continue</span>
-                )}
-              </button>
-            </form>
+                                {/* Verify & Continue Button */}
+                                <button
+                                  type="submit"
+                                  disabled={isLoading || otp.join('').length !== 6}
+                                  className={`w-full py-3.5 px-4 rounded-2xl text-base font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md ${otp.join('').length === 6 && !isLoading
+                                      ? 'bg-[#720C3E] hover:bg-[#4D082A] text-white shadow-[#720C3E]/25 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
+                                      : 'bg-[#6F5A64]/20 text-[#6F5A64]/60 cursor-not-allowed shadow-none'
+                                    }`}
+                                >
+                                  {isLoading ? (
+                                    <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
+                                  ) : (
+                                    <span>Verify & Continue</span>
+                                  )}
+                                </button>
+                                {/* Verify & Continue Button */}
+                                <button
+                                  type="submit"
+                                  disabled={isLoading || otp.join('').length !== 6}
+                                  className={`w-full py-3.5 px-4 rounded-2xl text-base font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md ${otp.join('').length === 6 && !isLoading
+                                      ? 'bg-[#720C3E] hover:bg-[#4D082A] text-white shadow-[#720C3E]/25 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
+                                      : 'bg-[#6F5A64]/20 text-[#6F5A64]/60 cursor-not-allowed shadow-none'
+                                    }`}
+                                >
+                                  {isLoading ? (
+                                    <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
+                                  ) : (
+                                    <span>Verify & Continue</span>
+                                  )}
+                                </button>
+                              </form>
           )}
-        </div>
-      </div>
-    </div>
-  );
+                            </div>
+                        </div>
+                    </div>
+                    );
 };
 
-export default Login;
+                    export default Login;
