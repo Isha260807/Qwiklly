@@ -1,5 +1,9 @@
 const mongoose = require('mongoose');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../utils/constants');
+require('./User');
+require('./Vendor');
+require('./UserService');
+require('./Category');
 
 /**
  * Booking Model
@@ -25,12 +29,6 @@ const bookingSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Vendor',
     required: false,
-    index: true
-  },
-  workerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Worker',
-    default: null,
     index: true
   },
   notifiedVendors: [{
@@ -375,7 +373,6 @@ bookingSchema.pre('save', async function (next) {
 // Core compound indexes
 bookingSchema.index({ userId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ vendorId: 1, status: 1, createdAt: -1 });
-bookingSchema.index({ workerId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ scheduledDate: 1, status: 1 });
 bookingSchema.index({ paymentStatus: 1, status: 1 });
 

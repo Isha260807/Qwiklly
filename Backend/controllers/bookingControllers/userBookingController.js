@@ -122,10 +122,11 @@ const createBooking = async (req, res) => {
       console.log('Geocoded address for vendor search:', bookingLocation);
     }
 
-    // Find vendors within 10km radius who offer this service category
+    // Find vendors within 10km radius who offer this exact service
     // CUSTOM - Check Cash Limit only if payment method is CASH
+    const bookedServiceTitle = service?.title || (category ? category.title : '');
     const vendorFilters = {
-      ...(category ? { service: category.title } : {}),
+      ...(bookedServiceTitle ? { service: bookedServiceTitle } : {}),
       checkCashLimit: paymentMethod === 'cash',
       city: address.city
     };
@@ -584,7 +585,6 @@ const getUserBookings = async (req, res) => {
       .populate('vendorId', 'name businessName phone profilePhoto')
       .populate('serviceId', 'title iconUrl')
       .populate('categoryId', 'title slug')
-      .populate('workerId', 'name phone profilePhoto')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -626,7 +626,6 @@ const getBookingById = async (req, res) => {
       .populate('vendorId', 'name businessName phone email address profilePhoto')
       .populate('serviceId', 'title description iconUrl images')
       .populate('categoryId', 'title slug')
-      .populate('workerId', 'name phone rating totalJobs location profilePhoto')
       .lean();
 
     if (!booking) {
@@ -1100,7 +1099,6 @@ const getUserRatings = async (req, res) => {
     const bookings = await Booking.find({ userId, rating: { $ne: null } })
       .populate('vendorId', 'name businessName profilePhoto')
       .populate('serviceId', 'title iconUrl')
-      .populate('workerId', 'name profilePhoto')
       .sort({ reviewedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));

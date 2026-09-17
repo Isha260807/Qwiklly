@@ -240,11 +240,19 @@ const ProfileDetails = () => {
                 <FiBriefcase className="w-5 h-5" style={{ color: themeColors.button }} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-500 font-medium mb-1.5">Service Categories</p>
+                <p className="text-xs text-gray-500 font-medium mb-1.5">Offered Services</p>
                 <div className="flex flex-wrap gap-1.5">
                   {profile.serviceCategory && (Array.isArray(profile.serviceCategory) ? profile.serviceCategory : profile.serviceCategory.split(', ')).filter(Boolean).length > 0 ? (
                     (Array.isArray(profile.serviceCategory) ? profile.serviceCategory : profile.serviceCategory.split(', ')).filter(Boolean).map((cat, i) => (
-                      <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 text-xs font-bold border border-teal-100">
+                      <span
+                        key={i}
+                        className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold"
+                        style={{
+                          backgroundColor: hexToRgba(themeColors.button, 0.1),
+                          color: themeColors.button,
+                          border: `1px solid ${hexToRgba(themeColors.button, 0.2)}`,
+                        }}
+                      >
                         {cat}
                       </span>
                     ))

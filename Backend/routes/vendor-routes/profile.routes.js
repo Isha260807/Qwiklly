@@ -3,7 +3,7 @@ const router = express.Router();
 const { body } = require('express-validator');
 const { authenticate } = require('../../middleware/authMiddleware');
 const { isVendor } = require('../../middleware/roleMiddleware');
-const { getProfile, updateProfile, updateAddress, updateLocation } = require('../../controllers/vendorControllers/vendorProfileController');
+const { getProfile, updateProfile, updateAddress, updateLocation, toggleOnlineStatus } = require('../../controllers/vendorControllers/vendorProfileController');
 
 // Validation rules
 const updateProfileValidation = [
@@ -20,6 +20,8 @@ const updateAddressValidation = [
 // Routes
 router.get('/profile', authenticate, isVendor, getProfile);
 router.put('/profile', authenticate, isVendor, updateProfileValidation, updateProfile);
+router.put('/profile/status', authenticate, isVendor, toggleOnlineStatus);
+router.put('/status', authenticate, isVendor, toggleOnlineStatus);
 router.put('/address', authenticate, isVendor, updateAddressValidation, updateAddress);
 router.put('/profile/location', authenticate, isVendor, updateLocation);
 

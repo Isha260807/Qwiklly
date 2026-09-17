@@ -66,15 +66,14 @@ const BookingAlert = () => {
   const handleAccept = async () => {
     try {
       await acceptBooking(id);
-      await assignWorker(id, 'SELF');
 
       // Update local storage states
       const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
-      const updatedPending = pendingJobs.filter(job => job.id !== id);
+      const updatedPending = pendingJobs.filter(job => String(job.id || job._id) !== String(id));
       localStorage.setItem('vendorPendingJobs', JSON.stringify(updatedPending));
 
       window.dispatchEvent(new Event('vendorJobsUpdated'));
-      toast.success('Booking accepted & assigned to you!');
+      toast.success('Booking accepted successfully!');
       navigate('/vendor/dashboard', { replace: true });
     } catch (error) {
       console.error('Error accepting:', error);
@@ -88,32 +87,13 @@ const BookingAlert = () => {
       await rejectBooking(id, 'Vendor rejected');
 
       const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
-      const updated = pendingJobs.filter(job => job.id !== id);
+      const updated = pendingJobs.filter(job => String(job.id || job._id) !== String(id));
       localStorage.setItem('vendorPendingJobs', JSON.stringify(updated));
 
       window.dispatchEvent(new Event('vendorJobsUpdated'));
       navigate('/vendor/dashboard', { replace: true });
     } catch (error) {
       console.error('Error rejecting:', error);
-      navigate('/vendor/dashboard', { replace: true });
-    }
-  };
-
-  const handleAssign = async () => {
-    try {
-      await acceptBooking(id);
-
-      // Update local storage states
-      const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
-      const updatedPending = pendingJobs.filter(job => job.id !== id);
-      localStorage.setItem('vendorPendingJobs', JSON.stringify(updatedPending));
-
-      window.dispatchEvent(new Event('vendorJobsUpdated'));
-      toast.success('Booking accepted! Redirecting to assign...');
-      navigate(`/vendor/booking/${id}/assign-worker`, { replace: true });
-    } catch (error) {
-      console.error('Error accepting:', error);
-      toast.error('Failed to accept booking.');
       navigate('/vendor/dashboard', { replace: true });
     }
   };
@@ -125,7 +105,6 @@ const BookingAlert = () => {
       isOpen={true}
       booking={booking}
       onAccept={handleAccept}
-      onAssign={handleAssign}
       onReject={handleReject}
       onMinimize={() => navigate('/vendor/dashboard', { replace: true })}
       maxSearchTimeMins={maxSearchTime}

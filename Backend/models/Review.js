@@ -25,11 +25,6 @@ const reviewSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  workerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Worker',
-    index: true
-  },
   rating: {
     type: Number,
     required: true,

@@ -135,47 +135,11 @@ exports.getVendorReport = async (req, res) => {
  */
 exports.getWorkerReport = async (req, res) => {
   try {
-    // Top workers by jobs completed
-    const topWorkers = await Booking.aggregate([
-      { $match: { status: BOOKING_STATUS.COMPLETED, workerId: { $ne: null } } },
-      {
-        $group: {
-          _id: '$workerId',
-          completedJobs: { $sum: 1 },
-          avgRating: { $avg: '$rating' }
-        }
-      },
-      { $sort: { completedJobs: -1 } },
-      { $limit: 10 },
-      {
-        $lookup: {
-          from: 'workers',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'worker'
-        }
-      },
-      { $unwind: '$worker' },
-      {
-        $project: {
-          name: '$worker.name',
-          phone: '$worker.phone',
-          completedJobs: 1,
-          avgRating: 1
-        }
-      }
-    ]);
-
-    // Worker availability distribution
-    const availabilityDistribution = await Worker.aggregate([
-      { $group: { _id: '$isAvailable', count: { $sum: 1 } } }
-    ]);
-
     res.status(200).json({
       success: true,
       data: {
-        topWorkers,
-        availabilityDistribution
+        topWorkers: [],
+        availabilityDistribution: []
       }
     });
   } catch (error) {

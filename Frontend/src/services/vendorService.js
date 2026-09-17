@@ -24,6 +24,12 @@ const vendorService = {
     return api.put('/vendors/profile/location', { lat, lng });
   },
 
+  // Toggle online/offline status
+  toggleOnlineStatus: async (isOnline) => {
+    const response = await api.put('/vendors/profile/status', { isOnline });
+    return response.data;
+  },
+
   // Get dashboard stats
   getDashboardStats: async () => {
     const response = await api.get('/vendors/dashboard/stats');

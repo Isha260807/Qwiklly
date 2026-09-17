@@ -16,8 +16,8 @@ import {
 } from '../../services/bookingService';
 import { CashCollectionModal, ConfirmDialog, WorkerPaymentModal, OtpVerificationModal, WorkCompletionModal } from '../../components/common';
 import VisitVerificationModal from '../../components/common/VisitVerificationModal';
-// import BillingModal from '../../components/bookings/BillingModal'; // Consumed by page now
 import vendorWalletService from '../../../../services/vendorWalletService';
+import vendorBillService from '../../../../services/vendorBillService';
 import { toast } from 'react-hot-toast';
 import { useAppNotifications } from '../../../../hooks/useAppNotifications';
 import { useLocationTracking } from '../../../../hooks/useLocationTracking';
@@ -1457,85 +1457,57 @@ export default function BookingDetails() {
             <FiArrowRight className="w-5 h-5" />
           </button>
 
-          {(booking.status === 'confirmed' || (booking.assignedTo && booking.workerResponse === 'rejected')) && (
-            <div className="flex gap-3">
+          {/* Vendor Operational Buttons */}
+          <div className="space-y-3 pt-2">
+            {(booking.status === 'confirmed' || booking.status === 'assigned') && (
               <button
-                onClick={handleAssignToSelf}
-                className="flex-1 py-4 rounded-xl font-semibold border-2 transition-all active:scale-95"
+                onClick={handleStartJourney}
+                className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
                 style={{
-                  borderColor: themeColors.button,
-                  color: themeColors.button,
-                  background: 'white',
+                  background: 'linear-gradient(135deg, #10B981, #059669)',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
                 }}
               >
-                Do it Myself
+                <FiNavigation className="w-5 h-5" />
+                Start Journey
               </button>
+            )}
+
+            {booking.status === 'journey_started' && (
               <button
-                onClick={handleAssignWorker}
-                className="flex-1 py-4 rounded-xl font-semibold text-white transition-all active:scale-95 px-4"
+                onClick={async () => {
+                  try {
+                    setIsVisitModalOpen(true);
+                    await vendorReached(id);
+                  } catch (err) {
+                    console.error('Failed to notify reached:', err);
+                  }
+                }}
+                className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
                 style={{
-                  background: themeColors.button,
-                  boxShadow: `0 4px 12px ${themeColors.button}40`,
+                  background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
                 }}
               >
-                {booking.workerResponse === 'rejected' ? 'Reassign' : 'Assign'}
+                <FiMapPin className="w-5 h-5" />
+                Arrived (Arrived at customer's site)
               </button>
-            </div>
-          )}
+            )}
 
-          {/* Self-Job Operational Buttons */}
-          {booking.assignedTo?.name === 'You (Self)' && (
-            <div className="space-y-3 pt-2">
-              {(booking.status === 'confirmed' || booking.status === 'assigned') && (
-                <button
-                  onClick={handleStartJourney}
-                  className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
-                  style={{
-                    background: 'linear-gradient(135deg, #10B981, #059669)',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
-                  }}
-                >
-                  <FiNavigation className="w-5 h-5" />
-                  Start Journey
-                </button>
-              )}
-
-              {booking.status === 'journey_started' && (
-                <button
-                  onClick={async () => {
-                    try {
-                      setIsVisitModalOpen(true);
-                      await vendorReached(id);
-                    } catch (err) {
-                      console.error('Failed to notify reached:', err);
-                    }
-                  }}
-                  className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
-                  style={{
-                    background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
-                    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
-                  }}
-                >
-                  <FiMapPin className="w-5 h-5" />
-                  Arrived (Arrived at customer's site)
-                </button>
-              )}
-
-              {(booking.status === 'visited' || booking.status === 'in_progress') && (
-                <button
-                  onClick={() => setIsWorkDoneModalOpen(true)}
-                  className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
-                  style={{
-                    background: 'linear-gradient(135deg, #10B981, #059669)',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
-                  }}
-                >
-                  <FiCheckCircle className="w-5 h-5" />
-                  Work Done
-                </button>
-              )}
-            </div>
-          )}
+            {(booking.status === 'visited' || booking.status === 'in_progress') && (
+              <button
+                onClick={() => setIsWorkDoneModalOpen(true)}
+                className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, #10B981, #059669)',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
+                }}
+              >
+                <FiCheckCircle className="w-5 h-5" />
+                Work Done
+              </button>
+            )}
+          </div>
         </div>
       </main>
 

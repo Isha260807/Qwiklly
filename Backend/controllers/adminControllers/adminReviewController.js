@@ -56,7 +56,6 @@ exports.getAllReviews = async (req, res) => {
       .populate('userId', 'name phone email profilePhoto')
       .populate('vendorId', 'businessName name phone')
       .populate('serviceId', 'title iconUrl')
-      .populate('workerId', 'name phone')
       .populate('bookingId', 'bookingNumber status')
       .sort({ createdAt: -1 })
       .skip(skip)

@@ -52,7 +52,6 @@ const getAllBookings = async (req, res) => {
       .populate('vendorId', 'name businessName phone')
       .populate('serviceId', 'title iconUrl')
       .populate('categoryId', 'title slug')
-      .populate('workerId', 'name phone')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -90,8 +89,7 @@ const getBookingById = async (req, res) => {
       .populate('userId', 'name phone email addresses')
       .populate('vendorId', 'name businessName phone email address')
       .populate('serviceId', 'title description iconUrl images')
-      .populate('categoryId', 'title slug')
-      .populate('workerId', 'name phone rating totalJobs completedJobs');
+      .populate('categoryId', 'title slug');
 
     if (!booking) {
       return res.status(404).json({

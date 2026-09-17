@@ -1,9 +1,15 @@
 import React, { useState, useEffect, memo, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiHome, FiBriefcase, FiUsers, FiUser } from 'react-icons/fi';
-import { HiHome, HiBriefcase, HiUsers, HiUser } from 'react-icons/hi';
-import { FaWallet } from 'react-icons/fa';
-import { vendorTheme as themeColors } from '../../../../theme';
+import { 
+  HiHome, 
+  HiOutlineHome, 
+  HiBriefcase, 
+  HiOutlineBriefcase, 
+  HiUser, 
+  HiOutlineUser 
+} from 'react-icons/hi';
+import { FaWallet, FaRegCreditCard } from 'react-icons/fa';
+import { motion } from 'framer-motion';
 
 const BottomNav = memo(() => {
   const navigate = useNavigate();
@@ -14,7 +20,6 @@ const BottomNav = memo(() => {
   useEffect(() => {
     const updatePendingCount = () => {
       try {
-        // Count active jobs (PENDING only) to show new requests
         const acceptedBookings = JSON.parse(localStorage.getItem('vendorAcceptedBookings') || '[]');
         const activeJobs = acceptedBookings.filter(job => job.status === 'PENDING');
         setPendingJobsCount(activeJobs.length);
@@ -33,19 +38,24 @@ const BottomNav = memo(() => {
     };
   }, []);
 
-  // Use useMemo to update navItems when pendingJobsCount changes
-  const navItems = useMemo(() => {
-    // Count jobs that require attention (Pending, Accepted, In Progress)
-    const badgeCount = pendingJobsCount;
+  // navItems without Workers
+  const navItems = useMemo(() => [
+    { id: 'home', path: '/vendor/dashboard', icon: HiOutlineHome, activeIcon: HiHome, label: 'Home' },
+    { id: 'jobs', path: '/vendor/jobs', icon: HiOutlineBriefcase, activeIcon: HiBriefcase, label: 'Jobs', badge: pendingJobsCount },
+    { id: 'wallet', path: '/vendor/wallet', icon: FaRegCreditCard, activeIcon: FaWallet, label: 'Wallet' },
+    { id: 'profile', path: '/vendor/profile', icon: HiOutlineUser, activeIcon: HiUser, label: 'Profile' },
+  ], [pendingJobsCount]);
 
-    return [
-      { path: '/vendor/dashboard', icon: FiHome, activeIcon: HiHome, label: 'Home' },
-      { path: '/vendor/jobs', icon: FiBriefcase, activeIcon: HiBriefcase, label: 'Jobs', badge: badgeCount },
-      { path: '/vendor/workers', icon: FiUsers, activeIcon: HiUsers, label: 'Workers' },
-      { path: '/vendor/wallet', icon: FaWallet, activeIcon: FaWallet, label: 'Wallet' },
-      { path: '/vendor/profile', icon: FiUser, activeIcon: HiUser, label: 'Profile' },
-    ];
-  }, [pendingJobsCount]);
+  const getActiveTab = () => {
+    const p = location.pathname;
+    if (p === '/vendor/dashboard' || p === '/vendor' || p === '/vendor/') return 'home';
+    if (p.startsWith('/vendor/jobs') || p.startsWith('/vendor/active-jobs')) return 'jobs';
+    if (p.startsWith('/vendor/wallet') || p.startsWith('/vendor/earnings')) return 'wallet';
+    if (p.startsWith('/vendor/profile') || p.startsWith('/vendor/settings')) return 'profile';
+    return 'home';
+  };
+
+  const activeTab = getActiveTab();
 
   const handleNavClick = (path) => {
     if (location.pathname !== path) {
@@ -70,95 +80,59 @@ const BottomNav = memo(() => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 bg-white"
+      className="fixed bottom-0 left-0 right-0 z-40 w-full bg-white border-t border-[#E8D9DF]/60 shadow-[0_-4px_20px_rgba(114,12,62,0.05)]"
       style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        width: '100%',
-        zIndex: 40,
-        willChange: 'transform',
-        transform: 'translateZ(0)',
-        backfaceVisibility: 'hidden',
         WebkitBackfaceVisibility: 'hidden',
-        borderTop: '2px solid rgba(0, 0, 0, 0.35)',
-        borderTopLeftRadius: '20px',
-        borderTopRightRadius: '20px',
-        boxShadow: '0 -8px 24px rgba(0, 0, 0, 0.15), 0 -4px 12px rgba(0, 0, 0, 0.1), 0 -2px 6px rgba(0, 0, 0, 0.08)',
-        background: 'linear-gradient(to top, #FFFFFF 0%, #FAFAFA 100%)',
       }}
     >
-      <div className="flex items-center justify-around px-2 py-2">
+      <div className="max-w-md mx-auto px-3 py-2 flex items-center justify-around gap-1">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path ||
-            (item.path === '/vendor/dashboard' && location.pathname === '/vendor');
+          const isActive = activeTab === item.id;
           const IconComponent = isActive ? item.activeIcon : item.icon;
 
           return (
-            <button
-              key={item.path}
+            <motion.button
+              key={item.id}
               onClick={() => handleNavClick(item.path)}
-              className="flex flex-col items-center justify-center relative w-16 h-14 rounded-xl transition-all duration-200 group hover:scale-105"
+              whileTap={{ scale: 0.94 }}
+              className={`relative flex items-center justify-center gap-1.5 px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer select-none ${
+                isActive
+                  ? 'text-[#720C3E] font-bold'
+                  : 'text-[#6F5A64] hover:text-[#24151D] font-medium'
+              }`}
             >
-              {/* Active Indicator Bar - Gradient Accent */}
+              {/* Active Pill Background */}
               {isActive && (
-                <div
-                  className="absolute -top-2 w-10 h-1 rounded-b-full"
-                  style={{
-                    background: themeColors.gradient,
-                    boxShadow: `0 2px 8px ${themeColors.brand.teal}4D`,
+                <motion.div
+                  layoutId="vendorBottomNavActivePill"
+                  className="absolute inset-0 bg-[#FCEBF3] rounded-2xl z-0"
+                  transition={{
+                    type: 'spring',
+                    stiffness: 400,
+                    damping: 30,
                   }}
                 />
               )}
 
-              {/* Active Background - Very Subtle Teal Tint */}
-              {isActive && (
-                <div
-                  className="absolute inset-0 rounded-xl scale-90"
-                  style={{ backgroundColor: `${themeColors.brand.teal}0A` }}
-                />
-              )}
-
-              <div className="relative z-10 flex flex-col items-center justify-center">
-                <div className="relative mb-0.5">
-                  <IconComponent
-                    className={`w-6 h-6 transition-all duration-300 ${isActive ? 'scale-110' : 'text-gray-400 group-hover:text-gray-600'}`}
-                    style={{
-                      color: isActive ? themeColors.button : '#9CA3AF',
-                      filter: isActive ? `drop-shadow(0 2px 4px ${themeColors.brand.teal}1A)` : 'none'
-                    }}
+              {/* Icon & Label */}
+              <div className="relative z-10 flex items-center gap-1.5">
+                <div className="relative flex items-center justify-center">
+                  <IconComponent 
+                    className={`w-5 h-5 transition-transform duration-200 ${
+                      isActive ? 'text-[#720C3E]' : 'text-[#6F5A64]'
+                    }`} 
                   />
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span
-                      className="absolute bg-gradient-to-br from-red-500 to-red-600 text-white text-xs font-bold rounded-full flex items-center justify-center"
-                      style={{
-                        top: '-6px',
-                        right: '-8px',
-                        minWidth: '18px',
-                        height: '18px',
-                        padding: '0 4px',
-                        fontSize: '10px',
-                        lineHeight: '18px',
-                        border: '2px solid white',
-                        boxShadow: '0 2px 5px rgba(239, 68, 68, 0.4)',
-                        zIndex: 50,
-                      }}
-                    >
+                    <span className="absolute -top-1.5 -right-2.5 bg-[#720C3E] text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5 border-2 border-white shadow-xs">
                       {item.badge > 9 ? '9+' : item.badge}
                     </span>
                   )}
                 </div>
-                <span
-                  className={`text-[10px] transition-colors duration-300 ${isActive ? 'font-bold' : 'font-medium text-gray-500'}`}
-                  style={{
-                    color: isActive ? themeColors.button : '#6B7280',
-                  }}
-                >
+                <span className="text-[13px] sm:text-sm font-semibold whitespace-nowrap">
                   {item.label}
                 </span>
               </div>
-            </button>
+            </motion.button>
           );
         })}
       </div>
@@ -168,4 +142,3 @@ const BottomNav = memo(() => {
 
 BottomNav.displayName = 'BottomNav';
 export default BottomNav;
-

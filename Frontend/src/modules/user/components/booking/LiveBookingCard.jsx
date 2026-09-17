@@ -17,19 +17,14 @@ const LiveBookingCard = ({ hasBottomNav }) => {
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
-  // Reset dismissed state when location changes (page changes)
-  useEffect(() => {
-    setIsDismissed(false);
-  }, [location.pathname]);
-
   // Status mapping for UI
   const getStatusInfo = (status) => {
     switch (status?.toUpperCase()) {
       case 'ASSIGNED':
-        return { label: 'Worker Assigned', icon: FiCheckCircle, color: 'bg-blue-500', sub: 'Worker will start journey soon' };
+        return { label: 'Partner Assigned', icon: FiCheckCircle, color: 'bg-blue-500', sub: 'Partner will start journey soon' };
       case 'STARTED':
       case 'JOURNEY_STARTED':
-        return { label: 'Worker on the Way', icon: FiNavigation, color: 'bg-orange-500', sub: 'Track location live', pulse: true };
+        return { label: 'Partner on the Way', icon: FiNavigation, color: 'bg-orange-500', sub: 'Track location live', pulse: true };
       case 'VISITED':
         return { label: 'Reached & Started Work', icon: FiMapPin, color: 'bg-green-500', sub: 'At your location • Work Started' };
       case 'IN_PROGRESS':
@@ -120,12 +115,29 @@ const LiveBookingCard = ({ hasBottomNav }) => {
     }
   };
 
-  if (!activeBooking || isDismissed) return null;
+  // Check dismissed state on activeBooking or route
+  const bookingId = activeBooking?._id || activeBooking?.id;
+  const isAlreadyDismissed = isDismissed || (bookingId && sessionStorage.getItem(`dismissed_live_booking_${bookingId}`) === 'true');
+
+  // Don't show LiveBookingCard on My Bookings or Booking Details / Confirmation pages
+  const isBookingPage = location.pathname.startsWith('/user/my-bookings') || 
+                        location.pathname.startsWith('/user/booking/') || 
+                        location.pathname.startsWith('/user/booking-confirmation');
+
+  if (!activeBooking || isAlreadyDismissed || isBookingPage) return null;
 
   const statusInfo = getStatusInfo(activeBooking.status);
   if (!statusInfo) return null;
 
   const Icon = statusInfo.icon;
+
+  const handleDismiss = (e) => {
+    e.stopPropagation();
+    setIsDismissed(true);
+    if (bookingId) {
+      sessionStorage.setItem(`dismissed_live_booking_${bookingId}`, 'true');
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -152,13 +164,11 @@ const LiveBookingCard = ({ hasBottomNav }) => {
 
           {/* Close Button */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsDismissed(true);
-            }}
-            className="absolute top-1 right-1 p-1 bg-gray-100 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-200 z-20 pointer-events-auto"
+            onClick={handleDismiss}
+            className="absolute top-2 right-2 p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 hover:text-gray-700 z-20 pointer-events-auto transition-colors"
+            title="Dismiss"
           >
-            <FiX className="w-3 h-3" />
+            <FiX className="w-3.5 h-3.5" />
           </button>
 
           {/* Progress Bar Background */}

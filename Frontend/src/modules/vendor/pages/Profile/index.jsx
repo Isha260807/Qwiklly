@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2 } from 'react-icons/fi';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiLayers } from 'react-icons/fi';
 import { FaWallet } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 import { vendorTheme as themeColors } from '../../../../theme';
@@ -23,10 +23,9 @@ const Profile = () => {
   const menuItems = [
     { id: 2, label: 'Wallet', icon: FaWallet, path: '/vendor/wallet' },
     { id: 5, label: 'My Ratings', icon: FiStar, path: '/vendor/my-ratings' },
-    { id: 6, label: 'Manage Payment Methods', icon: FiCreditCard, path: '/vendor/manage-payment-methods' },
     { id: 7, label: 'Manage Address', icon: FiMapPin, path: '/vendor/address-management' },
     { id: 8, label: 'Settings', icon: FiSettings, path: '/vendor/settings' },
-    { id: 9, label: 'About Homestr', icon: null, customIcon: 'H', path: '/vendor/about-homestr' },
+    { id: 9, label: 'About Qwiklly', icon: null, customIcon: 'Q', path: '/vendor/about-homestr' },
   ];
 
   const [profile, setProfile] = useState(null);
@@ -55,6 +54,9 @@ const Profile = () => {
       // Try to load from local storage first for immediate display
       const storedVendorData = JSON.parse(localStorage.getItem('vendorData') || '{}');
       if (storedVendorData && Object.keys(storedVendorData).length > 0) {
+        const rawServices = storedVendorData.service || storedVendorData.categories || [];
+        const servicesList = Array.isArray(rawServices) ? rawServices : (rawServices ? [rawServices] : []);
+
         setProfile({
           name: storedVendorData.name || 'Vendor Name',
           businessName: storedVendorData.businessName || null,
@@ -67,7 +69,8 @@ const Profile = () => {
           rating: storedVendorData.rating || 0,
           totalJobs: storedVendorData.totalJobs || 0,
           completionRate: storedVendorData.completionRate || 0,
-          serviceCategory: storedVendorData.service || '',
+          serviceCategory: Array.isArray(storedVendorData.service) ? storedVendorData.service.join(', ') : (storedVendorData.service || ''),
+          services: servicesList,
           skills: [],
           photo: storedVendorData.profilePhoto || null,
           approvalStatus: storedVendorData.approvalStatus,
@@ -139,16 +142,26 @@ const Profile = () => {
 
   if (error && !profile) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: themeColors.backgroundGradient }}>
-        <div className="text-center p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Error loading profile</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
+      <div
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{
+          background: themeColors.backgroundGradient,
+        }}
+      >
+        <div className="bg-white rounded-2xl p-6 max-w-md w-full text-center shadow-xl">
+          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl text-red-500">⚠️</span>
+          </div>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">Failed to Load Profile</h3>
+          <p className="text-gray-600 mb-6 text-sm">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-6 py-3 rounded-xl text-white font-semibold transition-all duration-300 hover:opacity-90"
-            style={{ backgroundColor: themeColors.button }}
+            className="w-full py-3 px-4 rounded-xl text-white font-semibold transition-all shadow-md active:scale-95"
+            style={{
+              backgroundColor: themeColors.button,
+            }}
           >
-            Refresh Page
+            Try Again
           </button>
         </div>
       </div>
@@ -160,20 +173,24 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
-      <Header title="Profile" />
+    <div
+      className="min-h-screen pb-24"
+      style={{
+        background: themeColors.backgroundGradient,
+      }}
+    >
+      <Header />
 
-      <main className="px-4 pt-4 pb-6">
-        {/* Profile Header Card with Phone & Email */}
+      <main className="max-w-md mx-auto pt-3">
+        {/* Profile Card */}
         <div
-          className="rounded-2xl p-5 mb-4 shadow-xl relative overflow-hidden"
+          className="mx-4 p-4 rounded-2xl mb-4 relative overflow-hidden"
           style={{
-            background: themeColors.button,
-            border: `2px solid ${themeColors.button}`,
-            boxShadow: `0 8px 24px ${hexToRgba(themeColors.button, 0.3)}, 0 4px 12px ${hexToRgba(themeColors.button, 0.2)}`,
+            background: `linear-gradient(135deg, ${themeColors.primary} 0%, ${themeColors.primaryDark} 100%)`,
+            boxShadow: `0 8px 24px ${hexToRgba(themeColors.primary, 0.25)}`,
           }}
         >
-          {/* Decorative Patterns */}
+          {/* Decorative Background Elements */}
           <div
             className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
             style={{
@@ -226,10 +243,10 @@ const Profile = () => {
               {/* Name and Info */}
               <div className="flex-1 min-w-0 flex flex-col">
                 <h2 className="text-xl font-bold text-white mb-1 break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{profile.name}</h2>
-                <p className="text-white text-sm opacity-95 mb-2.5 font-medium break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{profile.businessName}</p>
+                <p className="text-white text-sm opacity-95 mb-2 font-medium break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{profile.businessName}</p>
 
                 {/* Phone and Email */}
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 mb-2.5">
                   <div className="flex items-center gap-2">
                     <div className="p-1 rounded-md bg-white/15 backdrop-blur-sm flex-shrink-0">
                       <FiPhone className="w-3 h-3 text-white" />
@@ -243,6 +260,20 @@ const Profile = () => {
                     <span className="text-xs text-white font-semibold break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{profile.email}</span>
                   </div>
                 </div>
+
+                {/* Assigned Services Pills */}
+                {profile.services && profile.services.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {profile.services.map((srv, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-white/20 backdrop-blur-md border border-white/30"
+                      >
+                        {srv}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Navigate Button */}
@@ -341,9 +372,9 @@ const Profile = () => {
               </span>
             </button>
 
-            {/* Workers */}
+            {/* My Services */}
             <button
-              onClick={() => navigate('/vendor/workers')}
+              onClick={() => navigate('/vendor/profile/details')}
               className="flex flex-col items-center justify-center p-4 rounded-2xl active:scale-95 transition-all duration-300 relative overflow-hidden bg-white"
               style={{
                 boxShadow: '0 4px 12px rgba(0, 166, 166, 0.08), 0 2px 6px rgba(0, 0, 0, 0.05)',
@@ -367,10 +398,10 @@ const Profile = () => {
                   boxShadow: `0 2px 8px ${hexToRgba(themeColors.button, 0.2)}`,
                 }}
               >
-                <FiUser className="w-5 h-5" style={{ color: themeColors.button }} />
+                <FiLayers className="w-5 h-5" style={{ color: themeColors.button }} />
               </div>
               <span className="text-[11px] font-bold text-gray-800 text-center leading-tight">
-                Workers
+                My Services
               </span>
             </button>
           </div>

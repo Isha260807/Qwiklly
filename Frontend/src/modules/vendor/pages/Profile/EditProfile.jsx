@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiSave, FiUser, FiBriefcase, FiPhone, FiMail, FiMapPin, FiChevronDown, FiCamera, FiUpload } from 'react-icons/fi';
+import { FiSave, FiUser, FiBriefcase, FiPhone, FiMail, FiMapPin, FiChevronDown, FiCamera, FiUpload, FiSearch, FiX, FiCheck } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
@@ -53,8 +53,10 @@ const EditProfile = () => {
   const [uploading, setUploading] = useState(false);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
 
-  // Load service categories from admin config (dynamic)
-  const [categories, setCategories] = useState([]);
+  // Load available services directly from Admin catalog
+  const [availableServices, setAvailableServices] = useState([]);
+  const [isServicesLoading, setIsServicesLoading] = useState(true);
+  const [serviceSearch, setServiceSearch] = useState('');
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [errors, setErrors] = useState({});
   const [isFlutter, setIsFlutter] = useState(flutterBridge.isFlutter);
@@ -92,18 +94,48 @@ const EditProfile = () => {
   };
 
   useEffect(() => {
-    const loadServiceCategories = async () => {
+    const loadServices = async () => {
+      setIsServicesLoading(true);
       try {
-        const catRes = await publicCatalogService.getCategories();
-        if (catRes.success) {
-          setCategories(catRes.categories || []);
+        const serviceTitles = new Set();
+
+        // 1. Fetch live services created by Admin in database
+        try {
+          const svcRes = await publicCatalogService.getServices();
+          if (svcRes?.success && Array.isArray(svcRes.services)) {
+            svcRes.services.forEach(s => {
+              if (s.title && s.title.trim()) {
+                serviceTitles.add(s.title.trim());
+              }
+            });
+          }
+        } catch (sErr) {
+          console.error('Error fetching admin services:', sErr);
         }
+
+        // 2. Fetch live brands/service offerings created by Admin in database
+        try {
+          const brandRes = await publicCatalogService.getBrands();
+          if (brandRes?.success && Array.isArray(brandRes.brands)) {
+            brandRes.brands.forEach(b => {
+              if (b.title && b.title.trim()) {
+                serviceTitles.add(b.title.trim());
+              }
+            });
+          }
+        } catch (bErr) {
+          console.error('Error fetching admin brands:', bErr);
+        }
+
+        setAvailableServices(Array.from(serviceTitles));
       } catch (error) {
-        console.error('Error loading service categories:', error);
+        console.error('Error loading admin services:', error);
+      } finally {
+        setIsServicesLoading(false);
       }
     };
 
-    loadServiceCategories();
+    loadServices();
   }, []);
 
   useLayoutEffect(() => {
@@ -566,7 +598,12 @@ const EditProfile = () => {
 
             <button
               onClick={() => setIsAddressModalOpen(true)}
-              className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm border border-blue-100 hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 active:scale-95"
+              style={{
+                backgroundColor: hexToRgba(themeColors.button, 0.1),
+                color: themeColors.button,
+                border: `1.5px solid ${hexToRgba(themeColors.button, 0.25)}`,
+              }}
             >
               <FiMapPin className="w-4 h-4" />
               Build/Change Location on Map
@@ -575,69 +612,163 @@ const EditProfile = () => {
             {errors.address && <p className="text-red-500 text-sm mt-1">{errors.address}</p>}
           </div>
 
-          {/* Service Category (Multi-Select) */}
+          {/* Offered Services (Multi-Select) */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <div
-                className="p-2 rounded-lg"
-                style={{
-                  background: `linear-gradient(135deg, ${themeColors.icon}25 0%, ${themeColors.icon}15 100%)`,
-                }}
-              >
-                <FiBriefcase className="w-4 h-4" style={{ color: themeColors.icon }} />
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <div
+                  className="p-2 rounded-lg"
+                  style={{
+                    background: `linear-gradient(135deg, ${themeColors.icon}25 0%, ${themeColors.icon}15 100%)`,
+                  }}
+                >
+                  <FiBriefcase className="w-4 h-4" style={{ color: themeColors.icon }} />
+                </div>
+                <span>Services Offered <span className="text-red-500">*</span></span>
+              </label>
+
+              {formData.serviceCategories.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, serviceCategories: [] }))}
+                  className="text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+
+            <p className="text-xs text-gray-500 mb-3">
+              Select the exact services you provide so nearby customers' bookings reach you.
+            </p>
+
+            {/* Selected Services Tags */}
+            {formData.serviceCategories.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3 p-3 bg-white rounded-xl border border-gray-100 shadow-xs">
+                {formData.serviceCategories.map((svcTitle, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all shadow-xs"
+                    style={{
+                      backgroundColor: hexToRgba(themeColors.button, 0.1),
+                      color: themeColors.button,
+                      border: `1px solid ${hexToRgba(themeColors.button, 0.25)}`,
+                    }}
+                  >
+                    <span>{svcTitle}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCategoryChange(svcTitle);
+                      }}
+                      className="p-0.5 rounded-full hover:bg-black/10 transition-colors"
+                    >
+                      <FiX className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
               </div>
-              <span>Service Categories <span className="text-red-500">*</span></span>
-            </label>
+            )}
+
+            {/* Dropdown Selector */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setIsCategoryOpen(!isCategoryOpen)}
-                className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 flex items-center justify-between focus:outline-none focus:ring-2 transition-all"
+                style={{ focusRingColor: hexToRgba(themeColors.button, 0.2) }}
               >
-                <div className="flex flex-wrap gap-2 overflow-hidden">
-                  {formData.serviceCategories.length > 0 ? (
-                    formData.serviceCategories.map((cat, idx) => (
-                      <span key={idx} className="text-sm bg-blue-50 text-blue-700 px-2 py-1 rounded-md">
-                        {cat}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-gray-400">Select Categories</span>
-                  )}
-                </div>
-                <FiChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${isCategoryOpen ? 'rotate-180' : ''}`} />
+                <span className="text-sm font-semibold text-gray-700">
+                  {formData.serviceCategories.length > 0
+                    ? `+ Add / Manage Services (${formData.serviceCategories.length} selected)`
+                    : 'Select Services you offer'}
+                </span>
+                <FiChevronDown className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${isCategoryOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isCategoryOpen && (
                 <>
                   <div
-                    className="fixed inset-0 z-10 bg-transparent"
+                    className="fixed inset-0 z-20 bg-black/10 backdrop-blur-2xs"
                     onClick={() => setIsCategoryOpen(false)}
                   />
-                  <div className="absolute z-20 w-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto">
-                    {categories.length > 0 ? (
-                      categories.map((cat, index) => {
-                        const isSelected = formData.serviceCategories.includes(cat.title);
-                        return (
-                          <button
-                            key={cat._id || index}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation(); // Prevent closing dropdown immediately
-                              handleCategoryChange(cat.title);
-                            }}
-                            className="w-full text-left px-4 py-3 hover:bg-gray-50 font-medium text-gray-700 border-b border-gray-50 last:border-0 flex items-center justify-between"
-                          >
-                            {cat.title}
-                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`}>
-                              {isSelected && <span className="text-white text-xs">✓</span>}
-                            </div>
-                          </button>
+                  <div className="absolute z-30 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 max-h-72 overflow-hidden flex flex-col">
+                    {/* Search inside dropdown */}
+                    <div className="p-3 border-b border-gray-100 bg-gray-50/70 sticky top-0 z-10 flex items-center gap-2">
+                      <FiSearch className="w-4 h-4 text-gray-400 shrink-0" />
+                      <input
+                        type="text"
+                        value={serviceSearch}
+                        onChange={(e) => setServiceSearch(e.target.value)}
+                        placeholder="Search services (e.g. AC, Electrician)..."
+                        className="w-full text-xs font-medium bg-transparent focus:outline-none placeholder:text-gray-400"
+                        autoFocus
+                      />
+                      {serviceSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setServiceSearch('')}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <FiX className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Scrollable services list */}
+                    <div className="overflow-y-auto max-h-56 divide-y divide-gray-50">
+                      {isServicesLoading ? (
+                        <div className="px-4 py-6 text-center text-gray-400 text-xs font-medium">
+                          Loading services from Admin...
+                        </div>
+                      ) : availableServices.length === 0 ? (
+                        <div className="px-4 py-6 text-center text-gray-400 text-xs font-medium">
+                          No services added by Admin yet.
+                        </div>
+                      ) : (() => {
+                        const filtered = availableServices.filter(s =>
+                          s.toLowerCase().includes(serviceSearch.toLowerCase().trim())
                         );
-                      })
-                    ) : (
-                      <div className="px-4 py-3 text-gray-400 text-sm">No categories found</div>
-                    )}
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="px-4 py-6 text-center text-gray-400 text-xs font-medium">
+                              No services match "{serviceSearch}"
+                            </div>
+                          );
+                        }
+
+                        return filtered.map((svcTitle, index) => {
+                          const isSelected = formData.serviceCategories.includes(svcTitle);
+                          return (
+                            <button
+                              key={index}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCategoryChange(svcTitle);
+                              }}
+                              className={`w-full text-left px-4 py-3 hover:bg-gray-50/80 font-semibold text-xs flex items-center justify-between transition-colors ${
+                                isSelected ? 'bg-pink-50/40 text-gray-900' : 'text-gray-700'
+                              }`}
+                            >
+                              <span className="truncate pr-2">{svcTitle}</span>
+                              <div
+                                className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all ${
+                                  isSelected
+                                    ? 'text-white'
+                                    : 'border-gray-300 bg-white'
+                                }`}
+                                style={isSelected ? { backgroundColor: themeColors.button, borderColor: themeColors.button } : {}}
+                              >
+                                {isSelected && <FiCheck className="w-3.5 h-3.5" />}
+                              </div>
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
                   </div>
                 </>
               )}

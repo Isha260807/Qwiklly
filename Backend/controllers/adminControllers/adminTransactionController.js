@@ -161,17 +161,15 @@ const getAllTransactions = async (req, res) => {
     if (search) {
       const searchRegex = new RegExp(search, 'i');
 
-      // We need to find matching users, vendors, workers and bookings first
-      const [users, vendors, workers, bookings] = await Promise.all([
+      // We need to find matching users, vendors and bookings first
+      const [users, vendors, bookings] = await Promise.all([
         User.find({ $or: [{ name: searchRegex }, { email: searchRegex }] }).select('_id'),
         Vendor.find({ $or: [{ name: searchRegex }, { email: searchRegex }] }).select('_id'),
-        Worker.find({ $or: [{ name: searchRegex }, { email: searchRegex }] }).select('_id'),
         Booking.find({ bookingNumber: searchRegex }).select('_id')
       ]);
 
       const userIds = users.map(u => u._id);
       const vendorIds = vendors.map(v => v._id);
-      const workerIds = workers.map(w => w._id);
       const bookingIds = bookings.map(b => b._id);
 
       // Find bookings where the USER matches the search (for indirect transactions like cash_collected)
@@ -195,7 +193,6 @@ const getAllTransactions = async (req, res) => {
     const transactions = await Transaction.find(query)
       .populate('userId', 'name email phone')
       .populate('vendorId', 'name email phone')
-      .populate('workerId', 'name email phone')
       .populate({
         path: 'bookingId',
         select: 'bookingNumber userId',

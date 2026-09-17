@@ -29,7 +29,8 @@ const cartItemSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    required: true
+    required: false,
+    default: 'General'
   },
   categoryTitle: {
     type: String,
@@ -42,7 +43,8 @@ const cartItemSchema = new mongoose.Schema({
   price: {
     type: Number,
     required: true,
-    min: 0
+    min: 0,
+    default: 0
   },
   originalPrice: {
     type: Number,
@@ -51,7 +53,8 @@ const cartItemSchema = new mongoose.Schema({
   unitPrice: {
     type: Number,
     required: true,
-    min: 0
+    min: 0,
+    default: 0
   },
   serviceCount: {
     type: Number,

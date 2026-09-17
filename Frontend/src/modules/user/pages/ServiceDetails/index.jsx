@@ -195,6 +195,8 @@ const ServiceDetails = () => {
       const cartItemData = {
         serviceId: service.id || service._id,
         title: service.title,
+        category: service.category?.title || service.category || service.brandName || service.title || 'General',
+        sectionTitle: service.brandName || service.title || '',
         description: service.tagline || service.description || '',
         icon: service.image || service.icon || service.imageUrl || service.iconUrl || '',
         price: Number(displayPrice),

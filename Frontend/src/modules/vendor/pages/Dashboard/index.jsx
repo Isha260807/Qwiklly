@@ -462,30 +462,17 @@ const Dashboard = memo(() => {
         {/* Profile Card Section */}
         <div className="px-4 pt-4 pb-2">
           <div
-            className="rounded-2xl p-4 cursor-pointer active:scale-98 transition-all duration-200 relative overflow-hidden"
+            className="rounded-2xl p-4 cursor-pointer active:scale-98 transition-all duration-200 relative overflow-hidden shadow-sm hover:shadow-md"
             onClick={() => navigate('/vendor/profile')}
             style={{
-              background: themeColors.button,
-              border: `2px solid ${themeColors.button}`,
+              background: 'linear-gradient(135deg, #FFFFFF 0%, #FDF2F7 100%)',
+              border: '1.5px solid #F3D5E2',
             }}
           >
-            {/* Decorative Pattern */}
-            <div
-              className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-10"
-              style={{
-                background: `radial-gradient(circle, ${themeColors.button} 0%, transparent 70%)`,
-                transform: 'translate(20px, -20px)',
-              }}
-            />
-
             <div className="relative z-10 flex items-center gap-3">
               {/* Profile Photo */}
               <div
-                className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
-                style={{
-                  background: `linear-gradient(135deg, ${themeColors.button} 0%, ${themeColors.button}dd 100%)`,
-                  border: `2.5px solid #FFFFFF`,
-                }}
+                className="w-13 h-13 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-[#FCEBF3] border-2 border-[#720C3E]/30"
               >
                 {vendorProfile.photo ? (
                   <img
@@ -494,34 +481,24 @@ const Dashboard = memo(() => {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <FiUser className="w-7 h-7" style={{ color: '#FFFFFF' }} />
+                  <FiUser className="w-6 h-6 text-[#720C3E]" />
                 )}
               </div>
 
               {/* Profile Info */}
               <div className="flex-1 min-w-0">
-                <p className="text-lg font-bold uppercase tracking-wider mb-0.5" style={{
-                  color: '#FFFFFF',
-                  textShadow: `1px 1px 0px rgba(0, 0, 0, 0.2)`,
-                  letterSpacing: '0.12em',
-                }}>
+                <p className="text-xs font-black tracking-widest text-[#720C3E] uppercase mb-0.5">
                   WELCOME !
                 </p>
-                <h2 className="text-base font-bold text-white truncate mb-0.5">{vendorProfile.name}</h2>
-                <p className="text-xs text-white truncate font-medium opacity-90">{vendorProfile.businessName}</p>
+                <h2 className="text-base font-bold text-[#24151D] truncate mb-0.5">{vendorProfile.name}</h2>
+                <p className="text-xs text-[#6F5A64] truncate font-medium">{vendorProfile.businessName}</p>
               </div>
 
               {/* Arrow Icon */}
               <div
-                className="p-2.5 rounded-lg flex-shrink-0"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.35)',
-                  backdropFilter: 'blur(10px)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-                  border: '1px solid rgba(255, 255, 255, 0.4)',
-                }}
+                className="p-2.5 rounded-xl flex-shrink-0 bg-[#FCEBF3] text-[#720C3E] shadow-xs"
               >
-                <FiChevronRight className="w-6 h-6" style={{ color: '#FFFFFF', fontWeight: 'bold' }} />
+                <FiChevronRight className="w-5 h-5 text-[#720C3E]" />
               </div>
             </div>
           </div>
@@ -570,97 +547,49 @@ const Dashboard = memo(() => {
 
           {/* Performance Metrics */}
           <div>
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Performance</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <h2 className="text-base font-bold text-gray-800 mb-3">Performance</h2>
+            <div className="grid grid-cols-2 gap-3">
               {/* Completed Jobs Card */}
               <div
-                className="rounded-2xl shadow-lg relative overflow-hidden"
+                className="rounded-2xl p-4 relative overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
                 style={{
                   background: 'linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 100%)',
-                  boxShadow: '0 8px 24px rgba(16, 185, 129, 0.15), 0 4px 12px rgba(16, 185, 129, 0.1), 0 0 0 2px rgba(16, 185, 129, 0.2)',
-                  border: '2px solid rgba(16, 185, 129, 0.3)',
+                  border: '1.5px solid #BBF7D0',
                 }}
               >
-                {/* Left border accent */}
-                <div
-                  className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl"
-                  style={{
-                    background: 'linear-gradient(180deg, #10B981 0%, #059669 100%)',
-                  }}
-                />
-                {/* Top Border with Heading */}
-                <div
-                  className="w-full py-3 px-4 rounded-t-2xl"
-                  style={{
-                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
-                  }}
-                >
-                  <p className="text-base font-bold text-white text-center">Completed</p>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[11px] font-bold text-[#166534] uppercase tracking-wider">Completed</span>
+                  <div className="p-2 rounded-xl bg-[#DCFCE7] text-[#15803D]">
+                    <FiCheckCircle className="w-5 h-5" />
+                  </div>
                 </div>
-                {/* Icon at top left - just below heading */}
-                <div
-                  className="absolute top-14 left-4 p-3 rounded-xl z-10"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.2) 100%)',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3), 0 2px 6px rgba(0, 0, 0, 0.2)',
-                    border: '2px solid rgba(16, 185, 129, 0.4)',
-                  }}
-                >
-                  <FiCheckCircle className="w-7 h-7" style={{ color: '#10B981' }} />
-                </div>
-                {/* Content */}
-                <div className="p-5 pt-16">
-                  <p className="text-4xl font-bold mb-2 text-center" style={{ color: '#10B981' }}>
+                <div>
+                  <p className="text-2xl font-black text-[#15803D] leading-tight mb-0.5">
                     {stats.completedJobs}
                   </p>
-                  <p className="text-sm text-gray-600 font-semibold text-center">Total jobs</p>
+                  <p className="text-xs text-[#6F5A64] font-medium">Total jobs</p>
                 </div>
               </div>
 
               {/* Rating Card */}
               <div
-                className="rounded-2xl shadow-lg relative overflow-hidden"
+                className="rounded-2xl p-4 relative overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
                 style={{
                   background: 'linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 100%)',
-                  boxShadow: '0 8px 24px rgba(245, 158, 11, 0.15), 0 4px 12px rgba(245, 158, 11, 0.1), 0 0 0 2px rgba(245, 158, 11, 0.2)',
-                  border: '2px solid rgba(245, 158, 11, 0.3)',
+                  border: '1.5px solid #FED7AA',
                 }}
               >
-                {/* Left border accent */}
-                <div
-                  className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl"
-                  style={{
-                    background: 'linear-gradient(180deg, #F59E0B 0%, #D97706 100%)',
-                  }}
-                />
-                {/* Top Border with Heading */}
-                <div
-                  className="w-full py-3 px-4 rounded-t-2xl"
-                  style={{
-                    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-                    boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)',
-                  }}
-                >
-                  <p className="text-base font-bold text-white text-center">Rating</p>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[11px] font-bold text-[#9A3412] uppercase tracking-wider">Rating</span>
+                  <div className="p-2 rounded-xl bg-[#FFEDD5] text-[#D97706]">
+                    <FiTrendingUp className="w-5 h-5" />
+                  </div>
                 </div>
-                {/* Icon at top left - just below heading */}
-                <div
-                  className="absolute top-14 left-4 p-3 rounded-xl z-10"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(217, 119, 6, 0.2) 100%)',
-                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3), 0 2px 6px rgba(0, 0, 0, 0.2)',
-                    border: '2px solid rgba(245, 158, 11, 0.4)',
-                  }}
-                >
-                  <FiTrendingUp className="w-7 h-7" style={{ color: '#F59E0B' }} />
-                </div>
-                {/* Content */}
-                <div className="p-5 pt-16">
-                  <p className="text-4xl font-bold mb-2 text-center" style={{ color: '#F59E0B' }}>
+                <div>
+                  <p className="text-2xl font-black text-[#D97706] leading-tight mb-0.5">
                     {stats.rating > 0 ? stats.rating.toFixed(1) : 'N/A'}
                   </p>
-                  <p className="text-sm text-gray-600 font-semibold text-center">Average rating</p>
+                  <p className="text-xs text-[#6F5A64] font-medium">Average rating</p>
                 </div>
               </div>
             </div>
@@ -695,9 +624,7 @@ const Dashboard = memo(() => {
             {recentJobs.length > 0 ? (
               <div className="space-y-3">
                 {recentJobs.map((job, index) => {
-                  // Alternating colors
-                  const isDarkBlue = index % 2 === 0;
-                  const accentColor = isDarkBlue ? '#001947' : '#406788';
+                  const accentColor = '#720C3E';
 
                   return (
                     <div

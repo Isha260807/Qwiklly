@@ -10,16 +10,8 @@ const { sendNotificationToUser, sendNotificationToVendor } = require('../../serv
  */
 const getVendorBookings = async (req, res) => {
   try {
-    const vendorId = req.user.id;
+    const vendorId = req.user.id || req.user._id;
     const { status, q, page = 1, limit = 20 } = req.query;
-
-    // ── Get vendor categories from req.user (set in auth middleware) ──
-    let vendorCategories = req.user.categories || req.user.service || [];
-    if (!vendorCategories.length) {
-      const Vendor = require('../../models/Vendor');
-      const v = await Vendor.findById(vendorId, 'service').lean();
-      vendorCategories = v?.service || [];
-    }
 
     const vId = new mongoose.Types.ObjectId(vendorId);
 
@@ -31,7 +23,6 @@ const getVendorBookings = async (req, res) => {
         {
           vendorId: null,
           status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
-          serviceCategory: { $in: vendorCategories },
           'potentialVendors.vendorId': vId // Only show jobs where THIS vendor is within range
         }
       ]
@@ -81,59 +72,68 @@ const getVendorBookings = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     // ── Single DB round-trip: list + total via $facet ──
-    const [result] = await Booking.aggregate([
-      { $match: query },
-      {
-        $facet: {
-          data: [
-            { $sort: { createdAt: -1 } },
-            { $skip: skip },
-            { $limit: parseInt(limit) },
-            {
-              $project: {
-                _id: 1,
-                bookingNumber: 1,
-                status: 1,
-                paymentMethod: 1,
-                finalAmount: 1,
-                scheduledDate: 1,
-                scheduledTime: 1,
-                serviceName: 1,
-                serviceCategory: 1,
-                categoryIcon: 1,
-                createdAt: 1,
-                'address.addressLine1': 1,
-                'address.city': 1,
-                userId: 1,
-                workerId: 1,
-                serviceId: 1,
-                acceptedAt: 1,
-                assignedAt: 1,
-                brandName: 1,
-                brandIcon: 1,
-                expiresAt: 1
+    let bookings = [];
+    let total = 0;
+
+    try {
+      const aggResult = await Booking.aggregate([
+        { $match: query },
+        {
+          $facet: {
+            data: [
+              { $sort: { createdAt: -1 } },
+              { $skip: skip },
+              { $limit: parseInt(limit) },
+              {
+                $project: {
+                  _id: 1,
+                  bookingNumber: 1,
+                  status: 1,
+                  paymentMethod: 1,
+                  finalAmount: 1,
+                  scheduledDate: 1,
+                  scheduledTime: 1,
+                  serviceName: 1,
+                  serviceCategory: 1,
+                  categoryIcon: 1,
+                  createdAt: 1,
+                  'address.addressLine1': 1,
+                  'address.city': 1,
+                  userId: 1,
+                  workerId: 1,
+                  serviceId: 1,
+                  acceptedAt: 1,
+                  assignedAt: 1,
+                  brandName: 1,
+                  brandIcon: 1,
+                  expiresAt: 1
+                }
               }
-            }
-          ],
-          total: [{ $count: 'n' }]
+            ],
+            total: [{ $count: 'n' }]
+          }
+        }
+      ]);
+
+      const result = (aggResult && aggResult[0]) || { data: [], total: [] };
+      bookings = result.data || [];
+      total = result.total?.[0]?.n || 0;
+
+      // ── Populate only required fields ──
+      if (bookings.length > 0) {
+        try {
+          await Booking.populate(bookings, [
+            { path: 'userId', select: 'name phone' },
+            { path: 'workerId', select: 'name' },
+            { path: 'serviceId', select: 'title iconUrl' }
+          ]);
+        } catch (popErr) {
+          console.warn('[getVendorBookings] Populate warning:', popErr);
         }
       }
-    ]);
-
-    const bookings = result.data || [];
-    const total = result.total?.[0]?.n || 0;
-
-    // ── Populate only required fields ──
-    await Booking.populate(bookings, [
-      { path: 'userId', select: 'name phone', options: { lean: true } },
-      { path: 'workerId', select: 'name', options: { lean: true } },
-      {
-        path: 'serviceId',
-        select: 'title iconUrl categoryId',
-        populate: { path: 'categoryId', select: 'title' },
-        options: { lean: true }
-      }
-    ]);
+    } catch (aggErr) {
+      console.error('[getVendorBookings] Aggregate error:', aggErr);
+    }
 
     res.status(200).json({
       success: true,
@@ -142,7 +142,7 @@ const getVendorBookings = async (req, res) => {
         page: parseInt(page),
         limit: parseInt(limit),
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / parseInt(limit)) || 1
       }
     });
   } catch (error) {
@@ -173,8 +173,7 @@ const getBookingById = async (req, res) => {
       .populate('userId', 'name phone email profilePhoto')
       .populate('vendorId', 'name businessName phone email')
       .populate('serviceId', 'title description iconUrl images')
-      .populate('categoryId', 'title slug')
-      .populate('workerId', 'name phone rating totalJobs completedJobs');
+      .populate('categoryId', 'title slug');
 
     if (!booking) {
       return res.status(404).json({
@@ -481,130 +480,32 @@ const assignWorker = async (req, res) => {
       });
     }
 
-    // Handle "Assign to Self"
-    if (workerId === 'SELF') {
-      booking.workerId = null; // null means vendor itself
-      booking.assignedAt = new Date();
-
-      if (booking.status === BOOKING_STATUS.CONFIRMED || booking.status === BOOKING_STATUS.ACCEPTED) {
-        booking.status = BOOKING_STATUS.ASSIGNED;
-      }
-
-      await booking.save();
-
-      // Notify User
-      await createNotification({
-        userId: booking.userId,
-        type: 'worker_assigned',
-        title: 'Service Provider Assigned',
-        message: `Vendor ${req.user.businessName || req.user.name} will handle your booking ${booking.bookingNumber} personally.`,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        pushData: {
-          type: 'worker_assigned',
-          bookingId: booking._id.toString(),
-          link: `/user/booking/${booking._id}`
-        }
-      });
-
-      // Emit socket event for real-time UI refresh
-      const io = req.app.get('io');
-      if (io) {
-        io.to(`user_${booking.userId}`).emit('booking_updated', {
-          bookingId: booking._id,
-          status: booking.status,
-          message: 'Professional assigned to your booking'
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Assigned to yourself successfully',
-        data: booking
-      });
-    }
-
-    // Verify worker belongs to vendor
-    const worker = await Worker.findOne({ _id: workerId, vendorId });
-    if (!worker) {
-      return res.status(404).json({
-        success: false,
-        message: 'Worker not found or does not belong to your vendor account'
-      });
-    }
-
-    // Check if worker is active
-    const validStatuses = ['active', 'ONLINE', 'ACTIVE'];
-    if (!validStatuses.includes(worker.status)) {
-      return res.status(400).json({
-        success: false,
-        message: `Worker is not active (Status: ${worker.status})`
-      });
-    }
-
-    // Update booking
-    booking.workerId = workerId;
     booking.assignedAt = new Date();
 
-    // Set status to ASSIGNED immediately. 
-    // If worker rejects, respondToJob logic reverts it to CONFIRMED.
-    booking.status = BOOKING_STATUS.ASSIGNED;
-
-    booking.workerResponse = 'PENDING';
-    booking.workerAcceptedAt = undefined;
+    if (booking.status === BOOKING_STATUS.CONFIRMED || booking.status === BOOKING_STATUS.ACCEPTED) {
+      booking.status = BOOKING_STATUS.ASSIGNED;
+    }
 
     await booking.save();
 
-    // Send notification to user
+    // Notify User
     await createNotification({
       userId: booking.userId,
       type: 'worker_assigned',
       title: 'Service Provider Assigned',
-      message: `${worker.name} has been assigned to your booking. Check app for details.`,
+      message: `Vendor ${req.user.businessName || req.user.name} will handle your booking ${booking.bookingNumber}.`,
       relatedId: booking._id,
       relatedType: 'booking',
-      priority: 'high', // Ensure high priority delivery
       pushData: {
         type: 'worker_assigned',
         bookingId: booking._id.toString(),
         link: `/user/booking/${booking._id}`
-        // dataOnly: false // Explicitly false
       }
     });
 
-    // Send notification to worker
-    await createNotification({
-      workerId,
-      type: 'booking_created',
-      title: 'New Job Assigned',
-      message: `You have been assigned to booking ${booking.bookingNumber}.`,
-      relatedId: booking._id,
-      relatedType: 'booking',
-      pushData: {
-        type: 'job_assigned',
-        bookingId: booking._id.toString(),
-        link: `/worker/job/${booking._id}`
-      }
-    });
-
-    // Send FCM push notification to worker
-    // Manual push removed - auto handled by createNotification
-    // sendNotificationToWorker(workerId, { ... });
-
+    // Emit socket event for real-time UI refresh
     const io = req.app.get('io');
     if (io) {
-      io.to(`worker_${workerId}`).emit('new_job_assigned', {
-        bookingId: booking._id,
-        serviceName: booking.serviceId?.title || booking.serviceName || 'Service',
-        customerName: booking.userId?.name || 'Customer',
-        customerPhone: booking.userId?.phone,
-        address: booking.address,
-        price: booking.finalAmount,
-        scheduledDate: booking.scheduledDate,
-        scheduledTime: booking.scheduledTime,
-      });
-
-      // Notify User in real-time
       io.to(`user_${booking.userId}`).emit('booking_updated', {
         bookingId: booking._id,
         status: booking.status,
@@ -612,16 +513,16 @@ const assignWorker = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: 'Worker assigned successfully',
+      message: 'Booking assigned successfully',
       data: booking
     });
   } catch (error) {
     console.error('Assign worker error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to assign worker. Please try again.'
+      message: 'Failed to assign booking. Please try again.'
     });
   }
 };
@@ -1504,7 +1405,6 @@ const getVendorRatings = async (req, res) => {
     const bookings = await Booking.find({ vendorId, rating: { $ne: null } })
       .populate('userId', 'name profilePhoto')
       .populate('serviceId', 'title iconUrl')
-      .populate('workerId', 'name profilePhoto')
       .sort({ reviewedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));

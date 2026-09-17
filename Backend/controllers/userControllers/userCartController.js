@@ -68,14 +68,20 @@ const addToCart = async (req, res) => {
     // Verify service exists (only if serviceId is provided)
     let service = null;
     if (serviceId) {
-      service = await Service.findById(serviceId);
-      if (!service) {
-        return res.status(404).json({
-          success: false,
-          message: 'Service not found'
-        });
+      try {
+        service = await Service.findById(serviceId).populate('categoryId', 'title').populate('brandId', 'title');
+      } catch (svcErr) {
+        console.warn('[AddToCart] Service find error (non-fatal):', svcErr);
       }
     }
+
+    const itemTitle = title || service?.title || 'Service Item';
+    const itemCategory = category || service?.categoryId?.title || service?.brandId?.title || sectionTitle || 'General';
+    const itemUnitPrice = Number(unitPrice ?? price ?? service?.basePrice ?? 0);
+    const itemCount = Number(serviceCount || 1);
+    const itemTotalPrice = Number(price ?? (itemUnitPrice * itemCount));
+    const itemIcon = icon || service?.iconUrl || service?.image || '';
+    const itemDescription = description || service?.description || service?.tagline || '';
 
     // Get or create cart
     let cart = await Cart.findOne({ userId });
@@ -89,33 +95,33 @@ const addToCart = async (req, res) => {
 
     // Check if item already exists in cart
     const existingItemIndex = cart.items.findIndex(
-      item => item.title === title && (!serviceId || item.serviceId?.toString() === serviceId)
+      item => item.title === itemTitle && (!serviceId || item.serviceId?.toString() === serviceId.toString())
     );
 
     if (existingItemIndex !== -1) {
       // Update quantity if item exists
       const existingItem = cart.items[existingItemIndex];
-      const newCount = (existingItem.serviceCount || 1) + (serviceCount || 1);
-      const newPrice = existingItem.unitPrice * newCount;
+      const newCount = (existingItem.serviceCount || 1) + itemCount;
+      const newPrice = (existingItem.unitPrice || itemUnitPrice) * newCount;
 
       cart.items[existingItemIndex].serviceCount = newCount;
       cart.items[existingItemIndex].price = newPrice;
     } else {
       // Add new item
       const newItem = {
-        title,
-        description: description || '',
-        icon: icon || '',
-        category,
-        price: price || unitPrice || 0,
-        originalPrice: originalPrice || null,
-        unitPrice: unitPrice || price || 0,
-        serviceCount: serviceCount || 1,
-        rating: rating || '4.8',
-        reviews: reviews || '10k+',
+        title: itemTitle,
+        description: itemDescription,
+        icon: itemIcon,
+        category: itemCategory,
+        price: itemTotalPrice,
+        originalPrice: originalPrice ? Number(originalPrice) : (service?.originalPrice || null),
+        unitPrice: itemUnitPrice,
+        serviceCount: itemCount,
+        rating: rating || service?.rating?.toString() || '4.8',
+        reviews: reviews || service?.ratingCount || '10k+',
         vendorId: vendorId || null,
-        sectionTitle: sectionTitle || '',
-        sectionIcon: sectionIcon || null,
+        sectionTitle: sectionTitle || (service?.brandId?.title || ''),
+        sectionIcon: sectionIcon || (service?.brandId?.iconUrl || null),
         card: card || null
       };
 
@@ -123,7 +129,7 @@ const addToCart = async (req, res) => {
       if (serviceId) newItem.serviceId = serviceId;
       if (categoryId) newItem.categoryId = categoryId;
 
-      console.log(`[AddToCart] Adding new item: ${title}`);
+      console.log(`[AddToCart] Adding new item: ${itemTitle} in category: ${itemCategory}`);
       cart.items.push(newItem);
     }
 

@@ -526,3 +526,17 @@ html {
 .focus\:ring-primary-500:focus {
   --tw-ring-color: #720C3E;
 }
+
+/* Hide scrollbars universally */
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar,
+.scrollbar-hide {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}

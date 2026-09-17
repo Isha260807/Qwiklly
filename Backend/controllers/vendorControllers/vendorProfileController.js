@@ -49,6 +49,8 @@ const getProfile = async (req, res) => {
         approvalStatus: vendor.approvalStatus,
         isPhoneVerified: vendor.isPhoneVerified || false,
         isEmailVerified: vendor.isEmailVerified || false,
+        isOnline: vendor.isOnline || false,
+        availability: vendor.availability || 'OFFLINE',
         profilePhoto: vendor.profilePhoto || null,
         aadharDocument: vendor.aadhar?.document || null,
         createdAt: vendor.createdAt,
@@ -61,6 +63,37 @@ const getProfile = async (req, res) => {
       success: false,
       message: 'Failed to fetch profile. Please try again.'
     });
+  }
+};
+
+/**
+ * Toggle vendor online/offline status
+ */
+const toggleOnlineStatus = async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+    const { isOnline } = req.body;
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+
+    const newStatus = isOnline !== undefined ? Boolean(isOnline) : !vendor.isOnline;
+    vendor.isOnline = newStatus;
+    vendor.availability = newStatus ? 'AVAILABLE' : 'OFFLINE';
+    vendor.lastSeenAt = new Date();
+    await vendor.save();
+
+    res.status(200).json({
+      success: true,
+      message: `You are now ${newStatus ? 'Online' : 'Offline'}`,
+      isOnline: vendor.isOnline,
+      availability: vendor.availability
+    });
+  } catch (error) {
+    console.error('Toggle online status error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update online status' });
   }
 };
 
@@ -79,7 +112,7 @@ const updateProfile = async (req, res) => {
     }
 
     const vendorId = req.user.id;
-    const { name, businessName, address, profilePhoto, serviceCategory, skills, aadharNumber, aadharDocument, panNumber, panDocument, serviceRange } = req.body;
+    const { name, businessName, address, profilePhoto, serviceCategory, services, service, skills, aadharNumber, aadharDocument, panNumber, panDocument, serviceRange } = req.body;
 
     console.log('Update Vendor Profile Body:', JSON.stringify(req.body, null, 2));
 
@@ -138,15 +171,15 @@ const updateProfile = async (req, res) => {
       }
     }
 
-    // Handle multiple service categories
-    if (serviceCategory !== undefined) {
-      if (Array.isArray(serviceCategory)) {
-        vendor.service = serviceCategory;
-        vendor.categories = serviceCategory; // Sync categories field too
-      } else if (typeof serviceCategory === 'string') {
-        // If string, likely single value or comma separated
-        vendor.service = [serviceCategory];
-        vendor.categories = [serviceCategory];
+    // Handle multiple services directly
+    const targetServices = services !== undefined ? services : (service !== undefined ? service : serviceCategory);
+    if (targetServices !== undefined) {
+      if (Array.isArray(targetServices)) {
+        vendor.service = targetServices;
+        vendor.categories = targetServices;
+      } else if (typeof targetServices === 'string') {
+        vendor.service = [targetServices];
+        vendor.categories = [targetServices];
       }
     }
 
@@ -324,6 +357,7 @@ module.exports = {
   getProfile,
   updateProfile,
   updateAddress,
-  updateLocation
+  updateLocation,
+  toggleOnlineStatus
 };
 
