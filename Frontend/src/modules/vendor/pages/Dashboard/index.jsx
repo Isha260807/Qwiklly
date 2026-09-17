@@ -458,51 +458,7 @@ const Dashboard = memo(() => {
     <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
       <Header title="Dashboard" showBack={false} notificationCount={stats.pendingAlerts} />
 
-      <main className="pt-0">
-        {/* Profile Card Section */}
-        <div className="px-4 pt-4 pb-2">
-          <div
-            className="rounded-2xl p-4 cursor-pointer active:scale-98 transition-all duration-200 relative overflow-hidden shadow-sm hover:shadow-md"
-            onClick={() => navigate('/vendor/profile')}
-            style={{
-              background: 'linear-gradient(135deg, #FFFFFF 0%, #FDF2F7 100%)',
-              border: '1.5px solid #F3D5E2',
-            }}
-          >
-            <div className="relative z-10 flex items-center gap-3">
-              {/* Profile Photo */}
-              <div
-                className="w-13 h-13 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-[#FCEBF3] border-2 border-[#720C3E]/30"
-              >
-                {vendorProfile.photo ? (
-                  <img
-                    src={vendorProfile.photo}
-                    alt={vendorProfile.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <FiUser className="w-6 h-6 text-[#720C3E]" />
-                )}
-              </div>
-
-              {/* Profile Info */}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-black tracking-widest text-[#720C3E] uppercase mb-0.5">
-                  WELCOME !
-                </p>
-                <h2 className="text-base font-bold text-[#24151D] truncate mb-0.5">{vendorProfile.name}</h2>
-                <p className="text-xs text-[#6F5A64] truncate font-medium">{vendorProfile.businessName}</p>
-              </div>
-
-              {/* Arrow Icon */}
-              <div
-                className="p-2.5 rounded-xl flex-shrink-0 bg-[#FCEBF3] text-[#720C3E] shadow-xs"
-              >
-                <FiChevronRight className="w-5 h-5 text-[#720C3E]" />
-              </div>
-            </div>
-          </div>
-        </div>
+      <main className="pt-2">
 
         {/* Incomplete Profile Prompt */}
         {(!vendorProfile.service || vendorProfile.service.length === 0) && (
@@ -550,46 +506,34 @@ const Dashboard = memo(() => {
             <h2 className="text-base font-bold text-gray-800 mb-3">Performance</h2>
             <div className="grid grid-cols-2 gap-3">
               {/* Completed Jobs Card */}
-              <div
-                className="rounded-2xl p-4 relative overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
-                style={{
-                  background: 'linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 100%)',
-                  border: '1.5px solid #BBF7D0',
-                }}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] font-bold text-[#166534] uppercase tracking-wider">Completed</span>
-                  <div className="p-2 rounded-xl bg-[#DCFCE7] text-[#15803D]">
-                    <FiCheckCircle className="w-5 h-5" />
+              <div className="bg-white rounded-xl p-3.5 relative overflow-hidden border border-gray-200 shadow-sm hover:shadow-md hover:border-[#720C3E]/20 transition-all duration-200">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-[11px] font-bold text-[#6F5A64] uppercase tracking-wider">Completed</span>
+                  <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center bg-[#FCEBF3] text-[#720C3E]">
+                    <FiCheckCircle className="w-4 h-4" />
                   </div>
                 </div>
                 <div>
-                  <p className="text-2xl font-black text-[#15803D] leading-tight mb-0.5">
+                  <p className="text-xl font-black text-[#24151D] leading-tight mb-0.5">
                     {stats.completedJobs}
                   </p>
-                  <p className="text-xs text-[#6F5A64] font-medium">Total jobs</p>
+                  <p className="text-[11px] text-[#6F5A64] font-medium">Total jobs</p>
                 </div>
               </div>
 
               {/* Rating Card */}
-              <div
-                className="rounded-2xl p-4 relative overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
-                style={{
-                  background: 'linear-gradient(135deg, #FFFFFF 0%, #FFFBEB 100%)',
-                  border: '1.5px solid #FED7AA',
-                }}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] font-bold text-[#9A3412] uppercase tracking-wider">Rating</span>
-                  <div className="p-2 rounded-xl bg-[#FFEDD5] text-[#D97706]">
-                    <FiTrendingUp className="w-5 h-5" />
+              <div className="bg-white rounded-xl p-3.5 relative overflow-hidden border border-gray-200 shadow-sm hover:shadow-md hover:border-[#720C3E]/20 transition-all duration-200">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-[11px] font-bold text-[#6F5A64] uppercase tracking-wider">Rating</span>
+                  <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center bg-[#FCEBF3] text-[#720C3E]">
+                    <FiTrendingUp className="w-4 h-4" />
                   </div>
                 </div>
                 <div>
-                  <p className="text-2xl font-black text-[#D97706] leading-tight mb-0.5">
+                  <p className="text-xl font-black text-[#24151D] leading-tight mb-0.5">
                     {stats.rating > 0 ? stats.rating.toFixed(1) : 'N/A'}
                   </p>
-                  <p className="text-xs text-[#6F5A64] font-medium">Average rating</p>
+                  <p className="text-[11px] text-[#6F5A64] font-medium">Average rating</p>
                 </div>
               </div>
             </div>
@@ -600,138 +544,72 @@ const Dashboard = memo(() => {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-800">Active Jobs</h2>
               {recentJobs.length > 0 && (
-                <button
+                <span
                   onClick={() => navigate('/vendor/jobs')}
-                  className="px-4 py-2 rounded-lg font-semibold text-sm transition-all duration-300 active:scale-95"
-                  style={{
-                    background: `linear-gradient(135deg, ${themeColors.button} 0%, ${themeColors.button}dd 100%)`,
-                    color: '#FFFFFF',
-                    boxShadow: `0 4px 12px ${hexToRgba(themeColors.button, 0.3)}, 0 2px 6px ${hexToRgba(themeColors.button, 0.2)}`,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = `0 6px 16px ${hexToRgba(themeColors.button, 0.4)}, 0 3px 8px ${hexToRgba(themeColors.button, 0.3)}`;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = `0 4px 12px ${hexToRgba(themeColors.button, 0.3)}, 0 2px 6px ${hexToRgba(themeColors.button, 0.2)}`;
-                  }}
+                  className="text-xs font-bold text-[#720C3E] cursor-pointer active:opacity-70"
                 >
                   View All
-                </button>
+                </span>
               )}
             </div>
             {recentJobs.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {recentJobs.map((job, index) => {
-                  const accentColor = '#720C3E';
-
                   return (
                     <div
                       key={job.id}
                       onClick={() => navigate(`/vendor/booking/${job.id}`)}
-                      className="bg-white rounded-xl shadow-lg cursor-pointer active:scale-98 transition-all duration-200 relative overflow-hidden"
-                      style={{
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.08)',
-                        border: '1px solid rgba(0, 0, 0, 0.1)',
-                      }}
+                      className="bg-white rounded-xl cursor-pointer active:scale-[0.99] transition-all duration-200 relative overflow-hidden border border-gray-100"
+                      style={{ boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}
                     >
-                      {/* Left accent border */}
-                      <div
-                        className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl"
-                        style={{
-                          background: `linear-gradient(180deg, ${accentColor} 0%, ${accentColor}dd 100%)`,
-                        }}
-                      />
+                      {/* Light left accent bar */}
+                      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-[#720C3E]/40" />
 
-                      {/* Compact Content - All in one row */}
-                      <div className="px-3 py-2.5">
-                        <div className="flex items-center gap-3">
-                          {/* Profile Image Circle */}
-                          <div
-                            className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"
-                            style={{
-                              border: `2.5px solid ${accentColor}40`,
-                              boxShadow: `0 2px 8px ${hexToRgba(accentColor, 0.25)}, inset 0 1px 0 rgba(255, 255, 255, 0.4)`,
-                              background: `linear-gradient(135deg, ${accentColor}20 0%, ${accentColor}10 100%)`,
-                            }}
-                          >
-                            <FiUser className="w-5 h-5" style={{ color: accentColor }} />
+                      {/* Content */}
+                      <div className="pl-4 pr-3 py-3">
+                        <div className="flex items-start gap-3">
+                          {/* Avatar */}
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-[#FCEBF3] text-[#720C3E] mt-0.5">
+                            <FiUser className="w-4 h-4" />
                           </div>
 
                           {/* Main Content */}
                           <div className="flex-1 min-w-0">
-                            {/* Name and Service in one line */}
-                            <div className="flex items-center gap-2 mb-1.5">
-                              <p className="text-sm font-bold text-gray-800 truncate">{job.customerName}</p>
-                              <span
-                                className="text-xs font-bold px-2 py-0.5 rounded-lg flex-shrink-0"
-                                style={{
-                                  background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%)`,
-                                  color: '#FFFFFF',
-                                  boxShadow: `0 2px 5px ${hexToRgba(accentColor, 0.3)}`,
-                                }}
-                              >
+                            {/* Name + service tag */}
+                            <div className="flex items-start gap-2 mb-1.5 flex-wrap">
+                              <p className="text-xs font-bold text-[#24151D]">{job.customerName}</p>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 bg-[#FCEBF3] text-[#720C3E]">
                                 {job.serviceType || 'Service'}
                               </span>
                             </div>
 
-                            {/* Address, Time, Status in one line */}
+                            {/* Address */}
+                            <div className="flex items-center gap-1 mb-1">
+                              <FiMapPin className="w-2.5 h-2.5 text-[#720C3E] flex-shrink-0" />
+                              <span className="text-[10px] font-medium text-gray-600 truncate">{job.location}</span>
+                            </div>
+
+                            {/* Time + Status */}
                             <div className="flex items-center gap-2 flex-wrap">
-                              <div
-                                className="flex items-center gap-1 px-2 py-0.5 rounded"
-                                style={{
-                                  background: 'rgba(0, 166, 166, 0.1)',
-                                  border: '1px solid rgba(0, 166, 166, 0.2)',
-                                }}
-                              >
-                                <FiMapPin className="w-3 h-3" style={{ color: themeColors.button }} />
-                                <span className="text-xs font-semibold text-gray-700 truncate max-w-[100px]">{job.location}</span>
+                              <div className="flex items-center gap-1">
+                                <FiClock className="w-2.5 h-2.5 text-gray-400" />
+                                <span className="text-[10px] font-medium text-gray-500">{job.timeSlot?.date} {job.timeSlot?.time}</span>
                               </div>
-                              <div
-                                className="flex items-center gap-1 px-2 py-0.5 rounded"
-                                style={{
-                                  background: 'rgba(245, 158, 11, 0.1)',
-                                  border: '1px solid rgba(245, 158, 11, 0.2)',
-                                }}
-                              >
-                                <FiClock className="w-3 h-3" style={{ color: '#F59E0B' }} />
-                                <span className="text-xs font-semibold text-gray-700">{job.time}</span>
-                              </div>
-                              <span
-                                className="text-xs font-bold px-2 py-0.5 rounded-full"
-                                style={{
-                                  background: `${accentColor}15`,
-                                  color: accentColor,
-                                  border: `1px solid ${accentColor}30`,
-                                }}
-                              >
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#FCEBF3] text-[#720C3E]">
                                 {getStatusLabel(job.status)}
                               </span>
                             </div>
                           </div>
 
-                          {/* Navigate Button */}
+                          {/* Light arrow button */}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               navigate(`/vendor/booking/${job.id}`);
                             }}
-                            className="p-2 rounded-lg flex-shrink-0 transition-all duration-300 active:scale-95"
-                            style={{
-                              background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%)`,
-                              boxShadow: `0 3px 10px ${hexToRgba(accentColor, 0.3)}, 0 2px 5px ${hexToRgba(accentColor, 0.2)}`,
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.transform = 'scale(1.1)';
-                              e.currentTarget.style.boxShadow = `0 5px 14px ${hexToRgba(accentColor, 0.4)}, 0 3px 7px ${hexToRgba(accentColor, 0.3)}`;
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.transform = 'scale(1)';
-                              e.currentTarget.style.boxShadow = `0 3px 10px ${hexToRgba(accentColor, 0.3)}, 0 2px 5px ${hexToRgba(accentColor, 0.2)}`;
-                            }}
+                            className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center bg-[#FCEBF3] text-[#720C3E] active:scale-95 transition-all mt-0.5"
                           >
-                            <FiArrowRight className="w-4 h-4" style={{ color: '#FFFFFF' }} />
+                            <FiArrowRight className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>

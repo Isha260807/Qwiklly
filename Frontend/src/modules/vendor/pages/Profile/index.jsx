@@ -21,7 +21,6 @@ const Profile = () => {
   };
 
   const menuItems = [
-    { id: 2, label: 'Wallet', icon: FaWallet, path: '/vendor/wallet' },
     { id: 5, label: 'My Ratings', icon: FiStar, path: '/vendor/my-ratings' },
     { id: 7, label: 'Manage Address', icon: FiMapPin, path: '/vendor/address-management' },
     { id: 8, label: 'Settings', icon: FiSettings, path: '/vendor/settings' },
@@ -181,44 +180,20 @@ const Profile = () => {
     >
       <Header />
 
-      <main className="max-w-md mx-auto pt-3">
-        {/* Profile Card */}
+      <main className="max-w-md mx-auto pt-4">
+        {/* Profile Card - Light & Compact without borders */}
         <div
-          className="mx-4 p-4 rounded-2xl mb-4 relative overflow-hidden"
-          style={{
-            background: `linear-gradient(135deg, ${themeColors.primary} 0%, ${themeColors.primaryDark} 100%)`,
-            boxShadow: `0 8px 24px ${hexToRgba(themeColors.primary, 0.25)}`,
-          }}
+          className="mx-4 p-3 rounded-xl mb-3 relative overflow-hidden bg-white shadow-sm"
         >
-          {/* Decorative Background Elements */}
-          <div
-            className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10"
-            style={{
-              background: `radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, transparent 70%)`,
-              transform: 'translate(30px, -30px)',
-            }}
-          />
-          <div
-            className="absolute bottom-0 left-0 w-24 h-24 rounded-full opacity-8"
-            style={{
-              background: `radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%)`,
-              transform: 'translate(-20px, 20px)',
-            }}
-          />
-
           <div className="relative z-10">
-            <div className="flex items-start gap-4">
-              {/* Profile Photo - Circle with Rating Below */}
+            <div className="flex items-center gap-3">
+              {/* Profile Photo */}
               <div className="flex flex-col items-center flex-shrink-0">
                 <div
-                  className="w-18 h-18 rounded-full flex items-center justify-center overflow-hidden mb-2"
+                  className="w-13 h-13 rounded-full flex items-center justify-center overflow-hidden bg-[#FCEBF3]"
                   style={{
-                    background: 'rgba(255, 255, 255, 0.35)',
-                    backdropFilter: 'blur(15px)',
-                    boxShadow: '0 8px 20px rgba(0, 0, 0, 0.25), inset 0 2px 6px rgba(255, 255, 255, 0.5)',
-                    border: '3.5px solid rgba(255, 255, 255, 0.6)',
-                    width: '72px',
-                    height: '72px',
+                    width: '52px',
+                    height: '52px',
                   }}
                 >
                   {profile.photo ? (
@@ -228,50 +203,57 @@ const Profile = () => {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <FiUser className="w-9 h-9 text-white" />
+                    <FiUser className="w-6 h-6 text-[#720C3E]" />
                   )}
                 </div>
                 {/* Star Rating Below Photo */}
                 {profile.rating > 0 && (
-                  <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-white/25 backdrop-blur-sm">
-                    <FiStar className="w-3 h-3 text-yellow-300" style={{ filter: 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3))' }} />
-                    <span className="text-xs font-bold text-white">{profile.rating.toFixed(1)}</span>
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#FCEBF3] mt-1 shadow-2xs">
+                    <FiStar className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
+                    <span className="text-[10px] font-bold text-[#24151D]">{profile.rating.toFixed(1)}</span>
                   </div>
                 )}
               </div>
 
               {/* Name and Info */}
-              <div className="flex-1 min-w-0 flex flex-col">
-                <h2 className="text-xl font-bold text-white mb-1 break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{profile.name}</h2>
-                <p className="text-white text-sm opacity-95 mb-2 font-medium break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{profile.businessName}</p>
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <h2 className="text-sm font-bold text-[#24151D] leading-tight truncate">{profile.name}</h2>
+                {profile.businessName && (
+                  <p className="text-[#720C3E] text-xs font-semibold truncate mt-0.5">{profile.businessName}</p>
+                )}
 
                 {/* Phone and Email */}
-                <div className="space-y-1.5 mb-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1 rounded-md bg-white/15 backdrop-blur-sm flex-shrink-0">
-                      <FiPhone className="w-3 h-3 text-white" />
+                <div className="space-y-0.5 mt-1">
+                  {profile.phone && (
+                    <div className="flex items-center gap-1.5">
+                      <FiPhone className="w-2.5 h-2.5 text-[#720C3E] flex-shrink-0" />
+                      <span className="text-[11px] text-gray-600 font-medium truncate">{profile.phone}</span>
                     </div>
-                    <span className="text-xs text-white font-semibold break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{profile.phone}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="p-1 rounded-md bg-white/15 backdrop-blur-sm flex-shrink-0">
-                      <FiMail className="w-3 h-3 text-white" />
+                  )}
+                  {profile.email && (
+                    <div className="flex items-center gap-1.5">
+                      <FiMail className="w-2.5 h-2.5 text-[#720C3E] flex-shrink-0" />
+                      <span className="text-[11px] text-gray-600 font-medium truncate">{profile.email}</span>
                     </div>
-                    <span className="text-xs text-white font-semibold break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{profile.email}</span>
-                  </div>
+                  )}
                 </div>
 
                 {/* Assigned Services Pills */}
                 {profile.services && profile.services.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {profile.services.map((srv, idx) => (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {profile.services.slice(0, 3).map((srv, idx) => (
                       <span
                         key={idx}
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold text-white bg-white/20 backdrop-blur-md border border-white/30"
+                        className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold text-[#720C3E] bg-[#FCEBF3]"
                       >
                         {srv}
                       </span>
                     ))}
+                    {profile.services.length > 3 && (
+                      <span className="text-[9px] font-bold text-[#720C3E] self-center">
+                        +{profile.services.length - 3}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -279,62 +261,27 @@ const Profile = () => {
               {/* Navigate Button */}
               <button
                 onClick={() => navigate('/vendor/profile/details')}
-                className="p-3.5 rounded-xl flex-shrink-0 transition-all duration-300 active:scale-95 mt-1"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.28)',
-                  backdropFilter: 'blur(12px)',
-                  boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
-                  border: '1.5px solid rgba(255, 255, 255, 0.35)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.12) rotate(5deg)';
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.38)';
-                  e.currentTarget.style.boxShadow = '0 6px 18px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1) rotate(0deg)';
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.28)';
-                  e.currentTarget.style.boxShadow = '0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4)';
-                }}
+                className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center bg-[#FCEBF3] text-[#720C3E] hover:bg-[#f6d7e6] active:scale-95 transition-all cursor-pointer"
+                aria-label="View Profile Details"
               >
-                <FiArrowRight className="w-5 h-5 text-white" style={{ fontWeight: 'bold' }} />
+                <FiChevronRight className="w-4 h-4 text-[#720C3E]" />
               </button>
             </div>
           </div>
         </div>
 
         {/* Three Cards Section - Horizontal */}
-        <div className="px-4 mb-5">
-          <div className="grid grid-cols-3 gap-3">
+        <div className="px-4 mb-3">
+          <div className="grid grid-cols-3 gap-2">
             {/* Active Jobs */}
             <button
               onClick={() => navigate('/vendor/jobs')}
-              className="flex flex-col items-center justify-center p-4 rounded-2xl active:scale-95 transition-all duration-300 relative overflow-hidden bg-white"
-              style={{
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.05)',
-                border: '1.5px solid rgba(0, 166, 166, 0.15)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 166, 166, 0.15), 0 3px 8px rgba(0, 0, 0, 0.08)';
-                e.currentTarget.style.borderColor = hexToRgba(themeColors.button, 0.25);
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.05)';
-                e.currentTarget.style.borderColor = hexToRgba(themeColors.button, 0.15);
-              }}
+              className="flex flex-col items-center justify-center p-2.5 rounded-xl active:scale-95 transition-all duration-200 bg-white shadow-xs hover:shadow-sm cursor-pointer"
             >
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center mb-2"
-                style={{
-                  backgroundColor: hexToRgba(themeColors.button, 0.12),
-                  boxShadow: `0 2px 8px ${hexToRgba(themeColors.button, 0.2)}`,
-                }}
-              >
-                <FiBriefcase className="w-5 h-5" style={{ color: themeColors.button }} />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-1 bg-[#FCEBF3] text-[#720C3E]">
+                <FiBriefcase className="w-3.5 h-3.5" />
               </div>
-              <span className="text-[11px] font-bold text-gray-800 text-center leading-tight">
+              <span className="text-[11px] font-bold text-[#24151D] text-center leading-tight">
                 Active Jobs
               </span>
             </button>
@@ -342,65 +289,25 @@ const Profile = () => {
             {/* Wallet */}
             <button
               onClick={() => navigate('/vendor/wallet')}
-              className="flex flex-col items-center justify-center p-4 rounded-2xl active:scale-95 transition-all duration-300 relative overflow-hidden bg-white"
-              style={{
-                boxShadow: '0 4px 12px rgba(0, 166, 166, 0.08), 0 2px 6px rgba(0, 0, 0, 0.05)',
-                border: '1.5px solid rgba(0, 166, 166, 0.15)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 166, 166, 0.15), 0 3px 8px rgba(0, 0, 0, 0.08)';
-                e.currentTarget.style.borderColor = hexToRgba(themeColors.button, 0.25);
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.05)';
-                e.currentTarget.style.borderColor = hexToRgba(themeColors.button, 0.15);
-              }}
+              className="flex flex-col items-center justify-center p-2.5 rounded-xl active:scale-95 transition-all duration-200 bg-white shadow-xs hover:shadow-sm cursor-pointer"
             >
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center mb-2"
-                style={{
-                  backgroundColor: hexToRgba(themeColors.button, 0.12),
-                  boxShadow: `0 2px 8px ${hexToRgba(themeColors.button, 0.2)}`,
-                }}
-              >
-                <FaWallet className="w-5 h-5" style={{ color: themeColors.button }} />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-1 bg-[#FCEBF3] text-[#720C3E]">
+                <FaWallet className="w-3.5 h-3.5" />
               </div>
-              <span className="text-[11px] font-bold text-gray-800 text-center leading-tight">
+              <span className="text-[11px] font-bold text-[#24151D] text-center leading-tight">
                 Wallet
               </span>
             </button>
 
             {/* My Services */}
             <button
-              onClick={() => navigate('/vendor/profile/details')}
-              className="flex flex-col items-center justify-center p-4 rounded-2xl active:scale-95 transition-all duration-300 relative overflow-hidden bg-white"
-              style={{
-                boxShadow: '0 4px 12px rgba(0, 166, 166, 0.08), 0 2px 6px rgba(0, 0, 0, 0.05)',
-                border: '1.5px solid rgba(0, 166, 166, 0.15)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 166, 166, 0.15), 0 3px 8px rgba(0, 0, 0, 0.08)';
-                e.currentTarget.style.borderColor = hexToRgba(themeColors.button, 0.25);
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.05)';
-                e.currentTarget.style.borderColor = hexToRgba(themeColors.button, 0.15);
-              }}
+              onClick={() => navigate('/vendor/services')}
+              className="flex flex-col items-center justify-center p-2.5 rounded-xl active:scale-95 transition-all duration-200 bg-white shadow-xs hover:shadow-sm cursor-pointer"
             >
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center mb-2"
-                style={{
-                  backgroundColor: hexToRgba(themeColors.button, 0.12),
-                  boxShadow: `0 2px 8px ${hexToRgba(themeColors.button, 0.2)}`,
-                }}
-              >
-                <FiLayers className="w-5 h-5" style={{ color: themeColors.button }} />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-1 bg-[#FCEBF3] text-[#720C3E]">
+                <FiLayers className="w-3.5 h-3.5" />
               </div>
-              <span className="text-[11px] font-bold text-gray-800 text-center leading-tight">
+              <span className="text-[11px] font-bold text-[#24151D] text-center leading-tight">
                 My Services
               </span>
             </button>
@@ -408,42 +315,33 @@ const Profile = () => {
         </div>
 
         {/* Menu List Section */}
-        <div className="px-4 mb-4 space-y-3">
+        <div className="px-4 mb-3 space-y-2">
           {menuItems.map((item) => {
             const IconComponent = item.icon;
             return (
               <button
                 key={item.id}
                 onClick={() => navigate(item.path)}
-                className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-gray-100 hover:border-teal-200 hover:shadow-md transition-all active:scale-[0.98]"
+                className="w-full flex items-center justify-between p-2.5 bg-white rounded-xl shadow-xs hover:shadow-sm transition-all active:scale-[0.99] cursor-pointer"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2.5">
                   {item.customIcon ? (
-                    <div
-                      className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-colors group-hover:bg-teal-50"
-                      style={{
-                        backgroundColor: hexToRgba(themeColors.button, 0.1),
-                        border: `1px solid ${hexToRgba(themeColors.button, 0.2)}`,
-                      }}
-                    >
-                      <span className="text-sm font-bold" style={{ color: themeColors.button }}>{item.customIcon}</span>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-[#FCEBF3] text-[#720C3E]">
+                      <span className="text-xs font-black">{item.customIcon}</span>
                     </div>
                   ) : (
                     IconComponent && (
-                      <div
-                        className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-colors"
-                        style={{ backgroundColor: hexToRgba(themeColors.button, 0.1) }}
-                      >
-                        <IconComponent className="w-6 h-6" style={{ color: themeColors.button }} />
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-[#FCEBF3] text-[#720C3E]">
+                        <IconComponent className="w-3.5 h-3.5" />
                       </div>
                     )
                   )}
-                  <span className="text-[15px] font-bold text-gray-800 text-left">
+                  <span className="text-xs font-bold text-[#24151D] text-left">
                     {item.label}
                   </span>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center">
-                  <FiChevronRight className="w-5 h-5 text-gray-400" />
+                <div className="w-6 h-6 rounded-full bg-gray-50 flex items-center justify-center">
+                  <FiChevronRight className="w-3.5 h-3.5 text-gray-400" />
                 </div>
               </button>
             );
@@ -469,21 +367,18 @@ const Profile = () => {
                 navigate('/vendor/login');
               }
             }}
-            className="w-full font-semibold py-3 rounded-xl active:scale-98 transition-all text-white flex items-center justify-center gap-2"
+            className="w-full font-semibold py-2.5 rounded-xl active:scale-98 transition-all text-white flex items-center justify-center gap-2 text-xs cursor-pointer shadow-xs"
             style={{
               backgroundColor: '#EF4444',
-              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
             }}
             onMouseEnter={(e) => {
               e.target.style.backgroundColor = '#DC2626';
-              e.target.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.4)';
             }}
             onMouseLeave={(e) => {
               e.target.style.backgroundColor = '#EF4444';
-              e.target.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
             }}
           >
-            <FiLogOut className="w-5 h-5" />
+            <FiLogOut className="w-4 h-4" />
             Logout
           </button>
         </div>

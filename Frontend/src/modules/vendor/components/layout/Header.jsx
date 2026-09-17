@@ -1,6 +1,6 @@
 import React, { memo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiBell, FiSearch } from 'react-icons/fi';
+import { FiArrowLeft, FiBell, FiSearch, FiUser } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Logo from '../../../../components/common/Logo';
@@ -121,12 +121,11 @@ const Header = memo(({
   };
 
   return (
-    <header
-      className="sticky top-0 z-40 w-full bg-white"
+    <>
+      <header
+        className="fixed top-0 left-0 right-0 z-40 w-full bg-white"
       style={{
         borderBottom: '1px solid rgba(232, 217, 223, 0.7)',
-        borderBottomLeftRadius: '20px',
-        borderBottomRightRadius: '20px',
         boxShadow: '0 4px 20px rgba(114, 12, 62, 0.04)',
       }}
     >
@@ -161,26 +160,36 @@ const Header = memo(({
 
         {/* Right Area: Online/Offline Toggle + Search + Notifications */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Online / Offline Toggle Button */}
-          <motion.button
+          {/* Online / Offline Toggle Switch */}
+          <button
             onClick={handleToggleOnline}
             disabled={togglingStatus}
-            whileTap={{ scale: 0.94 }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all duration-300 cursor-pointer text-xs font-bold select-none ${
-              isOnline
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 shadow-xs'
-                : 'bg-gray-100 border-gray-300 text-gray-500 hover:bg-gray-200'
-            }`}
+            className="flex flex-row items-center gap-1.5 cursor-pointer select-none"
           >
-            {/* Status Dot with Pulse animation */}
-            <span className="relative flex h-2.5 w-2.5">
+            {/* Toggle Track */}
+            <div
+              className={`relative w-11 h-6 rounded-full transition-all duration-300 ${
+                isOnline ? 'bg-emerald-400' : 'bg-gray-300'
+              }`}
+            >
+              {/* Thumb */}
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${
+                  isOnline ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+              {/* Online ping animation */}
               {isOnline && (
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-200 opacity-75" />
+                </span>
               )}
-              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isOnline ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+            </div>
+            {/* Label */}
+            <span className={`text-[9px] font-bold tracking-wide ${isOnline ? 'text-emerald-600' : 'text-gray-400'}`}>
+              {isOnline ? 'Online' : 'Offline'}
             </span>
-            <span className="tracking-wide">{isOnline ? 'Online' : 'Offline'}</span>
-          </motion.button>
+          </button>
 
           {showSearch && (
             <button
@@ -227,9 +236,22 @@ const Header = memo(({
               )}
             </motion.div>
           )}
+
+          {/* Profile Button */}
+          <motion.button
+            onClick={() => navigate('/vendor/profile')}
+            className="w-9 h-9 rounded-full flex items-center justify-center bg-[#720C3E] text-white flex-shrink-0 cursor-pointer hover:bg-[#5a0930] transition-colors"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <FiUser className="w-4 h-4" />
+          </motion.button>
         </div>
       </div>
-    </header>
+      </header>
+      {/* Spacer to push content below fixed header */}
+      <div className="h-[57px]" />
+    </>
   );
 });
 

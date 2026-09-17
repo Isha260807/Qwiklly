@@ -131,56 +131,56 @@ const Wallet = () => {
 
   return (
     <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
-      <Header title="Wallet & Ledger" />
+      <Header title="Wallet" />
 
-      <main className="px-4 py-6">
-        {/* Earnings Card (Green) */}
-        <div className="rounded-2xl p-6 shadow-xl relative overflow-hidden mb-4 bg-gradient-to-br from-green-600 to-green-800">
-          <div className="relative z-10 text-white">
-            <div className="flex justify-between items-start">
+      <main className="px-4 py-3">
+        {/* Earnings Card */}
+        <div className="rounded-xl p-4 shadow-sm relative overflow-hidden mb-3 border border-[#E8D9DF]" style={{ background: '#FCEBF3' }}>
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-3">
               <div>
-                <p className="text-white/80 text-sm font-medium mb-1">Available Earnings</p>
-                <p className="text-3xl font-bold mb-4">₹{wallet.earnings?.toLocaleString() || 0}</p>
+                <p className="text-[#6F5A64] text-xs font-medium mb-0.5">Available Earnings</p>
+                <p className="text-2xl font-bold text-[#720C3E]">₹{wallet.earnings?.toLocaleString() || 0}</p>
               </div>
-              <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-                <FiDollarSign className="w-6 h-6 text-white" />
+              <div className="p-1.5 rounded-lg bg-white/70">
+                <FiDollarSign className="w-5 h-5 text-[#720C3E]" />
               </div>
             </div>
-
             <button
               onClick={() => navigate('/vendor/wallet/withdraw')}
-              className="w-full bg-white text-green-700 py-3 rounded-xl font-bold text-sm hover:bg-green-50 active:scale-95 transition-all shadow-sm"
+              className="w-full py-2 rounded-lg font-bold text-xs active:scale-95 transition-all text-white"
+              style={{ background: '#720C3E' }}
             >
               Request Withdrawal
             </button>
           </div>
         </div>
 
-        {/* Dues Card (Red) */}
-        <div className="rounded-2xl p-6 shadow-xl relative overflow-hidden mb-6 bg-gradient-to-br from-red-600 to-red-800">
-          <div className="relative z-10 text-white">
-            <div className="flex justify-between items-start">
+        {/* Dues Card */}
+        <div className="rounded-xl p-4 shadow-sm relative overflow-hidden mb-3 border border-[#E8D9DF]" style={{ background: '#FFF0F4' }}>
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-3">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-white/80 text-sm font-medium">Amount Due to Admin</p>
-                  {wallet.dues > 0 && <FiAlertCircle className="w-4 h-4 text-red-200 animate-pulse" />}
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <p className="text-[#6F5A64] text-xs font-medium">Amount Due to Admin</p>
+                  {wallet.dues > 0 && <FiAlertCircle className="w-3.5 h-3.5 text-[#720C3E] animate-pulse" />}
                 </div>
-                <p className="text-3xl font-bold mb-4">₹{wallet.dues?.toLocaleString() || 0}</p>
+                <p className="text-2xl font-bold text-[#720C3E]">₹{wallet.dues?.toLocaleString() || 0}</p>
               </div>
-              <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-                <FiArrowDown className="w-6 h-6 text-white" />
+              <div className="p-1.5 rounded-lg bg-white/70">
+                <FiArrowDown className="w-5 h-5 text-[#720C3E]" />
               </div>
             </div>
-
             {wallet.dues > 0 ? (
               <button
                 onClick={() => navigate('/vendor/wallet/settle')}
-                className="w-full bg-white text-red-700 py-3 rounded-xl font-bold text-sm hover:bg-red-50 active:scale-95 transition-all shadow-sm"
+                className="w-full py-2 rounded-lg font-bold text-xs active:scale-95 transition-all text-white"
+                style={{ background: '#720C3E' }}
               >
                 Pay Now
               </button>
             ) : (
-              <div className="w-full bg-white/10 text-white py-3 rounded-xl font-medium text-sm text-center border border-white/20">
+              <div className="w-full py-2 rounded-lg font-medium text-xs text-center border border-[#E8D9DF] bg-white/60 text-[#6F5A64]">
                 No Dues Pending
               </div>
             )}
@@ -188,29 +188,27 @@ const Wallet = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          {/* Cash Collected */}
-          <div className="bg-white rounded-2xl p-4 shadow-lg border border-red-100">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 rounded-lg bg-red-50">
-                <FiArrowDown className="w-4 h-4 text-red-500" />
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-white rounded-xl p-3 shadow-sm border border-[#E8D9DF]">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <div className="p-1.5 rounded-lg bg-[#FCEBF3]">
+                <FiArrowDown className="w-3.5 h-3.5 text-[#720C3E]" />
               </div>
-              <p className="text-xs text-gray-600 font-semibold">Cash Collected</p>
+              <p className="text-xs text-[#6F5A64] font-semibold">Cash Collected</p>
             </div>
-            <p className="text-xl font-bold text-red-600">
+            <p className="text-lg font-bold text-[#720C3E]">
               ₹{wallet.totalCashCollected?.toLocaleString() || 0}
             </p>
           </div>
 
-          {/* Total Settled */}
-          <div className="bg-white rounded-2xl p-4 shadow-lg border border-green-100">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 rounded-lg bg-green-50">
-                <FiArrowUp className="w-4 h-4 text-green-500" />
+          <div className="bg-white rounded-xl p-3 shadow-sm border border-[#E8D9DF]">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <div className="p-1.5 rounded-lg bg-[#FCEBF3]">
+                <FiArrowUp className="w-3.5 h-3.5 text-[#720C3E]" />
               </div>
-              <p className="text-xs text-gray-600 font-semibold">Total Settled</p>
+              <p className="text-xs text-[#6F5A64] font-semibold">Total Settled</p>
             </div>
-            <p className="text-xl font-bold text-green-600">
+            <p className="text-lg font-bold text-[#720C3E]">
               ₹{wallet.totalSettled?.toLocaleString() || 0}
             </p>
           </div>

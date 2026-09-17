@@ -43,7 +43,6 @@ const BottomNav = memo(() => {
     { id: 'home', path: '/vendor/dashboard', icon: HiOutlineHome, activeIcon: HiHome, label: 'Home' },
     { id: 'jobs', path: '/vendor/jobs', icon: HiOutlineBriefcase, activeIcon: HiBriefcase, label: 'Jobs', badge: pendingJobsCount },
     { id: 'wallet', path: '/vendor/wallet', icon: FaRegCreditCard, activeIcon: FaWallet, label: 'Wallet' },
-    { id: 'profile', path: '/vendor/profile', icon: HiOutlineUser, activeIcon: HiUser, label: 'Profile' },
   ], [pendingJobsCount]);
 
   const getActiveTab = () => {
