@@ -17,6 +17,7 @@ import {
   FiPackage,
   FiStar,
   FiSearch,
+  FiLayout,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
 import dashboardService from "../../services/dashboardService";
@@ -28,6 +29,7 @@ const iconMap = {
   Vendors: FiBriefcase,
   Bookings: FiShoppingBag,
   "User Catalog": FiGrid,
+  "Page Builder": FiLayout,
   "Vendor Services": FiGrid,
   "Vendor Parts": FiPackage,
   Payments: FiDollarSign,
@@ -62,6 +64,7 @@ const getChildRoute = (parentRoute, childName) => {
     "/admin/user-categories": {
       "Home": "/admin/user-categories/home",
       "Manage Services": "/admin/user-categories/sections",
+      "Page Builder": "/admin/user-categories/page-builder",
     },
     "/admin/payments": {
       "Payment Overview": "/admin/payments/overview",

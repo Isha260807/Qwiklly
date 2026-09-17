@@ -90,7 +90,8 @@
     ],
     "children": [
       "Home",
-      "Manage Services"
+      "Manage Services",
+      "Page Builder"
     ]
   },
   {

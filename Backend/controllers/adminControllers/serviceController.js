@@ -105,7 +105,15 @@ const createService = async (req, res) => {
       ratingCount,
       badge,
       tagline,
+      heroBanner,
       inclusions,
+      whyLoveTitle,
+      whyLove,
+      exclusionsTitle,
+      exclusions,
+      howItWorksTitle,
+      howItWorks,
+      faqs,
       cityIds,
       cityId,
       description,
@@ -132,7 +140,15 @@ const createService = async (req, res) => {
       ratingCount: ratingCount || '4.9 (237.6k)',
       badge: badge ? badge.trim() : null,
       tagline: tagline ? tagline.trim() : null,
+      heroBanner: heroBanner || { imageUrl: null, buttonText: 'BOOK NOW' },
       inclusions: Array.isArray(inclusions) ? inclusions : [],
+      whyLoveTitle: whyLoveTitle ? whyLoveTitle.trim() : null,
+      whyLove: Array.isArray(whyLove) ? whyLove : [],
+      exclusionsTitle: exclusionsTitle ? exclusionsTitle.trim() : null,
+      exclusions: Array.isArray(exclusions) ? exclusions : [],
+      howItWorksTitle: howItWorksTitle ? howItWorksTitle.trim() : null,
+      howItWorks: Array.isArray(howItWorks) ? howItWorks : [],
+      faqs: Array.isArray(faqs) ? faqs : [],
       cityIds: Array.isArray(cityIds) ? cityIds : (cityId ? [cityId] : []),
       cityId: cityId || (Array.isArray(cityIds) && cityIds.length > 0 ? cityIds[0] : null),
       description: description ? description.trim() : '',
@@ -180,7 +196,15 @@ const updateService = async (req, res) => {
     if (updates.ratingCount !== undefined) service.ratingCount = updates.ratingCount;
     if (updates.badge !== undefined) service.badge = updates.badge;
     if (updates.tagline !== undefined) service.tagline = updates.tagline;
+    if (updates.heroBanner !== undefined) service.heroBanner = updates.heroBanner;
     if (updates.inclusions !== undefined) service.inclusions = updates.inclusions;
+    if (updates.whyLoveTitle !== undefined) service.whyLoveTitle = updates.whyLoveTitle;
+    if (updates.whyLove !== undefined) service.whyLove = updates.whyLove;
+    if (updates.exclusionsTitle !== undefined) service.exclusionsTitle = updates.exclusionsTitle;
+    if (updates.exclusions !== undefined) service.exclusions = updates.exclusions;
+    if (updates.howItWorksTitle !== undefined) service.howItWorksTitle = updates.howItWorksTitle;
+    if (updates.howItWorks !== undefined) service.howItWorks = updates.howItWorks;
+    if (updates.faqs !== undefined) service.faqs = updates.faqs;
     if (updates.cityIds !== undefined) service.cityIds = updates.cityIds;
     if (updates.cityId !== undefined) service.cityId = updates.cityId;
     if (updates.description !== undefined) service.description = updates.description;

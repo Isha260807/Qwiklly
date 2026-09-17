@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FiGrid,
   FiPlus,
@@ -7,25 +8,21 @@ import {
   FiPackage,
   FiSearch,
   FiStar,
-  FiClock,
   FiDollarSign,
-  FiCheckCircle,
-  FiX,
   FiUploadCloud,
-  FiInfo,
-  FiList
+  FiLayout,
+  FiExternalLink
 } from "react-icons/fi";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
-import CardShell from "../components/CardShell";
 import Modal from "../components/Modal";
 import { toAssetUrl } from "../utils";
 import { serviceService } from "../../../../../services/catalogService";
 
 const initialServiceForm = {
   title: "",
-  tagline: "",
-  description: "",
+  tagline: "One Booking. Countless Tasks.",
+  description: "Let our professionals take care of everyday household tasks while you focus on work, family and everything else on your schedule.",
   badge: "",
   iconUrl: "",
   basePrice: "",
@@ -34,22 +31,17 @@ const initialServiceForm = {
   gstPercentage: 18,
   rating: 4.9,
   ratingCount: "237.6k",
-  status: "active",
-  inclusions: [
-    { title: "Bathroom Cleaning", duration: "40 mins", iconUrl: "" },
-    { title: "Utensils", duration: "20 mins", iconUrl: "" },
-    { title: "Sweeping & Mopping", duration: "30 mins", iconUrl: "" }
-  ]
+  status: "active"
 };
 
 const ServicesPage = ({ selectedCity }) => {
+  const navigate = useNavigate();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState(null);
   const [formData, setFormData] = useState(initialServiceForm);
-  const [activeModalTab, setActiveModalTab] = useState("basic"); // 'basic', 'pricing', 'inclusions'
   const [uploadingImage, setUploadingImage] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -105,7 +97,6 @@ const ServicesPage = ({ selectedCity }) => {
   const handleOpenAdd = () => {
     setEditingServiceId(null);
     setFormData(initialServiceForm);
-    setActiveModalTab("basic");
     setIsModalOpen(true);
   };
 
@@ -124,13 +115,8 @@ const ServicesPage = ({ selectedCity }) => {
       gstPercentage: service.gstPercentage ?? 18,
       rating: service.rating ?? 4.9,
       ratingCount: service.ratingCount || "237.6k",
-      status: service.status || "active",
-      inclusions:
-        service.inclusions && service.inclusions.length > 0
-          ? service.inclusions
-          : [{ title: "", duration: "", iconUrl: "" }]
+      status: service.status || "active"
     });
-    setActiveModalTab("basic");
     setIsModalOpen(true);
   };
 
@@ -156,42 +142,17 @@ const ServicesPage = ({ selectedCity }) => {
     }
   };
 
-  // Inclusions dynamic handlers
-  const handleAddInclusion = () => {
-    setFormData((prev) => ({
-      ...prev,
-      inclusions: [...prev.inclusions, { title: "", duration: "30 mins", iconUrl: "" }]
-    }));
-  };
-
-  const handleRemoveInclusion = (index) => {
-    setFormData((prev) => ({
-      ...prev,
-      inclusions: prev.inclusions.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleInclusionChange = (index, field, value) => {
-    setFormData((prev) => {
-      const updated = [...prev.inclusions];
-      updated[index] = { ...updated[index], [field]: value };
-      return { ...prev, inclusions: updated };
-    });
-  };
-
   // Save Service
   const handleSaveService = async (e) => {
     e?.preventDefault();
 
     if (!formData.title?.trim()) {
       toast.error("Service title is required");
-      setActiveModalTab("basic");
       return;
     }
 
     if (formData.basePrice === "" || isNaN(formData.basePrice)) {
       toast.error("Valid base price is required");
-      setActiveModalTab("pricing");
       return;
     }
 
@@ -210,7 +171,6 @@ const ServicesPage = ({ selectedCity }) => {
         rating: Number(formData.rating) || 4.9,
         ratingCount: formData.ratingCount || "237.6k",
         status: formData.status || "active",
-        inclusions: formData.inclusions.filter((inc) => inc.title?.trim() !== ""),
         cityId: selectedCity || null,
         cityIds: selectedCity ? [selectedCity] : []
       };
@@ -294,7 +254,7 @@ const ServicesPage = ({ selectedCity }) => {
             </h1>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Create and manage standalone services with direct pricing, task inclusions, and duration estimates.
+            Manage services catalog, basic details, and launch Page Builder for custom landing pages.
           </p>
         </div>
 
@@ -345,7 +305,7 @@ const ServicesPage = ({ selectedCity }) => {
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
             {searchTerm
               ? `No services matching "${searchTerm}". Try a different search term.`
-              : "No services have been added yet. Click 'Add Service' to create your first direct service."}
+              : "No services have been added yet. Click 'Add Service' to create your first service."}
           </p>
           {!searchTerm && (
             <button
@@ -402,21 +362,13 @@ const ServicesPage = ({ selectedCity }) => {
                 {/* Content */}
                 <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                   <div>
-                    <h3 className="font-bold text-slate-900 text-sm leading-tight truncate" title={service.title}>
+                    <h3 className="font-bold text-slate-900 text-sm leading-tight truncate capitalize" title={service.title}>
                       {service.title}
                     </h3>
                     {service.tagline && (
                       <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
                         {service.tagline}
                       </p>
-                    )}
-
-                    {/* Inclusions summary */}
-                    {service.inclusions && service.inclusions.length > 0 && (
-                      <div className="mt-2 flex items-center gap-1.5 text-[11px] text-[#720C3E] font-semibold bg-[#720C3E]/5 px-2 py-1 rounded-lg">
-                        <FiCheckCircle className="text-xs shrink-0" />
-                        <span className="truncate">{service.inclusions.length} tasks included</span>
-                      </div>
                     )}
                   </div>
 
@@ -450,23 +402,33 @@ const ServicesPage = ({ selectedCity }) => {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="pt-2 flex items-center gap-2">
+                  <div className="pt-2 space-y-2">
+                    {/* Launch Page Builder Button */}
                     <button
-                      onClick={() => handleOpenEdit(service)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      onClick={() => navigate(`/admin/user-categories/page-builder?serviceId=${id}`)}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 bg-[#720C3E] hover:bg-[#5b0931] text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
                     >
-                      <FiEdit2 className="text-xs" /> Edit
+                      <FiLayout className="text-xs" /> Customize Page Builder
                     </button>
-                    <button
-                      onClick={() => {
-                        setServiceToDelete(service);
-                        setDeleteModalOpen(true);
-                      }}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                      title="Delete Service"
-                    >
-                      <FiTrash2 className="text-sm" />
-                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenEdit(service)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        <FiEdit2 className="text-xs" /> Edit Info
+                      </button>
+                      <button
+                        onClick={() => {
+                          setServiceToDelete(service);
+                          setDeleteModalOpen(true);
+                        }}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                        title="Delete Service"
+                      >
+                        <FiTrash2 className="text-sm" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -475,293 +437,167 @@ const ServicesPage = ({ selectedCity }) => {
         </div>
       )}
 
-      {/* Add / Edit Service Modal */}
+      {/* Quick Add / Edit Service Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingServiceId ? "Edit Service" : "Add New Service"}
-        maxWidth="max-w-2xl"
+        title={editingServiceId ? "Edit Service Info" : "Add New Service"}
+        maxWidth="max-w-xl"
       >
-        <form onSubmit={handleSaveService} className="space-y-5">
-          {/* Modal Tabs */}
-          <div className="flex border-b border-slate-200 gap-2">
-            {[
-              { id: "basic", label: "1. Basic Info", icon: FiInfo },
-              { id: "pricing", label: "2. Pricing & Rating", icon: FiDollarSign },
-              { id: "inclusions", label: "3. Included Tasks", icon: FiList }
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeModalTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveModalTab(tab.id)}
-                  className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold transition-all border-b-2 cursor-pointer ${
-                    isActive
-                      ? "border-[#720C3E] text-[#720C3E]"
-                      : "border-transparent text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  <Icon /> {tab.label}
-                </button>
-              );
-            })}
+        <form onSubmit={handleSaveService} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Service Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Bathroom Cleaning, Kitchen Cleaning"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+              required
+            />
           </div>
 
-          {/* Tab 1: Basic Info */}
-          {activeModalTab === "basic" && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Service Title <span className="text-red-500">*</span>
-                </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Tagline / Subheading
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. One Booking. Countless Tasks."
+                value={formData.tagline}
+                onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Badge (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. NEW, POPULAR"
+                value={formData.badge}
+                onChange={(e) => setFormData({ ...formData, badge: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Base Price (₹) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                placeholder="e.g. 400"
+                value={formData.basePrice}
+                onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Original Price / Strikethrough (₹)
+              </label>
+              <input
+                type="number"
+                placeholder="e.g. 500"
+                value={formData.originalPrice}
+                onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                GST (%)
+              </label>
+              <input
+                type="number"
+                value={formData.gstPercentage}
+                onChange={(e) => setFormData({ ...formData, gstPercentage: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Rating
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                min="1"
+                max="5"
+                value={formData.rating}
+                onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Status
+              </label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Thumbnail Upload */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Service Thumbnail / Image
+            </label>
+            <div className="flex items-center gap-3">
+              {formData.iconUrl && (
+                <img
+                  src={toAssetUrl(formData.iconUrl)}
+                  alt="Thumbnail"
+                  className="w-12 h-12 rounded-xl object-cover border border-slate-200"
+                />
+              )}
+              <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-600">
+                <FiUploadCloud className="text-base text-[#720C3E]" />
+                <span>{uploadingImage ? "Uploading..." : "Upload Image"}</span>
                 <input
-                  type="text"
-                  placeholder="e.g. Hourly Service, Bathroom Cleaning, Festive Home Help"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                  required
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  disabled={uploadingImage}
                 />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Tagline / Subheading
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. One Booking. Countless Tasks."
-                    value={formData.tagline}
-                    onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Badge (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. NEW, POPULAR, BESTSELLER"
-                    value={formData.badge}
-                    onChange={(e) => setFormData({ ...formData, badge: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Detailed Description
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Describe the service details and customer expectations..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                />
-              </div>
-
-              {/* Image Upload Area */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Service Image / Thumbnail
-                </label>
-                <div className="flex items-center gap-4">
-                  {formData.iconUrl && (
-                    <img
-                      src={toAssetUrl(formData.iconUrl)}
-                      alt="Preview"
-                      className="w-16 h-16 rounded-xl object-cover border border-slate-200 shadow-sm"
-                    />
-                  )}
-                  <div className="flex-1">
-                    <label className="flex items-center justify-center gap-2 px-4 py-2.5 border border-dashed border-slate-300 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors text-xs font-bold text-slate-600">
-                      <FiUploadCloud className="text-base text-[#720C3E]" />
-                      <span>{uploadingImage ? "Uploading..." : "Upload Service Image"}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                        disabled={uploadingImage}
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
+              </label>
             </div>
-          )}
+          </div>
 
-          {/* Tab 2: Pricing & Rating */}
-          {activeModalTab === "pricing" && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Base Price (₹) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 30"
-                    value={formData.basePrice}
-                    onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Original Price / Strikethrough (₹)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 125"
-                    value={formData.originalPrice}
-                    onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    GST Percentage (%)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="18"
-                    value={formData.gstPercentage}
-                    onChange={(e) => setFormData({ ...formData, gstPercentage: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Rating (e.g. 4.9)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="1"
-                    max="5"
-                    placeholder="4.9"
-                    value={formData.rating}
-                    onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Rating Count (e.g. 237.6k)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="237.6k ratings"
-                    value={formData.ratingCount}
-                    onChange={(e) => setFormData({ ...formData, ratingCount: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Status
-                </label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                >
-                  <option value="active">Active (Visible to users)</option>
-                  <option value="inactive">Inactive (Hidden)</option>
-                </select>
-              </div>
-            </div>
-          )}
-
-          {/* Tab 3: Included Tasks / Scope */}
-          {activeModalTab === "inclusions" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800">
-                    Included Tasks & Time Estimates
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    List specific sub-tasks and durations shown on the service details page.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddInclusion}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#720C3E]/10 hover:bg-[#720C3E]/20 text-[#720C3E] rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                >
-                  <FiPlus /> Add Task
-                </button>
-              </div>
-
-              <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-                {formData.inclusions.map((inc, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-2.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                  >
-                    <input
-                      type="text"
-                      placeholder="Task Name (e.g. Bathroom Cleaning)"
-                      value={inc.title || inc.name || ""}
-                      onChange={(e) =>
-                        handleInclusionChange(index, "title", e.target.value)
-                      }
-                      className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#720C3E]"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Duration (e.g. 40 mins)"
-                      value={inc.duration || ""}
-                      onChange={(e) =>
-                        handleInclusionChange(index, "duration", e.target.value)
-                      }
-                      className="w-28 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-[#720C3E]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveInclusion(index)}
-                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                      title="Remove task"
-                    >
-                      <FiX className="text-sm" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Modal Footer Actions */}
-          <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-5 py-2 bg-[#720C3E] hover:bg-[#5b0931] text-white rounded-xl text-xs font-bold shadow-md shadow-[#720C3E]/20 transition-all cursor-pointer disabled:opacity-50"
+              className="px-5 py-2 bg-[#720C3E] hover:bg-[#5b0931] text-white rounded-xl text-xs font-bold shadow-md disabled:opacity-50"
             >
               {saving ? "Saving..." : editingServiceId ? "Update Service" : "Create Service"}
             </button>
@@ -788,14 +624,14 @@ const ServicesPage = ({ selectedCity }) => {
             <button
               type="button"
               onClick={() => setDeleteModalOpen(false)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleConfirmDelete}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer"
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold"
             >
               Delete Permanently
             </button>

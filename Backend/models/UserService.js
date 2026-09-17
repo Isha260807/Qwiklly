@@ -72,12 +72,47 @@ const userServiceSchema = new mongoose.Schema({
     default: null,
     trim: true
   },
+  heroBanner: {
+    imageUrl: { type: String, default: null },
+    buttonText: { type: String, default: 'BOOK NOW' }
+  },
   inclusions: [{
     title: { type: String, trim: true },
     name: { type: String, trim: true },
     duration: { type: String, trim: true },
     iconUrl: { type: String, default: null },
     description: { type: String, default: null }
+  }],
+  whyLoveTitle: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  whyLove: [{
+    text: { type: String, trim: true }
+  }],
+  exclusionsTitle: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  exclusions: [{
+    text: { type: String, trim: true }
+  }],
+  howItWorksTitle: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  howItWorks: [{
+    stepNumber: { type: Number, default: 1 },
+    title: { type: String, trim: true },
+    description: { type: String, trim: true },
+    iconUrl: { type: String, default: null }
+  }],
+  faqs: [{
+    question: { type: String, trim: true },
+    answer: { type: String, trim: true }
   }],
   cityIds: [{
     type: mongoose.Schema.Types.ObjectId,

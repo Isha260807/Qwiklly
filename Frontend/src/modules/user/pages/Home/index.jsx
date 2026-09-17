@@ -585,8 +585,8 @@ const Home = () => {
                   <ServicesWeOffer
                     services={services}
                     onServiceClick={(svc) => {
-                      setSelectedDirectService(svc);
-                      setIsDirectServiceModalOpen(true);
+                      const serviceId = svc._id || svc.id || svc.slug;
+                      navigate(`/user/service/${serviceId}`, { state: { service: svc } });
                     }}
                   />
                 </motion.section>
