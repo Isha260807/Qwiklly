@@ -5,16 +5,14 @@ import {
   HiOutlineHome, 
   HiClipboardList, 
   HiOutlineClipboardList, 
-  HiShoppingCart, 
-  HiOutlineShoppingCart 
+  HiUser, 
+  HiOutlineUser 
 } from 'react-icons/hi';
 import { motion } from 'framer-motion';
-import { useCart } from '../../../../context/CartContext';
 
 const BottomNav = React.memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { cartCount } = useCart();
 
   const navItems = useMemo(() => [
     { 
@@ -32,12 +30,11 @@ const BottomNav = React.memo(() => {
       path: '/user/my-bookings' 
     },
     { 
-      id: 'cart', 
-      label: 'Cart', 
-      icon: HiOutlineShoppingCart, 
-      activeIcon: HiShoppingCart, 
-      path: '/user/cart', 
-      isCart: true 
+      id: 'profile', 
+      label: 'Profile', 
+      icon: HiOutlineUser, 
+      activeIcon: HiUser, 
+      path: '/user/account' 
     },
   ], []);
 
@@ -45,7 +42,7 @@ const BottomNav = React.memo(() => {
     const path = location.pathname;
     if (path === '/user' || path === '/user/') return 'home';
     if (path.startsWith('/user/my-bookings') || path.startsWith('/user/booking')) return 'bookings';
-    if (path.startsWith('/user/cart') || path.startsWith('/user/checkout')) return 'cart';
+    if (path.startsWith('/user/account') || path.startsWith('/user/profile') || path.startsWith('/user/update-profile') || path.startsWith('/user/settings')) return 'profile';
     return 'home';
   };
 
@@ -74,8 +71,8 @@ const BottomNav = React.memo(() => {
               whileTap={{ scale: 0.94 }}
               className={`relative flex items-center justify-center gap-2 px-4 py-2 rounded-2xl transition-all duration-200 cursor-pointer select-none ${
                 isActive
-                  ? 'text-[#720C3E] font-bold'
-                  : 'text-[#6F5A64] hover:text-[#24151D] font-medium'
+                  ? 'text-[#720C3E] font-extrabold'
+                  : 'text-[#55404B] hover:text-[#24151D] font-bold'
               }`}
             >
               {/* Active Pill Background Matching App Theme */}
@@ -96,16 +93,11 @@ const BottomNav = React.memo(() => {
                 <div className="relative flex items-center justify-center">
                   <IconComponent 
                     className={`w-5 h-5 transition-transform duration-200 ${
-                      isActive ? 'text-[#720C3E]' : 'text-[#6F5A64]'
+                      isActive ? 'text-[#720C3E]' : 'text-[#55404B]'
                     }`} 
                   />
-                  {item.isCart && cartCount > 0 && (
-                    <span className="absolute -top-1.5 -right-2 bg-[#720C3E] text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5 border-2 border-white shadow-xs">
-                      {cartCount > 9 ? '9+' : cartCount}
-                    </span>
-                  )}
                 </div>
-                <span className="text-sm font-semibold tracking-tight whitespace-nowrap">
+                <span className={`text-sm tracking-wide whitespace-nowrap ${isActive ? 'font-extrabold' : 'font-bold'}`}>
                   {item.label}
                 </span>
               </div>

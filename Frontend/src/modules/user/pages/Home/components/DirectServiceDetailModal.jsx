@@ -90,15 +90,37 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
           className="relative w-full max-w-lg max-h-[92vh] bg-white rounded-t-[32px] sm:rounded-3xl shadow-2xl overflow-y-auto z-10 flex flex-col"
         >
           {/* Top Banner / Image Area */}
-          <div className="relative w-full h-56 sm:h-64 bg-slate-900 overflow-hidden">
+          <div 
+            className="relative w-full h-56 sm:h-64 overflow-hidden flex items-center justify-center border-b border-[#E8D9DF]/60"
+            style={{
+              background: `
+                radial-gradient(circle at 50% 25%, rgba(154, 36, 89, 0.12) 0%, transparent 60%),
+                radial-gradient(circle at 15% 85%, rgba(114, 12, 62, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 85% 85%, rgba(232, 160, 184, 0.18) 0%, transparent 50%),
+                #FFF9FB
+              `
+            }}
+          >
+            {/* Subtle Dot Grid Pattern */}
+            <div 
+              className="absolute inset-0 opacity-[0.04] pointer-events-none"
+              style={{
+                backgroundImage: 'radial-gradient(#720C3E 0.8px, transparent 0.8px)',
+                backgroundSize: '24px 24px'
+              }}
+            />
+
             {service.image || service.icon || service.imageUrl ? (
               <img
                 src={toAssetUrl(service.image || service.icon || service.imageUrl)}
                 alt={service.title}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain sm:object-cover relative z-0"
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-emerald-600 to-teal-800 flex items-center justify-center text-white font-bold text-2xl">
+              <div 
+                className="w-full h-full flex items-center justify-center text-white font-bold text-2xl relative z-0"
+                style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+              >
                 {service.title}
               </div>
             )}

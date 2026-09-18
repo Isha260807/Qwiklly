@@ -262,16 +262,38 @@ const ServiceDetails = () => {
           </button>
         </div>
 
-        {/* Hero Visual Area - Full Cover */}
-        <div className="relative w-full h-64 sm:h-80 md:h-96 overflow-hidden bg-slate-100 flex items-center justify-center">
+        {/* Hero Visual Area */}
+        <div 
+          className="relative w-full h-64 sm:h-80 md:h-96 overflow-hidden flex items-center justify-center border-b border-[#E8D9DF]/60"
+          style={{
+            background: `
+              radial-gradient(circle at 50% 25%, rgba(154, 36, 89, 0.12) 0%, transparent 60%),
+              radial-gradient(circle at 15% 85%, rgba(114, 12, 62, 0.08) 0%, transparent 50%),
+              radial-gradient(circle at 85% 85%, rgba(232, 160, 184, 0.18) 0%, transparent 50%),
+              #FFF9FB
+            `
+          }}
+        >
+          {/* Subtle Dot Grid Pattern */}
+          <div 
+            className="absolute inset-0 opacity-[0.04] pointer-events-none"
+            style={{
+              backgroundImage: 'radial-gradient(#720C3E 0.8px, transparent 0.8px)',
+              backgroundSize: '24px 24px'
+            }}
+          />
+
           {bannerImage ? (
             <img
               src={toAssetUrl(bannerImage)}
               alt={service.title}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain sm:object-cover relative z-0"
             />
           ) : (
-            <div className="w-20 h-20 rounded-2xl bg-slate-200/80 flex items-center justify-center text-slate-400 font-black text-3xl">
+            <div 
+              className="w-20 h-20 rounded-2xl flex items-center justify-center text-white font-black text-3xl shadow-sm relative z-0"
+              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+            >
               {service.title?.charAt(0) || 'S'}
             </div>
           )}

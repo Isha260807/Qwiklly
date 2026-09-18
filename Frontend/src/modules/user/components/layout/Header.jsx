@@ -1,23 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { HiChevronDown, HiUser } from 'react-icons/hi';
-import { FiSearch } from 'react-icons/fi';
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { HiChevronDown } from 'react-icons/hi';
+import { FiSearch, FiShoppingCart } from 'react-icons/fi';
 import NotificationBell from '../common/NotificationBell';
+import { useCart } from '../../../../context/CartContext';
 
 const Header = ({ location, onLocationClick, onSearchClick }) => {
-  const navigate = useNavigate();
-  const [userData, setUserData] = useState(null);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('userData');
-      if (stored) {
-        setUserData(JSON.parse(stored));
-      }
-    } catch (e) {
-      // ignore
-    }
-  }, []);
+  const { cartCount } = useCart();
 
   // Parse location into title and detailed subtitle
   const cleanLocation = location && location !== '...' ? location : 'Select Location';
@@ -49,13 +38,13 @@ const Header = ({ location, onLocationClick, onSearchClick }) => {
           </span>
         </div>
 
-        {/* Right Side: Search, Notification & Profile Avatar */}
+        {/* Right Side: Search, Notification & Cart Button */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Search Trigger Button */}
           <button
             type="button"
             onClick={onSearchClick}
-            className="w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all duration-200 backdrop-blur-sm border border-white/20 shadow-sm"
+            className="w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all duration-200 backdrop-blur-sm border border-white/20 shadow-sm cursor-pointer"
             aria-label="Search services"
             title="Search"
           >
@@ -69,21 +58,18 @@ const Header = ({ location, onLocationClick, onSearchClick }) => {
             dotClassName="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-1.5 h-1.5 bg-[#FF2D55] rounded-full ring-1 ring-white/90 shadow-xs"
           />
 
-          {/* Profile Avatar Button */}
+          {/* Cart Button */}
           <Link
-            to="/user/account"
-            className="w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 rounded-full bg-white text-[#720C3E] flex items-center justify-center shadow-md overflow-hidden border border-white/40 hover:opacity-95 active:scale-95 transition-all duration-200"
-            aria-label="User Account"
-            title="Account"
+            to="/user/cart"
+            className="w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all duration-200 backdrop-blur-sm border border-white/20 shadow-sm relative shrink-0 cursor-pointer"
+            aria-label="Your Cart"
+            title="Cart"
           >
-            {userData?.profilePhoto ? (
-              <img
-                src={userData.profilePhoto}
-                alt={userData.name || 'User Profile'}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <HiUser className="w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 text-[#720C3E]" />
+            <FiShoppingCart className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2]" />
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-[#FF2D55] text-white text-[10px] font-bold min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-1 ring-1 ring-white shadow-xs">
+                {cartCount > 9 ? '9+' : cartCount}
+              </span>
             )}
           </Link>
         </div>

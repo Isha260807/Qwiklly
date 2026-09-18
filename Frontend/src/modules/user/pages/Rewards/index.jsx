@@ -2,9 +2,10 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 
-import { FiCopy, FiArrowLeft, FiGift, FiBell } from 'react-icons/fi';
+import { FiCopy, FiArrowLeft, FiGift } from 'react-icons/fi';
 import { FaWhatsapp, FaFacebookMessenger } from 'react-icons/fa';
 import { themeColors } from '../../../../theme';
+import NotificationBell from '../../components/common/NotificationBell';
 
 const Rewards = () => {
   const navigate = useNavigate();

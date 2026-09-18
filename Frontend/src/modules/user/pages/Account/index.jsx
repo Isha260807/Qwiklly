@@ -155,7 +155,7 @@ const Account = () => {
   }
 
   return (
-    <div className="min-h-screen pb-24 relative bg-transparent">
+    <div className="relative bg-transparent">
       {/* Background provided globally by UserRoutes */}
 
       <div className="relative z-10 max-w-lg mx-auto">
@@ -264,7 +264,7 @@ const Account = () => {
               >
                 <MdAccountBalanceWallet className="w-4 h-4" />
               </div>
-              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Balance</span>
+              <span className="text-[10px] text-[#6F5A64] font-bold uppercase tracking-wider">Balance</span>
               <p className={`text-sm font-black mt-0.5 ${userProfile.walletBalance < 0 ? 'text-red-500' : 'text-gray-900'}`}>
                 ₹{Math.abs(userProfile.walletBalance || 0).toLocaleString('en-IN')}
                 {userProfile.walletBalance < 0 && <span className="text-[10px] font-normal ml-1">(Penalty)</span>}
@@ -278,14 +278,14 @@ const Account = () => {
               <div className="w-8 h-8 bg-white/10 text-yellow-400 rounded-xl flex items-center justify-center mb-1.5">
                 <FiGift className="w-4 h-4" />
               </div>
-              <span className="text-[10px] text-white/60 font-bold uppercase tracking-wider">Rewards</span>
+              <span className="text-[10px] text-white/70 font-bold uppercase tracking-wider">Rewards</span>
               <p className="text-xs font-bold text-white mt-0.5">Refer & Earn</p>
             </button>
           </div>
 
           {/* Menu Card 1: Shopping & Activity */}
           <div>
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Orders & Plans</h3>
+            <h3 className="text-[11px] font-bold text-[#55404B] uppercase tracking-wider mb-1.5 px-1">Orders & Plans</h3>
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden divide-y divide-gray-50">
               <MenuItem
                 icon={FiFileText}
@@ -307,7 +307,7 @@ const Account = () => {
 
           {/* Menu Card 2: Preferences */}
           <div>
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Preferences</h3>
+            <h3 className="text-[11px] font-bold text-[#55404B] uppercase tracking-wider mb-1.5 px-1">Preferences</h3>
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden divide-y divide-gray-50">
               <MenuItem
                 icon={FiMapPin}
@@ -324,7 +324,7 @@ const Account = () => {
 
           {/* Menu Card 3: Support & Legal */}
           <div>
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">Support & More</h3>
+            <h3 className="text-[11px] font-bold text-[#55404B] uppercase tracking-wider mb-1.5 px-1">Support & More</h3>
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden divide-y divide-gray-50">
               <MenuItem
                 icon={FiHeadphones}
@@ -357,7 +357,7 @@ const Account = () => {
             <span>Log out</span>
           </button>
 
-          <div className="text-center pt-2 pb-4">
+          <div className="text-center pt-1 pb-0">
             <p className="text-[10px] font-medium text-gray-400">Version 7.6.27 R547</p>
           </div>
         </main>

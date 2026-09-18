@@ -173,7 +173,7 @@ const Profile = () => {
 
   return (
     <div
-      className="min-h-screen pb-2"
+      className="pb-0 relative"
       style={{
         background: themeColors.backgroundGradient,
       }}

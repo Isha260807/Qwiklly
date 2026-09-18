@@ -13,12 +13,31 @@ import cleaningIcon from '../../../../assets/images/icons/services/cleaning-icon
 import acApplianceRepairIcon from '../../../../assets/images/icons/services/ac-appliance-repair-icon.png';
 import NotificationBell from '../../components/common/NotificationBell';
 
+const toAssetUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+  const clean = url.replace('/api/upload', '/upload');
+  if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:') || clean.startsWith('blob:')) {
+    return clean;
+  }
+  const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/api\/?$/, '');
+  return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
+};
+
 const Cart = () => {
   const navigate = useNavigate();
   const { cartItems, isLoading: loading, removeItem, removeCategoryItems, updateItem } = useCart();
 
-  // Category icon mapping
-  const getCategoryIcon = (category) => {
+  // Dynamic image resolver with fallback to exact category icon
+  const getCategoryImage = (items, category) => {
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        const candidate = item?.icon || item?.iconUrl || item?.image || item?.imageUrl || item?.categoryIcon || item?.sectionIcon || item?.card?.imageUrl;
+        if (candidate && typeof candidate === 'string' && candidate.trim() !== '') {
+          return toAssetUrl(candidate);
+        }
+      }
+    }
+
     const iconMap = {
       'Electrician': electricianIcon,
       'Electricity': electricianIcon,
@@ -32,7 +51,12 @@ const Cart = () => {
       'AC Service and Repair': acApplianceRepairIcon,
       'AC & Appliance Repair': acApplianceRepairIcon,
     };
-    return iconMap[category] || electricianIcon; // Default icon
+
+    if (category && iconMap[category]) {
+      return iconMap[category];
+    }
+
+    return null;
   };
 
   // Group items by category
@@ -208,65 +232,56 @@ const Cart = () => {
             </div>
           ) : cartItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
-              <FiShoppingCart className="w-16 h-16 text-gray-300 mb-4" />
-              <p className="text-gray-500 text-lg font-medium">Your cart is empty</p>
-              <p className="text-gray-400 text-sm mt-2">Add services to get started</p>
+              <div className="w-16 h-16 rounded-full bg-[#FFF7FA] border border-[#E8D9DF] flex items-center justify-center mb-3 shadow-xs">
+                <FiShoppingCart className="w-8 h-8 text-[#9A2459]" />
+              </div>
+              <p className="text-gray-800 text-base font-bold">Your cart is empty</p>
+              <p className="text-gray-400 text-xs mt-1">Add services to get started</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-3.5">
               {Object.entries(groupedItems).map(([category, items]) => {
                 const categoryTotal = items.reduce((sum, item) => sum + (item.price || 0), 0);
-                const categoryIcon = getCategoryIcon(category);
+                const dynamicImage = getCategoryImage(items, category);
                 const serviceCount = items.reduce((sum, item) => sum + (item.serviceCount || 1), 0);
 
                 return (
                   <div
                     key={category}
-                    className="bg-white rounded-2xl shadow-md border border-gray-100"
-                    style={{
-                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)',
-                      padding: '16px'
-                    }}
+                    className="bg-white rounded-2xl border border-[#E8D9DF]/70 shadow-[0_2px_10px_rgba(114,12,62,0.05)] p-3 sm:p-3.5 transition-all"
                   >
                     {/* Category Header */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3 flex-1">
-                        {/* Category Icon */}
-                        <div
-                          className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
-                          style={{
-                            backgroundColor: `${themeColors.brand.teal}15`,
-                            border: `2px solid ${themeColors.brand.teal}20`
-                          }}
-                        >
-                          <img
-                            src={categoryIcon}
-                            alt={category}
-                            className="w-12 h-12 object-contain"
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              if (e.target.nextSibling) {
-                                e.target.nextSibling.style.display = 'flex';
-                              }
-                            }}
-                          />
-                          <div
-                            className="hidden items-center justify-center"
-                            style={{
-                              width: '48px',
-                              height: '48px',
-                              display: 'none'
-                            }}
-                          >
-                            <FiShoppingCart className="w-8 h-8" style={{ color: themeColors.button }} />
+                    <div className="flex items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                        {/* Dynamic Image or Initials Badge */}
+                        {dynamicImage ? (
+                          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden bg-[#FFF7FA] border border-[#E8D9DF]/80 shadow-2xs">
+                            <img
+                              src={dynamicImage}
+                              alt={category}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                if (e.target.nextElementSibling) {
+                                  e.target.nextElementSibling.style.display = 'flex';
+                                }
+                              }}
+                            />
+                            <div className="hidden w-full h-full items-center justify-center bg-gradient-to-br from-[#720C3E] to-[#9A2459] text-white font-bold text-sm uppercase">
+                              {category?.charAt(0) || 'S'}
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden bg-gradient-to-br from-[#720C3E] to-[#9A2459] text-white font-bold text-sm uppercase shadow-2xs">
+                            {category?.charAt(0) || 'S'}
+                          </div>
+                        )}
 
                         {/* Category Info */}
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-base font-bold text-black mb-1">{category}</h3>
-                          <p className="text-sm text-gray-600">
-                            {serviceCount} {serviceCount === 1 ? 'service' : 'services'} • ₹{categoryTotal.toLocaleString('en-IN')}
+                          <h3 className="text-sm sm:text-base font-bold text-gray-900 leading-snug capitalize truncate">{category}</h3>
+                          <p className="text-[11px] sm:text-xs text-gray-500 font-medium mt-0.5">
+                            {serviceCount} {serviceCount === 1 ? 'service' : 'services'} • <span className="font-bold text-[#720C3E]">₹{categoryTotal.toLocaleString('en-IN')}</span>
                           </p>
                         </div>
                       </div>
@@ -274,33 +289,40 @@ const Cart = () => {
                       {/* Delete Category Button */}
                       <button
                         onClick={() => handleDeleteCategory(category)}
-                        className="p-2 hover:bg-red-50 rounded-full transition-colors shrink-0"
+                        className="p-1.5 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg transition-colors shrink-0"
+                        title="Remove category"
                       >
-                        <FiTrash2 className="w-5 h-5 text-red-500" />
+                        <FiTrash2 className="w-4 h-4" />
                       </button>
                     </div>
 
                     {/* Services List */}
-                    <div className="mb-4 space-y-2">
+                    <div className="my-2.5 bg-[#FAF7F8]/80 rounded-xl p-2 sm:p-2.5 border border-[#E8D9DF]/50 divide-y divide-gray-100">
                       {items.map((item) => (
-                        <div key={item._id || item.id} className="flex items-start justify-between py-2 border-b border-gray-100 last:border-0">
-                          <div className="flex-1">
-                            <p className="text-sm text-gray-800 font-medium">
-                              {item.title} X {item.serviceCount || 1}
-                            </p>
+                        <div key={item._id || item.id} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0 gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-xs sm:text-sm text-gray-800 font-bold capitalize truncate">
+                                {item.title}
+                              </p>
+                              <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 bg-white px-1.5 py-0.2 rounded border border-gray-200/80 shrink-0">
+                                × {item.serviceCount || 1}
+                              </span>
+                            </div>
                             {item.description && (
-                              <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
+                              <p className="text-[10px] sm:text-[11px] text-gray-400 mt-0.5 truncate">{item.description}</p>
                             )}
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-sm font-semibold text-black">
+                            <span className="text-xs sm:text-sm font-bold text-[#720C3E]">
                               ₹{(item.price || 0).toLocaleString('en-IN')}
                             </span>
                             <button
                               onClick={() => handleDelete(item._id || item.id)}
-                              className="p-1 hover:bg-red-50 rounded transition-colors"
+                              className="p-1 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded transition-colors"
+                              title="Delete item"
                             >
-                              <FiTrash2 className="w-4 h-4 text-red-500" />
+                              <FiTrash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
@@ -308,27 +330,18 @@ const Cart = () => {
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-2 gap-2 mt-2.5">
                       <button
                         onClick={() => handleAddServices(category)}
-                        className="flex-1 px-4 py-2.5 bg-white border-2 border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all active:scale-95"
+                        className="py-2 px-3 bg-[#FFF7FA] hover:bg-[#FCEBF3] border border-[#E8D9DF] text-[#720C3E] rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 text-center"
                       >
                         Add Services
                       </button>
                       <button
                         onClick={() => handleCategoryCheckout(category)}
-                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 shadow-md"
+                        className="py-2 px-3 rounded-xl text-xs sm:text-sm font-bold text-white transition-all active:scale-95 shadow-xs text-center"
                         style={{
-                          backgroundColor: themeColors.button,
-                          boxShadow: `0 2px 6px ${themeColors.brand.teal}4D`
-                        }}
-                        onMouseEnter={(e) => {
-                          e.target.style.backgroundColor = themeColors.brand.teal;
-                          e.target.style.boxShadow = `0 4px 12px ${themeColors.brand.teal}66`;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.backgroundColor = themeColors.button;
-                          e.target.style.boxShadow = `0 2px 6px ${themeColors.brand.teal}4D`;
+                          background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)',
                         }}
                       >
                         Book
