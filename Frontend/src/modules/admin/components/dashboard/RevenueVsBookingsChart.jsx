@@ -12,16 +12,19 @@ import {
 } from 'recharts';
 import { filterByDateRange, getDateRange, formatDate, formatCurrency } from '../../utils/adminHelpers';
 
-const RevenueVsBookingsChart = ({ data, period = 'month' }) => {
-  const filteredData = useMemo(() => {
-    const range = getDateRange(period);
-    const filtered = filterByDateRange(data, range.start, range.end);
-    const limit = period === 'week' ? 7 : period === 'month' ? 14 : 30;
-    return filtered.slice(-limit).map((item) => ({
-      ...item,
-      dateLabel: formatDate(item.date, { month: 'short', day: 'numeric' }),
-    }));
-  }, [data, period]);
+const RevenueVsBookingsChart = ({ data = [], period = 'month' }) => {
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    return data.map((item) => {
+      const isMonthly = item.date && String(item.date).length === 7;
+      return {
+        ...item,
+        dateLabel: isMonthly
+          ? formatDate(`${item.date}-01`, { month: 'short', year: '2-digit' })
+          : formatDate(item.date, { month: 'short', day: 'numeric' }),
+      };
+    });
+  }, [data]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload || !payload.length) return null;
@@ -54,7 +57,7 @@ const RevenueVsBookingsChart = ({ data, period = 'month' }) => {
 
       <div className="w-full overflow-x-auto scrollbar-admin">
         <ResponsiveContainer width="100%" height={260} minHeight={200}>
-          <ComposedChart data={filteredData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
             <XAxis
               dataKey="dateLabel"

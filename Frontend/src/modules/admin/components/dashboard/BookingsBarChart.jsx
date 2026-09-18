@@ -11,16 +11,19 @@ import {
 } from 'recharts';
 import { filterByDateRange, getDateRange, formatDate } from '../../utils/adminHelpers';
 
-const BookingsBarChart = ({ data, period = 'month' }) => {
-  const filteredData = useMemo(() => {
-    const range = getDateRange(period);
-    const filtered = filterByDateRange(data, range.start, range.end);
-    const daysToShow = period === 'week' ? 7 : 7;
-    return filtered.slice(-daysToShow).map((item) => ({
-      ...item,
-      dateLabel: formatDate(item.date, { month: 'short', day: 'numeric' }),
-    }));
-  }, [data, period]);
+const BookingsBarChart = ({ data = [], period = 'month' }) => {
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    return data.map((item) => {
+      const isMonthly = item.date && String(item.date).length === 7;
+      return {
+        ...item,
+        dateLabel: isMonthly
+          ? formatDate(`${item.date}-01`, { month: 'short', year: '2-digit' })
+          : formatDate(item.date, { month: 'short', day: 'numeric' }),
+      };
+    });
+  }, [data]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -58,7 +61,7 @@ const BookingsBarChart = ({ data, period = 'month' }) => {
 
       <div className="w-full overflow-x-auto scrollbar-admin">
         <ResponsiveContainer width="100%" height={250} minHeight={200}>
-          <BarChart data={filteredData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+          <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
             <defs>
               <linearGradient id="colorBookingsAdmin" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#10b981" stopOpacity={0.85} />

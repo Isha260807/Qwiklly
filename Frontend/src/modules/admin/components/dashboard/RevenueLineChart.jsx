@@ -11,15 +11,19 @@ import {
 } from 'recharts';
 import { filterByDateRange, getDateRange, formatDate, formatCurrency } from '../../utils/adminHelpers';
 
-const RevenueLineChart = ({ data, period = 'month' }) => {
-  const filteredData = useMemo(() => {
-    const range = getDateRange(period);
-    const filtered = filterByDateRange(data, range.start, range.end);
-    return filtered.map((item) => ({
-      ...item,
-      dateLabel: formatDate(item.date, { month: 'short', day: 'numeric' }),
-    }));
-  }, [data, period]);
+const RevenueLineChart = ({ data = [], period = 'month' }) => {
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    return data.map((item) => {
+      const isMonthly = item.date && String(item.date).length === 7;
+      return {
+        ...item,
+        dateLabel: isMonthly
+          ? formatDate(`${item.date}-01`, { month: 'short', year: '2-digit' })
+          : formatDate(item.date, { month: 'short', day: 'numeric' }),
+      };
+    });
+  }, [data]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -57,7 +61,7 @@ const RevenueLineChart = ({ data, period = 'month' }) => {
 
       <div className="w-full overflow-x-auto scrollbar-admin">
         <ResponsiveContainer width="100%" height={250} minHeight={200}>
-          <AreaChart data={filteredData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
             <defs>
               <linearGradient id="colorRevenueAdmin" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />

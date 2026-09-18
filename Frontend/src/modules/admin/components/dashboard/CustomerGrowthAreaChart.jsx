@@ -20,22 +20,25 @@ const getCustomerKey = (booking) => {
 
 const CustomerGrowthAreaChart = ({ timelineData = [], bookings = [], period = 'month' }) => {
   const customerData = useMemo(() => {
-    const range = getDateRange(period);
-    const filteredDays = filterByDateRange(timelineData, range.start, range.end);
+    if (!timelineData || timelineData.length === 0) return [];
 
     const byDate = new Map();
     bookings.forEach((b) => {
       const createdAt = b.createdAt || b.acceptedAt || b.assignedAt || b.visitedAt || b.workDoneAt || b.completedAt;
       if (!createdAt) return;
       const dateKey = new Date(createdAt).toISOString().slice(0, 10);
+      const monthKey = new Date(createdAt).toISOString().slice(0, 7);
       if (!byDate.has(dateKey)) byDate.set(dateKey, []);
       byDate.get(dateKey).push(b);
+      if (!byDate.has(monthKey)) byDate.set(monthKey, []);
+      byDate.get(monthKey).push(b);
     });
 
     const seen = new Set();
     let cumulative = 0;
 
-    return filteredDays.map((d) => {
+    return timelineData.map((d) => {
+      const isMonthly = d.date && String(d.date).length === 7;
       const dayBookings = byDate.get(d.date) || [];
       let newCustomers = 0;
       dayBookings.forEach((b) => {
@@ -49,12 +52,14 @@ const CustomerGrowthAreaChart = ({ timelineData = [], bookings = [], period = 'm
       cumulative += newCustomers;
       return {
         date: d.date,
-        dateLabel: formatDate(d.date, { month: 'short', day: 'numeric' }),
+        dateLabel: isMonthly
+          ? formatDate(`${d.date}-01`, { month: 'short', year: '2-digit' })
+          : formatDate(d.date, { month: 'short', day: 'numeric' }),
         customers: cumulative,
         newCustomers,
       };
     });
-  }, [timelineData, bookings, period]);
+  }, [timelineData, bookings]);
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload || !payload.length) return null;

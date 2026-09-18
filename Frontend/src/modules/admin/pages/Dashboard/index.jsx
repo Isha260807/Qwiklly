@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiBriefcase, FiUsers, FiShoppingBag, FiDollarSign, FiActivity } from 'react-icons/fi';
+import { FiUser, FiBriefcase, FiShoppingBag, FiDollarSign, FiActivity } from 'react-icons/fi';
 import RevenueLineChart from '../../components/dashboard/RevenueLineChart';
 import BookingsBarChart from '../../components/dashboard/BookingsBarChart';
 import BookingStatusPieChart from '../../components/dashboard/BookingStatusPieChart';
@@ -196,17 +196,6 @@ const AdminDashboard = () => {
       iconBg: 'bg-white/20',
       link: '/admin/vendors/analytics'
     },
-    {
-      title: 'New Workers',
-      value: (stats.totalWorkers || 0).toLocaleString(),
-      change: 0,
-      icon: FiUsers,
-      color: 'text-white',
-      bgColor: 'bg-gradient-to-br from-rose-500 to-pink-600',
-      cardBg: 'bg-gradient-to-br from-rose-50 to-pink-50',
-      iconBg: 'bg-white/20',
-      link: '/admin/workers/analytics'
-    },
   ];
 
   return (
@@ -227,7 +216,7 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {statsCards.map((card, index) => {
           const Icon = card.icon;
           const isPositive = (card.change || 0) >= 0;

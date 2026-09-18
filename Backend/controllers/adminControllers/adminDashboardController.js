@@ -22,50 +22,41 @@ const getDashboardStats = async (req, res) => {
       }
     }
 
-    // Revenue date filter (use completedAt for revenue consistency)
-    const revenueDateFilter = {};
-    if (startDate || endDate) {
-      revenueDateFilter.completedAt = {};
-      if (startDate) revenueDateFilter.completedAt.$gte = new Date(startDate);
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        revenueDateFilter.completedAt.$lte = end;
-      }
-    }
-
     // Total counts (filtered by creation date if provided)
     const totalUsers = await User.countDocuments({ isActive: true, ...dateFilter });
     const totalVendors = await Vendor.countDocuments({ isActive: true, ...dateFilter });
+    const totalWorkers = await Vendor.countDocuments({ role: 'worker', ...dateFilter });
     const totalBookings = await Booking.countDocuments(dateFilter);
 
     // Booking stats
     const pendingBookings = await Booking.countDocuments({
       ...dateFilter,
-      status: { $nin: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED] }
+      status: { $nin: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED, 'completed', 'cancelled', 'rejected'] }
     });
     const completedBookings = await Booking.countDocuments({
       ...dateFilter,
-      status: BOOKING_STATUS.COMPLETED
+      status: { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'work_done'] }
     });
     const cancelledBookings = await Booking.countDocuments({
       ...dateFilter,
-      status: BOOKING_STATUS.CANCELLED
+      status: { $in: [BOOKING_STATUS.CANCELLED, 'cancelled', 'rejected'] }
     });
 
     // Revenue stats
     const revenueResult = await Booking.aggregate([
       {
         $match: {
-          status: BOOKING_STATUS.COMPLETED,
-          paymentStatus: { $in: [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, 'success', 'collected_by_vendor', 'collected_by_worker', 'paid'] },
-          ...revenueDateFilter
+          $or: [
+            { status: { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'work_done'] } },
+            { paymentStatus: { $in: [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, 'success', 'collected_by_vendor', 'collected_by_worker', 'paid'] } }
+          ],
+          ...dateFilter
         }
       },
       {
         $group: {
           _id: null,
-          totalRevenue: { $sum: '$finalAmount' },
+          totalRevenue: { $sum: { $ifNull: ['$finalAmount', '$basePrice', 0] } },
           totalBookings: { $sum: 1 }
         }
       }
@@ -84,24 +75,26 @@ const getDashboardStats = async (req, res) => {
 
     // Recent activities (filtered by period)
     const recentActivityDocs = await Booking.find(dateFilter)
-      .populate('userId', 'name phone')
-      .populate('vendorId', 'name businessName')
-      .populate('serviceId', 'title')
+      .populate('userId', 'name phone email')
+      .populate('vendorId', 'name businessName phone')
+      .populate('serviceId', 'title name')
       .sort({ createdAt: -1 })
-      .limit(20);
+      .limit(50);
 
     const recentBookings = recentActivityDocs.map(b => ({
-      id: b.bookingNumber || b._id,
+      id: b.bookingNumber || String(b._id),
       _id: b._id,
       status: b.status,
-      user: { name: b.userId?.name || 'Customer' },
-      serviceType: b.serviceId?.title || b.serviceName,
+      user: { name: b.userId?.name || 'Customer', phone: b.userId?.phone || '', email: b.userId?.email || '' },
+      vendor: { name: b.vendorId?.name || b.vendorId?.businessName || 'Unassigned' },
+      serviceType: b.serviceId?.title || b.serviceId?.name || b.serviceName || b.bookedItems?.[0]?.serviceName || b.serviceCategory || 'Service',
       price: b.finalAmount || b.basePrice || 0,
+      paymentStatus: b.paymentStatus,
       createdAt: b.createdAt,
       acceptedAt: b.acceptedAt,
       assignedAt: b.assignedAt,
       visitedAt: b.visitedAt,
-      completedAt: b.completedAt,
+      completedAt: b.completedAt || b.visitedAt || b.createdAt,
       workerPaymentStatus: b.workerPaymentStatus
     }));
 
@@ -111,6 +104,7 @@ const getDashboardStats = async (req, res) => {
         stats: {
           totalUsers,
           totalVendors,
+          totalWorkers,
           totalBookings,
           pendingBookings,
           completedBookings,
@@ -141,45 +135,110 @@ const getRevenueAnalytics = async (req, res) => {
   try {
     const { period = 'monthly', startDate, endDate } = req.query;
 
-    let groupFormat = '%Y-%m';
-    if (period === 'daily') {
-      groupFormat = '%Y-%m-%d';
-    } else if (period === 'weekly') {
-      groupFormat = '%Y-%W';
-    }
+    const groupFormat = period === 'monthly' || period === 'year' ? '%Y-%m' : '%Y-%m-%d';
 
     // Build date filter
-    const dateFilter = {};
+    const matchFilter = {};
     if (startDate || endDate) {
-      dateFilter.completedAt = {};
-      if (startDate) dateFilter.completedAt.$gte = new Date(startDate);
-      if (endDate) dateFilter.completedAt.$lte = new Date(endDate);
+      matchFilter.createdAt = {};
+      if (startDate) matchFilter.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        matchFilter.createdAt.$lte = end;
+      }
     }
 
-    // Revenue analytics
-    const revenueData = await Booking.aggregate([
+    // Revenue analytics aggregated from bookings
+    const aggregated = await Booking.aggregate([
       {
-        $match: {
-          status: BOOKING_STATUS.COMPLETED,
-          paymentStatus: { $in: [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, 'success', 'collected_by_vendor', 'collected_by_worker', 'paid'] },
-          ...dateFilter
-        }
+        $match: matchFilter
       },
       {
         $group: {
           _id: {
             $dateToString: {
               format: groupFormat,
-              date: '$completedAt'
+              date: '$createdAt'
             }
           },
-          revenue: { $sum: '$finalAmount' },
+          revenue: {
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $in: ['$status', [BOOKING_STATUS.COMPLETED, 'completed', 'work_done']] },
+                    { $in: ['$paymentStatus', [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, 'success', 'collected_by_vendor', 'collected_by_worker', 'paid']] }
+                  ]
+                },
+                { $ifNull: ['$finalAmount', '$basePrice', 0] },
+                0
+              ]
+            }
+          },
           bookings: { $sum: 1 },
-          platformCommission: { $sum: { $multiply: ['$finalAmount', 0.2] } }
+          platformCommission: {
+            $sum: {
+              $cond: [
+                {
+                  $or: [
+                    { $in: ['$status', [BOOKING_STATUS.COMPLETED, 'completed', 'work_done']] },
+                    { $in: ['$paymentStatus', [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, 'success', 'collected_by_vendor', 'collected_by_worker', 'paid']] }
+                  ]
+                },
+                { $multiply: [{ $ifNull: ['$finalAmount', '$basePrice', 0] }, 0.2] },
+                0
+              ]
+            }
+          }
         }
       },
       { $sort: { _id: 1 } }
     ]);
+
+    const resultMap = new Map();
+    aggregated.forEach(item => {
+      if (item._id) resultMap.set(item._id, item);
+    });
+
+    // Fill continuous series across the date range so charts render smoothly
+    const revenueData = [];
+    const curr = new Date(startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+    const end = new Date(endDate || Date.now());
+
+    if (groupFormat === '%Y-%m') {
+      let d = new Date(curr.getFullYear(), curr.getMonth(), 1);
+      const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+
+      while (d <= endMonth) {
+        const key = d.toISOString().slice(0, 7); // YYYY-MM
+        const existing = resultMap.get(key);
+        revenueData.push({
+          _id: key,
+          revenue: existing ? existing.revenue : 0,
+          bookings: existing ? existing.bookings : 0,
+          platformCommission: existing ? existing.platformCommission : 0
+        });
+        d.setMonth(d.getMonth() + 1);
+      }
+    } else {
+      let d = new Date(curr);
+      d.setHours(0, 0, 0, 0);
+      const endDay = new Date(end);
+      endDay.setHours(23, 59, 59, 999);
+
+      while (d <= endDay) {
+        const key = d.toISOString().slice(0, 10); // YYYY-MM-DD
+        const existing = resultMap.get(key);
+        revenueData.push({
+          _id: key,
+          revenue: existing ? existing.revenue : 0,
+          bookings: existing ? existing.bookings : 0,
+          platformCommission: existing ? existing.platformCommission : 0
+        });
+        d.setDate(d.getDate() + 1);
+      }
+    }
 
     res.status(200).json({
       success: true,
