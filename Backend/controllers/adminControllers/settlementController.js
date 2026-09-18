@@ -24,12 +24,15 @@ const getVendorBalances = async (req, res) => {
 
     // If filtering by vendors who owe money
     if (filterDue === 'true') {
-      matchQuery['wallet.dues'] = { $gt: 0 };
+      matchQuery.$or = [
+        { 'wallet.dues': { $gt: 0 } },
+        { walletBalance: { $lt: 0 } }
+      ];
     }
 
     const vendors = await Vendor.find(matchQuery)
-      .select('name businessName phone email wallet profilePhoto')
-      .sort({ 'wallet.dues': -1 }) // Highest dues first
+      .select('name businessName phone email wallet walletBalance profilePhoto')
+      .sort({ 'wallet.dues': -1, walletBalance: 1 })
       .skip(skip)
       .limit(parseInt(limit));
 
@@ -37,41 +40,72 @@ const getVendorBalances = async (req, res) => {
 
     // Calculate total amount due to admin
     const totalDueResult = await Vendor.aggregate([
-      { $match: { 'wallet.dues': { $gt: 0 } } },
-      { $group: { _id: null, total: { $sum: '$wallet.dues' } } }
+      {
+        $match: {
+          $or: [
+            { 'wallet.dues': { $gt: 0 } },
+            { walletBalance: { $lt: 0 } }
+          ]
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: {
+              $cond: [
+                { $gt: ['$wallet.dues', 0] },
+                '$wallet.dues',
+                { $cond: [{ $lt: ['$walletBalance', 0] }, { $abs: '$walletBalance' }, 0] }
+              ]
+            }
+          }
+        }
+      }
     ]);
 
     const totalDueToAdmin = Math.abs(totalDueResult[0]?.total || 0);
 
     // Format vendor data
-    const vendorData = vendors.map(v => ({
-      _id: v._id,
-      name: v.name,
-      businessName: v.businessName,
-      phone: v.phone,
-      email: v.email,
-      profilePhoto: v.profilePhoto,
-      dues: v.wallet?.dues || 0,
-      earnings: v.wallet?.earnings || 0,
-      amountDue: v.wallet?.dues || 0,
-      balance: (v.wallet?.earnings || 0) - (v.wallet?.dues || 0), // Net for reference
-      totalCashCollected: v.wallet?.totalCashCollected || 0,
-      cashLimit: v.wallet?.cashLimit || 10000,
-      isBlocked: v.wallet?.isBlocked || false
-    }));
+    const vendorData = vendors.map(v => {
+      const dueAmount = (v.wallet?.dues && v.wallet.dues > 0)
+        ? v.wallet.dues
+        : (v.walletBalance < 0 ? Math.abs(v.walletBalance) : 0);
+
+      return {
+        _id: v._id,
+        name: v.name,
+        businessName: v.businessName || v.name,
+        phone: v.phone,
+        email: v.email,
+        profilePhoto: v.profilePhoto,
+        dues: dueAmount,
+        earnings: v.wallet?.earnings || 0,
+        amountDue: dueAmount,
+        balance: (v.wallet?.earnings || 0) - dueAmount,
+        totalCashCollected: v.wallet?.totalCashCollected || 0,
+        cashLimit: v.wallet?.cashLimit || 10000,
+        isBlocked: v.wallet?.isBlocked || false
+      };
+    });
 
     res.status(200).json({
       success: true,
       data: vendorData,
       summary: {
         totalDueToAdmin,
-        vendorsWithDue: await Vendor.countDocuments({ 'wallet.dues': { $gt: 0 } })
+        vendorsWithDue: await Vendor.countDocuments({
+          $or: [
+            { 'wallet.dues': { $gt: 0 } },
+            { walletBalance: { $lt: 0 } }
+          ]
+        })
       },
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / parseInt(limit)) || 1
       }
     });
   } catch (error) {
@@ -364,12 +398,31 @@ const getSettlementHistory = async (req, res) => {
 const getSettlementDashboard = async (req, res) => {
   try {
     // Total amount due to admin
-    // Total amount due to admin
     const totalDueResult = await Vendor.aggregate([
-      { $match: { 'wallet.dues': { $gt: 0 } } },
-      { $group: { _id: null, total: { $sum: '$wallet.dues' } } }
+      {
+        $match: {
+          $or: [
+            { 'wallet.dues': { $gt: 0 } },
+            { walletBalance: { $lt: 0 } }
+          ]
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: {
+              $cond: [
+                { $gt: ['$wallet.dues', 0] },
+                '$wallet.dues',
+                { $cond: [{ $lt: ['$walletBalance', 0] }, { $abs: '$walletBalance' }, 0] }
+              ]
+            }
+          }
+        }
+      }
     ]);
-    const totalDueToAdmin = totalDueResult[0]?.total || 0;
+    const totalDueToAdmin = Math.abs(totalDueResult[0]?.total || 0);
 
     // Pending settlements
     const pendingSettlements = await Settlement.aggregate([
@@ -383,7 +436,8 @@ const getSettlementDashboard = async (req, res) => {
     const todayCollections = await Transaction.aggregate([
       {
         $match: {
-          type: 'cash_collected',
+          type: { $in: ['cash_collected', 'payment'] },
+          status: { $in: ['completed', 'success', 'pending'] },
           createdAt: { $gte: today }
         }
       },
@@ -402,8 +456,8 @@ const getSettlementDashboard = async (req, res) => {
     const weekSettlements = await Transaction.aggregate([
       {
         $match: {
-          type: 'settlement',
-          status: 'completed',
+          type: { $in: ['settlement', 'payment', 'cash_collected'] },
+          status: { $in: ['completed', 'success'] },
           createdAt: { $gte: weekStart }
         }
       },
@@ -420,7 +474,12 @@ const getSettlementDashboard = async (req, res) => {
       success: true,
       data: {
         totalDueToAdmin,
-        vendorsWithDue: await Vendor.countDocuments({ 'wallet.dues': { $gt: 0 } }),
+        vendorsWithDue: await Vendor.countDocuments({
+          $or: [
+            { 'wallet.dues': { $gt: 0 } },
+            { walletBalance: { $lt: 0 } }
+          ]
+        }),
         pendingSettlements: {
           amount: pendingSettlements[0]?.total || 0,
           count: pendingSettlements[0]?.count || 0
@@ -534,16 +593,36 @@ module.exports = {
   // Withdrawal functions
   getWithdrawalRequests: async (req, res) => {
     try {
-      const { page = 1, limit = 20 } = req.query;
+      const { page = 1, limit = 20, search, status } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
 
-      const withdrawals = await Withdrawal.find({ status: 'pending' })
-        .populate('vendorId', 'name businessName phone wallet.earnings')
-        .sort({ createdAt: 1 })
+      let query = {};
+      if (status && status !== 'all') {
+        query.status = status;
+      }
+
+      if (search) {
+        const searchRegex = new RegExp(search, 'i');
+        const vendors = await Vendor.find({
+          $or: [{ name: searchRegex }, { businessName: searchRegex }, { phone: searchRegex }]
+        }).select('_id');
+
+        query.$or = [
+          { vendorId: { $in: vendors.map(v => v._id) } },
+          { transactionReference: searchRegex },
+          { 'bankDetails.accountHolderName': searchRegex },
+          { 'bankDetails.accountNumber': searchRegex },
+          { 'bankDetails.upiId': searchRegex }
+        ];
+      }
+
+      const withdrawals = await Withdrawal.find(query)
+        .populate('vendorId', 'name businessName phone email wallet profilePhoto')
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit));
 
-      const total = await Withdrawal.countDocuments({ status: 'pending' });
+      const total = await Withdrawal.countDocuments(query);
 
       res.status(200).json({
         success: true,
@@ -552,7 +631,7 @@ module.exports = {
           page: parseInt(page),
           limit: parseInt(limit),
           total,
-          pages: Math.ceil(total / parseInt(limit))
+          pages: Math.ceil(total / parseInt(limit)) || 1
         }
       });
     } catch (error) {

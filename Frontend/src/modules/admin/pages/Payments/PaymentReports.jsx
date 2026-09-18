@@ -16,6 +16,7 @@ import {
   FiCheck
 } from 'react-icons/fi';
 import api from '../../../../services/api';
+import toast from 'react-hot-toast';
 
 // Report Card Component
 const ReportCard = ({ title, description, icon: Icon, color, status, onGenerate, loading }) => {

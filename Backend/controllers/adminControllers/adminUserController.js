@@ -297,28 +297,34 @@ const getAllUserBookings = async (req, res) => {
 
     const query = {};
 
-    if (status) {
-      query.status = status;
+    if (status && status !== 'all') {
+      query.status = { $regex: new RegExp(`^${status}$`, 'i') };
     }
 
-    // Search by user name or phone
+    // Search by user name, phone, email, bookingNumber, serviceName
     if (search) {
       const users = await User.find({
         $or: [
           { name: { $regex: search, $options: 'i' } },
-          { phone: { $regex: search, $options: 'i' } }
+          { phone: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
         ]
       }).select('_id');
       
       const userIds = users.map(u => u._id);
-      query.userId = { $in: userIds };
+      query.$or = [
+        { userId: { $in: userIds } },
+        { bookingNumber: { $regex: search, $options: 'i' } },
+        { serviceName: { $regex: search, $options: 'i' } }
+      ];
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const bookings = await Booking.find(query)
       .populate('userId', 'name phone email')
-      .populate('serviceId', 'title')
+      .populate('vendorId', 'name businessName phone')
+      .populate('serviceId', 'title name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
