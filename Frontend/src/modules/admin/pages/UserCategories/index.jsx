@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ensureIds, loadCatalog } from "./utils";
-import HomePage from "./pages/HomePage";
 import CategoriesPage from "./pages/CategoriesPage";
 import ServicesPage from "./pages/ServicesPage";
 import BrandsPage from "./pages/BrandsPage";
@@ -90,8 +89,8 @@ const UserCategories = () => {
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
         <Routes>
-          <Route index element={<Navigate to="home" replace />} />
-          <Route path="home" element={<HomePage catalog={catalog} setCatalog={setCatalog} selectedCity={selectedCity} />} />
+          <Route index element={<Navigate to="sections" replace />} />
+          <Route path="home" element={<Navigate to="sections" replace />} />
           <Route path="sections" element={<ServicesPage selectedCity={selectedCity} />} />
           <Route path="services" element={<ServicesPage selectedCity={selectedCity} />} />
           <Route path="page-builder" element={<ServicePageBuilder selectedCity={selectedCity} />} />
@@ -100,7 +99,7 @@ const UserCategories = () => {
           <Route path="brands" element={<Navigate to="services" replace />} />
           <Route path="vendor-services" element={<VendorServicesPage />} />
           <Route path="vendor-parts" element={<VendorPartsPage />} />
-          <Route path="*" element={<Navigate to="home" replace />} />
+          <Route path="*" element={<Navigate to="sections" replace />} />
         </Routes>
       </motion.div>
     </div>

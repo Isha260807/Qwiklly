@@ -89,7 +89,6 @@
       "admin"
     ],
     "children": [
-      "Home",
       "Manage Services",
       "Page Builder"
     ]

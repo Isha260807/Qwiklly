@@ -62,7 +62,6 @@ const getChildRoute = (parentRoute, childName) => {
       "Booking Notifications": "/admin/bookings/notifications",
     },
     "/admin/user-categories": {
-      "Home": "/admin/user-categories/home",
       "Manage Services": "/admin/user-categories/sections",
       "Page Builder": "/admin/user-categories/page-builder",
     },

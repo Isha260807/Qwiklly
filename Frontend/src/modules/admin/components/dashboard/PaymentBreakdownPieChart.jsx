@@ -14,8 +14,8 @@ const PaymentBreakdownPieChart = ({ bookings = [] }) => {
       else pending += 1;
     });
     return [
-      { name: 'Paid to Worker', value: paid },
-      { name: 'Pending Worker Payment', value: pending },
+      { name: 'Paid to Partner', value: paid },
+      { name: 'Pending Partner Payment', value: pending },
     ];
   }, [bookings]);
 
@@ -42,7 +42,7 @@ const PaymentBreakdownPieChart = ({ bookings = [] }) => {
       className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-200"
     >
       <div className="mb-4">
-        <h3 className="text-base sm:text-lg font-extrabold text-gray-800">Worker Payment</h3>
+        <h3 className="text-base sm:text-lg font-extrabold text-gray-800">Partner Payment</h3>
         <p className="text-xs sm:text-sm text-gray-500 mt-1">Paid vs pending (after work done)</p>
       </div>
 
