@@ -217,8 +217,6 @@ const MyRatings = () => {
           )}
         </div>
       </main>
-
-      <BottomNav />
     </div>
   );
 };

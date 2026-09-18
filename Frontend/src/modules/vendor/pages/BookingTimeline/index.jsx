@@ -388,16 +388,11 @@ const BookingTimeline = () => {
   }
 
   return (
-    <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
-      <Header title="Booking Timeline" />
+    <div className="min-h-screen pb-4" style={{ background: themeColors.backgroundGradient }}>
+      <Header title="Timeline" />
 
-      <main className="px-4 py-6">
-        <div
-          className="bg-white rounded-xl p-6 shadow-md"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
+      <main className="max-w-md mx-auto px-4 pt-3 pb-6">
+        <div className="bg-white rounded-xl p-3.5 shadow-xs">
           {/* Timeline */}
           <div className="relative">
             {timelineStages.map((stage, index) => {
@@ -405,14 +400,14 @@ const BookingTimeline = () => {
               const isCompleted = stage.id < currentStage;
               const isCurrent = stage.id === currentStage;
               const isPending = stage.id > currentStage;
-              const isSkipped = false; // We filter stages now, no need to skip visually in the flow unless needed for other reasons
+              const isSkipped = false;
 
               return (
-                <div key={stage.id} className="relative pb-8 last:pb-0">
+                <div key={stage.id} className="relative pb-4 last:pb-0">
                   {/* Timeline Line */}
                   {index < timelineStages.length - 1 && (
                     <div
-                      className="absolute left-6 top-12 w-0.5 h-full"
+                      className="absolute left-4 top-8 w-0.5 h-full"
                       style={{
                         background: isCompleted ? themeColors.button : '#E5E7EB',
                       }}
@@ -420,21 +415,21 @@ const BookingTimeline = () => {
                   )}
 
                   {/* Timeline Item */}
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-start gap-3">
                     {/* Icon Circle */}
                     <div
-                      className={`relative z-10 w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-white' : isCurrent ? 'bg-white' : 'bg-gray-100'
+                      className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isCompleted ? 'bg-white' : isCurrent ? 'bg-white' : 'bg-gray-100'
                         }`}
                       style={{
-                        border: `3px solid ${isCompleted || isCurrent ? themeColors.button : '#E5E7EB'}`,
-                        boxShadow: isCurrent ? `0 0 0 4px ${themeColors.button}20` : 'none',
+                        border: `2px solid ${isCompleted || isCurrent ? themeColors.button : '#E5E7EB'}`,
+                        boxShadow: isCurrent ? `0 0 0 3px ${themeColors.button}20` : 'none',
                       }}
                     >
                       {isCompleted ? (
-                        <FiCheck className="w-6 h-6" style={{ color: themeColors.button }} />
+                        <FiCheck className="w-4 h-4" style={{ color: themeColors.button }} />
                       ) : (
                         <IconComponent
-                          className="w-6 h-6"
+                          className="w-3.5 h-3.5"
                           style={{
                             color: isCurrent ? themeColors.button : '#9CA3AF',
                           }}
@@ -443,34 +438,33 @@ const BookingTimeline = () => {
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 pt-1">
-                      <div className="flex items-center justify-between mb-1">
+                    <div className="flex-1 pt-0.5 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
                         <h3
-                          className={`font-semibold ${isCompleted || isCurrent ? 'text-gray-800' : 'text-gray-400'
+                          className={`text-xs font-bold leading-tight ${isCompleted || isCurrent ? 'text-gray-900' : 'text-gray-400'
                             }`}
                         >
                           {stage.title}
                         </h3>
                         {isSkipped && (
-                          <span className="text-xs text-gray-500">Skipped</span>
+                          <span className="text-[10px] text-gray-400">Skipped</span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-600 mb-3">{stage.description}</p>
+                      <p className="text-[11px] text-gray-500 mb-1 leading-snug">{stage.description}</p>
 
                       {/* Action Button */}
                       {stage.action && !isSkipped && (
                         <button
                           onClick={stage.action}
-                          className="px-4 py-2 rounded-lg font-semibold text-white text-sm transition-all active:scale-95"
+                          className="px-3 py-1.5 rounded-lg font-bold text-white text-xs transition-all active:scale-95 shadow-xs cursor-pointer my-1"
                           style={{
                             background: themeColors.button,
-                            boxShadow: `0 2px 8px ${themeColors.button}40`,
                           }}
                         >
                           {stage.id === 3 ? 'Assign Worker' :
                             stage.id === 4 ? 'Start Journey' :
                               stage.id === 5 ? 'Mark Arrived' :
-                                stage.id === 6 ? 'Mark workdone' :
+                                stage.id === 6 ? 'Mark Work Done' :
                                   stage.id === 7 ? (
                                     (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid')
                                       ? 'Online Payment Done'
@@ -483,15 +477,15 @@ const BookingTimeline = () => {
 
                       {/* Online Payment Status Badge for Stage 7 */}
                       {stage.id === 7 && (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid') && !isCompleted && (
-                        <div className="mt-2 flex items-center gap-1.5 text-green-600 font-bold text-xs bg-green-50 px-3 py-1.5 rounded-lg border border-green-100">
-                          <FiCheckCircle className="w-4 h-4" />
+                        <div className="mt-1 flex items-center gap-1.5 text-emerald-700 font-bold text-[10px] bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100">
+                          <FiCheckCircle className="w-3.5 h-3.5 text-emerald-600" />
                           ONLINE PAYMENT RECEIVED
                         </div>
                       )}
 
                       {/* Timestamp */}
                       {isCompleted && booking.timeline && booking.timeline.find(t => t.stage === stage.id) && (
-                        <p className="text-xs text-gray-500 mt-2">
+                        <p className="text-[10px] text-gray-400 mt-0.5">
                           {new Date(booking.timeline.find(t => t.stage === stage.id).timestamp).toLocaleString()}
                         </p>
                       )}
@@ -503,8 +497,6 @@ const BookingTimeline = () => {
           </div>
         </div>
       </main>
-
-      <BottomNav />
 
       {/* Visit OTP Modal */}
       {isVisitModalOpen && (

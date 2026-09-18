@@ -232,8 +232,6 @@ const ProfileDetails = () => {
           </div>
         </div>
       </main>
-
-      <BottomNav />
     </div>
   );
 };

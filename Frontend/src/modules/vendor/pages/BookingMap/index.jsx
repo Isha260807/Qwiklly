@@ -533,12 +533,12 @@ const BookingMap = () => {
     <div className="h-screen flex flex-col relative bg-white overflow-hidden">
       {/* Top Floating Header */}
       {/* Top Floating Header - Always Visible */}
-      <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-start pointer-events-none">
+      <div className="absolute top-3 left-3 right-3 z-20 flex justify-between items-start pointer-events-none">
         <button
           onClick={() => navigate(-1)}
-          className="pointer-events-auto bg-white/90 backdrop-blur-md p-3 rounded-full shadow-lg text-gray-700 hover:bg-white transition-all active:scale-95"
+          className="pointer-events-auto bg-white/90 backdrop-blur-md p-2 rounded-full shadow-md text-gray-700 hover:bg-white transition-all active:scale-95 cursor-pointer"
         >
-          <FiArrowLeft className="w-6 h-6" />
+          <FiArrowLeft className="w-4 h-4" />
         </button>
       </div>
 
@@ -549,14 +549,14 @@ const BookingMap = () => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="absolute top-20 left-4 right-4 z-50 bg-red-500 text-white p-4 rounded-xl shadow-2xl flex items-center gap-4"
+            className="absolute top-16 left-3 right-3 z-50 bg-red-500 text-white p-3 rounded-xl shadow-xl flex items-center gap-3"
           >
-            <div className="w-10 h-10 rounded-full bg-red-600 flex items-center justify-center shrink-0">
-              <FiWifiOff className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center shrink-0">
+              <FiWifiOff className="w-4 h-4" />
             </div>
             <div className="flex-1">
-              <h3 className="font-bold text-sm">No Internet Connection</h3>
-              <p className="text-xs text-red-100">Check your network settings.</p>
+              <h3 className="font-bold text-xs">No Internet Connection</h3>
+              <p className="text-[10px] text-red-100">Check your network settings.</p>
             </div>
           </motion.div>
         )}
@@ -569,28 +569,28 @@ const BookingMap = () => {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="absolute inset-x-4 top-[20%] z-40 bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center text-center max-w-sm mx-auto border border-gray-100"
+            className="absolute inset-x-4 top-[20%] z-40 bg-white p-5 rounded-2xl shadow-xl flex flex-col items-center text-center max-w-sm mx-auto border border-gray-100"
           >
-            <div className="w-16 h-16 rounded-full bg-orange-50 flex items-center justify-center mb-4">
-              <FiAlertTriangle className="w-8 h-8 text-orange-500" />
+            <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center mb-3">
+              <FiAlertTriangle className="w-6 h-6 text-orange-500" />
             </div>
-            <h3 className="text-lg font-black text-gray-800 mb-2">Route Not Found</h3>
-            <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-              We couldn't calculate a driving path to this location. The destination might be unreachable by road or off the map.
+            <h3 className="text-base font-bold text-gray-800 mb-1">Route Not Found</h3>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              We couldn't calculate a driving path to this location. The destination might be unreachable by road.
             </p>
-            <div className="flex gap-3 w-full">
+            <div className="flex gap-2 w-full">
               <button
                 onClick={() => window.location.reload()}
-                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
+                className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
               >
-                <FiRefreshCw className="w-4 h-4" /> Retry
+                <FiRefreshCw className="w-3.5 h-3.5" /> Retry
               </button>
               <button
                 onClick={() => {
                   const dest = coords ? `${coords.lat},${coords.lng}` : encodeURIComponent(booking?.address?.addressLine1 || '');
                   window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, '_blank');
                 }}
-                className="flex-1 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
+                className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
               >
                 Open Maps
               </button>
@@ -606,28 +606,28 @@ const BookingMap = () => {
             initial={{ opacity: 0, y: -50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -50 }}
-            className="absolute top-6 left-0 right-0 z-10 flex justify-center pointer-events-none"
+            className="absolute top-4 left-0 right-0 z-10 flex justify-center pointer-events-none"
           >
-            <div className="pointer-events-auto bg-white/95 backdrop-blur-xl px-6 py-2.5 rounded-full shadow-2xl flex items-center gap-6 border border-white/20 ring-1 ring-black/5">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-teal-50 flex items-center justify-center">
-                  <FiMapPin className="w-4 h-4 text-teal-600" />
+            <div className="pointer-events-auto bg-white/95 backdrop-blur-xl px-4 py-1.5 rounded-full shadow-lg flex items-center gap-4 border border-white/20 ring-1 ring-black/5">
+              <div className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-full bg-teal-50 flex items-center justify-center">
+                  <FiMapPin className="w-3 h-3 text-teal-600" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Remaining</p>
-                  <p className="text-sm font-black text-gray-800">{distance}</p>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Remaining</p>
+                  <p className="text-xs font-bold text-gray-800">{distance}</p>
                 </div>
               </div>
 
-              <div className="w-px h-8 bg-gray-100"></div>
+              <div className="w-px h-6 bg-gray-100"></div>
 
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center">
-                  <FiClock className="w-4 h-4 text-orange-500" />
+              <div className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-full bg-orange-50 flex items-center justify-center">
+                  <FiClock className="w-3 h-3 text-orange-500" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">ETA</p>
-                  <p className="text-sm font-black text-gray-800">{duration}</p>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">ETA</p>
+                  <p className="text-xs font-bold text-gray-800">{duration}</p>
                 </div>
               </div>
             </div>
@@ -672,16 +672,13 @@ const BookingMap = () => {
           {riderMarker}
         </GoogleMap>
 
-        {/* Recenter Button */}
-
-
         {/* Full Screen Toggle Button */}
         <button
           onClick={() => setIsFullScreen(!isFullScreen)}
-          className="absolute top-24 right-4 p-4 rounded-full shadow-2xl transition-all active:scale-90 z-50 bg-white text-gray-700 hover:bg-gray-50"
-          style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.2)' }}
+          className="absolute top-3 right-3 p-2 rounded-full shadow-md transition-all active:scale-90 z-50 bg-white/90 backdrop-blur-md text-gray-700 hover:bg-white cursor-pointer"
+          title="Toggle Fullscreen"
         >
-          {isFullScreen ? <FiMinimize className="w-6 h-6" /> : <FiMaximize className="w-6 h-6" />}
+          {isFullScreen ? <FiMinimize className="w-4 h-4" /> : <FiMaximize className="w-4 h-4" />}
         </button>
 
         {/* Recenter Button */}
@@ -690,61 +687,59 @@ const BookingMap = () => {
             setIsAutoCenter(true);
             if (map && currentLocation) {
               map.panTo(currentLocation);
-              // Do NOT change zoom/tilt here, respect user's current mode
               if (!isNavigationMode) {
                 map.setZoom(15);
               } else {
-                map.setZoom(18); // If in nav mode, ensure close zoom
+                map.setZoom(18);
               }
             }
           }}
-          className={`absolute top-40 right-4 p-4 rounded-full shadow-2xl transition-all active:scale-90 z-50 ${isAutoCenter ? 'bg-teal-600 text-white animate-pulse' : 'bg-white text-gray-700'}`}
-          style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.2)' }}
+          className={`absolute top-12 right-3 p-2 rounded-full shadow-md transition-all active:scale-90 z-50 cursor-pointer ${isAutoCenter ? 'bg-teal-600 text-white animate-pulse' : 'bg-white/90 backdrop-blur-md text-gray-700'}`}
+          title="Recenter"
         >
-          <FiCrosshair className="w-6 h-6" />
+          <FiCrosshair className="w-4 h-4" />
         </button>
 
         {/* DEBUG: Simulation Button */}
         {SHOW_SIMULATION_BUTTON && (
           <button
             onClick={isSimulating ? stopSimulation : startSimulation}
-            className={`absolute top-56 right-4 px-4 py-3 rounded-full shadow-2xl transition-all active:scale-90 z-50 text-xs font-bold ${isSimulating ? 'bg-red-500 text-white' : 'bg-purple-600 text-white'}`}
-            style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.2)' }}
+            className={`absolute top-22 right-3 px-2.5 py-1.5 rounded-full shadow-md transition-all active:scale-90 z-50 text-[10px] font-bold cursor-pointer ${isSimulating ? 'bg-red-500 text-white' : 'bg-purple-600 text-white'}`}
           >
             {isSimulating ? '⏹ Stop' : '🚀 Simulate'}
           </button>
         )}
       </div>
 
-      {/* Modern Bottom Card */}
-      <div className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] z-20 p-6 pb-8 transition-transform duration-300 ${isFullScreen ? 'translate-y-full' : ''}`}>
-        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
+      {/* Modern Compact Bottom Card */}
+      <div className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-20 p-3.5 pb-4 transition-transform duration-300 ${isFullScreen ? 'translate-y-full' : ''}`}>
+        <div className="w-8 h-1 bg-gray-200 rounded-full mx-auto mb-2"></div>
 
         {/* Time & Distance Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <p className="text-sm font-medium text-teal-600 mb-1 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse"></span>
+            <p className="text-[11px] font-semibold text-teal-700 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse"></span>
               {duration ? `Trip time: ${duration}` : 'Calculating path...'}
             </p>
-            <h2 className="text-2xl font-black text-gray-900 tracking-tight">Job Location</h2>
+            <h2 className="text-base font-bold text-gray-900 tracking-tight">Job Location</h2>
           </div>
           {distance && (
             <div className="text-right">
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Distance</p>
-              <p className="text-xl font-bold text-gray-800">{distance}</p>
+              <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Distance</p>
+              <p className="text-sm font-extrabold text-gray-800">{distance}</p>
             </div>
           )}
         </div>
 
         {/* Address Section */}
-        <div className="bg-gray-50 rounded-2xl p-4 flex items-start gap-4 mb-4 border border-gray-100">
-          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm text-teal-600 border border-gray-100 shrink-0">
-            <FiMapPin className="w-5 h-5" />
+        <div className="bg-gray-50 rounded-xl p-2.5 flex items-center gap-2.5 mb-2.5 border border-gray-100">
+          <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center shadow-xs text-teal-600 border border-gray-100 shrink-0">
+            <FiMapPin className="w-3.5 h-3.5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-gray-900 mb-0.5 truncate">Address</h3>
-            <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">
+            <h3 className="text-xs font-bold text-gray-900 truncate">Address</h3>
+            <p className="text-[11px] text-gray-500 line-clamp-1 leading-snug">
               {(() => {
                 const addr = booking?.address;
                 if (!addr) return 'Address loading...';
@@ -756,19 +751,22 @@ const BookingMap = () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-3">
+        <div className="flex items-center gap-2">
           {booking?.status === 'journey_started' && (
             <button
               onClick={() => setIsVisitModalOpen(true)}
-              className="px-6 bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-orange-500/30 transition-all active:scale-95"
+              className="flex-1 py-2.5 px-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
             >
-              <FiCheckCircle className="w-5 h-5" /> Reached
+              <FiCheckCircle className="w-4 h-4" /> Reached
             </button>
           )}
 
           {(booking?.userId?.phone || booking?.customerPhone) && (
-            <a href={`tel:${booking.userId?.phone || booking.customerPhone}`} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-teal-600/30 transition-all active:scale-95">
-              <FiPhone className="w-5 h-5" /> Call
+            <a
+              href={`tel:${booking.userId?.phone || booking.customerPhone}`}
+              className="flex-1 py-2.5 px-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
+            >
+              <FiPhone className="w-4 h-4" /> Call
             </a>
           )}
           <button
@@ -778,9 +776,10 @@ const BookingMap = () => {
               const dest = coords ? `${coords.lat},${coords.lng}` : encodeURIComponent(addressStr);
               window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, '_blank');
             }}
-            className="w-14 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl flex items-center justify-center transition-all active:scale-95"
+            className="w-10 h-9 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl flex items-center justify-center transition-all active:scale-95 cursor-pointer shrink-0"
+            title="Open in Google Maps"
           >
-            <FiNavigation className="w-6 h-6" />
+            <FiNavigation className="w-4 h-4" />
           </button>
         </div>
       </div>

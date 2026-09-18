@@ -275,8 +275,6 @@ const AddressManagement = () => {
           </button>
         </div>
       </main>
-
-      <BottomNav />
     </div>
   );
 };

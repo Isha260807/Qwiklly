@@ -169,40 +169,40 @@ const VisitVerificationModal = ({ isOpen, onClose, bookingId, onSuccess }) => {
 
           {/* Modal Content */}
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ scale: 0.95, opacity: 0, y: 15 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            exit={{ scale: 0.95, opacity: 0, y: 15 }}
             transition={{ type: 'spring', damping: 25 }}
-            className="bg-white w-full max-w-sm rounded-[24px] p-8 shadow-2xl relative z-10"
+            className="bg-white w-full max-w-[310px] xs:max-w-xs rounded-2xl p-4 sm:p-5 shadow-2xl relative z-10 mx-auto"
           >
             {/* Header */}
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-3">
               <div>
-                <h3 className="text-2xl font-bold text-gray-900 leading-tight">
+                <h3 className="text-base font-bold text-gray-900 leading-tight">
                   Verify Arrival
                 </h3>
-                <p className="text-xs text-teal-600 font-bold uppercase tracking-wider mt-1">
+                <p className="text-[10px] text-[#720C3E] font-bold uppercase tracking-wider mt-0.5">
                   Check-in Verification
                 </p>
               </div>
               <button
                 onClick={handleClose}
                 disabled={loading}
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400 disabled:opacity-50"
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 disabled:opacity-50 cursor-pointer"
               >
-                <FiX className="w-6 h-6" />
+                <FiX className="w-4 h-4" />
               </button>
             </div>
 
             {/* Description */}
-            <div className="mb-8">
-              <p className="text-gray-500 font-medium leading-relaxed">
-                Please enter the <span className="text-gray-900 font-bold">4-digit code</span> provided by the customer to confirm your arrival.
+            <div className="mb-4">
+              <p className="text-xs text-gray-500 font-medium leading-relaxed">
+                Please enter the <span className="text-gray-900 font-bold">4-digit code</span> provided by customer to confirm your arrival.
               </p>
             </div>
 
             {/* OTP Inputs */}
-            <div className="flex justify-between gap-3 mb-8">
+            <div className="flex justify-center gap-2.5 mb-4">
               {otpInput.map((digit, idx) => (
                 <input
                   key={idx}
@@ -213,10 +213,10 @@ const VisitVerificationModal = ({ isOpen, onClose, bookingId, onSuccess }) => {
                   value={digit}
                   autoFocus={idx === 0}
                   disabled={loading}
-                  className={`w-14 h-16 text-center text-2xl font-bold rounded-2xl transition-all outline-none border-2 disabled:opacity-50
+                  className={`w-11 h-12 text-center text-lg font-bold rounded-xl transition-all outline-none border disabled:opacity-50
                     ${digit
-                      ? 'border-teal-500 bg-teal-50 text-teal-900'
-                      : 'border-gray-200 bg-gray-50 text-gray-800 focus:border-teal-400 focus:bg-white focus:shadow-lg focus:shadow-teal-100'
+                      ? 'border-[#720C3E] bg-[#FCEBF3]/60 text-[#720C3E]'
+                      : 'border-gray-200 bg-gray-50 text-gray-800 focus:border-[#720C3E] focus:bg-white focus:ring-2 focus:ring-[#720C3E]/20'
                     }`}
                   onChange={(e) => handleOtpChange(idx, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(idx, e)}
@@ -228,13 +228,16 @@ const VisitVerificationModal = ({ isOpen, onClose, bookingId, onSuccess }) => {
             <button
               onClick={handleVerify}
               disabled={loading}
-              className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white rounded-2xl font-bold text-lg shadow-xl shadow-teal-600/20 transition-all active:scale-[0.98] disabled:opacity-70 disabled:shadow-none flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-xl font-bold text-xs text-white shadow-xs transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-1.5 cursor-pointer"
+              style={{
+                background: '#720C3E'
+              }}
             >
               {loading ? (
-                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
-                  <FiCheckCircle className="w-5 h-5" />
+                  <FiCheckCircle className="w-4 h-4" />
                   <span>Verify & Start Work</span>
                 </>
               )}

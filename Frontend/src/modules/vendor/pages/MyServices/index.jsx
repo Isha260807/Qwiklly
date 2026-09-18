@@ -270,8 +270,6 @@ const MyServices = () => {
           {isSaving ? 'Saving...' : 'Save Services'}
         </button>
       </main>
-
-      <BottomNav />
     </div>
   );
 };

@@ -17,46 +17,47 @@ const WorkCompletionModal = ({ isOpen, onClose, job, onComplete, loading }) => {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl">
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center gap-2">
-            <FiCheckCircle className="text-green-500 text-xl" />
-            <h3 className="font-bold text-gray-800 text-lg">Complete Work</h3>
+      <div className="bg-white w-full max-w-[310px] xs:max-w-xs rounded-2xl p-4 shadow-2xl mx-auto">
+        <div className="flex justify-between items-center mb-3">
+          <div className="flex items-center gap-1.5">
+            <FiCheckCircle className="text-emerald-600 text-lg" />
+            <h3 className="font-bold text-gray-900 text-base">Complete Work</h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
           >
-            <FiX className="text-xl" />
+            <FiX className="text-lg" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
               Work Notes / Comments
             </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Describe work completed, remarks, etc..."
-              rows={3}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-teal-500 transition-colors resize-none"
+              rows={2}
+              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:border-[#720C3E] focus:ring-1 focus:ring-[#720C3E]/20 transition-colors resize-none"
             />
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-2 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 border border-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors text-sm"
+              className="flex-1 py-2 border border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-colors text-xs cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 py-2.5 bg-teal-600 text-white font-medium rounded-xl hover:bg-teal-700 transition-colors disabled:opacity-50 text-sm shadow-md shadow-teal-600/20"
+              className="flex-1 py-2 text-white font-bold rounded-xl hover:brightness-105 transition-all disabled:opacity-50 text-xs shadow-xs cursor-pointer"
+              style={{ background: '#720C3E' }}
             >
               {loading ? 'Submitting...' : 'Mark Completed'}
             </button>

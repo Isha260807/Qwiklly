@@ -181,8 +181,6 @@ const AboutQwiklly = () => {
           <p className="text-[9px] text-[#6F5A64]/60 mt-0.5">v1.0.0 • India</p>
         </motion.div>
       </main>
-
-      <BottomNav />
     </motion.div>
   );
 };

@@ -621,27 +621,22 @@ export default function BookingDetails() {
   const hasBill = !!bill;
 
   return (
-    <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient }}>
-      <Header title="Booking Details" />
+    <div className="min-h-screen pb-4" style={{ background: themeColors.backgroundGradient }}>
+      <Header title="Booking" />
 
-      <main className="px-4 py-6">
+      <main className="max-w-md mx-auto px-4 pt-3 pb-6">
         {/* Service Type Card */}
-        <div
-          className="bg-white rounded-xl p-4 mb-4 shadow-md"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
+        <div className="bg-white rounded-xl p-3 mb-2.5 shadow-xs">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Service Type</p>
-              <p className="text-xl font-bold" style={{ color: themeColors.button }}>
+              <p className="text-[11px] text-gray-500 font-medium">Service Type</p>
+              <p className="text-base font-bold text-[#720C3E] leading-tight mt-0.5">
                 {booking.serviceType}
               </p>
             </div>
             <div className="flex flex-col items-end gap-1">
               <div
-                className="px-3 py-1 rounded-full text-sm font-semibold"
+                className="px-2.5 py-0.5 rounded-full text-xs font-semibold"
                 style={{
                   background: `${themeColors.button}15`,
                   color: themeColors.button,
@@ -650,7 +645,7 @@ export default function BookingDetails() {
                 {booking.status}
               </div>
               {booking.assignedTo?.name === 'You (Self)' && (
-                <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-md border border-green-100 uppercase tracking-wider">
+                <span className="text-[9px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-md border border-green-200 uppercase tracking-wider">
                   Personal Job
                 </span>
               )}
@@ -659,53 +654,42 @@ export default function BookingDetails() {
         </div>
 
         {/* User Info Card */}
-        <div
-          className="bg-white rounded-xl p-4 mb-4 shadow-md"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: `${themeColors.icon}15` }}
-              >
-                <FiUser className="w-6 h-6" style={{ color: themeColors.icon }} />
+        <div className="bg-white rounded-xl p-3 mb-2.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[#FCEBF3] text-[#720C3E] shrink-0">
+                <FiUser className="w-4 h-4" />
               </div>
               <div>
-                <p className="font-semibold text-gray-800">{booking.user?.name || booking.customerName || 'Customer'}</p>
-                <p className="text-sm text-gray-600">{booking.user?.phone || booking.customerPhone || 'Phone hidden'}</p>
+                <p className="font-bold text-xs text-gray-900 leading-tight">{booking.user?.name || booking.customerName || 'Customer'}</p>
+                <p className="text-[11px] text-gray-500 font-medium mt-0.5">{booking.user?.phone || booking.customerPhone || 'Phone hidden'}</p>
               </div>
             </div>
             <button
               onClick={handleCallUser}
-              className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-              style={{ backgroundColor: `${themeColors.button}15` }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#FCEBF3] text-[#720C3E] hover:bg-[#f6d7e6] transition-colors cursor-pointer"
+              aria-label="Call Customer"
             >
-              <FiPhone className="w-5 h-5" style={{ color: themeColors.button }} />
+              <FiPhone className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
         {/* Address Card with Map */}
-        <div
-          className="bg-white rounded-xl p-4 mb-4 shadow-md"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <div className="flex items-start gap-3 mb-3">
-            <FiMapPin className="w-5 h-5 mt-0.5" style={{ color: themeColors.icon }} />
-            <div className="flex-1">
-              <p className="text-sm text-gray-600 mb-1">Address</p>
-              <p className="font-semibold text-gray-800">{booking.location.address}</p>
-              <p className="text-sm text-gray-500 mt-1">{booking.location.distance} away</p>
+        <div className="bg-white rounded-xl p-3 mb-2.5 shadow-xs">
+          <div className="flex items-start gap-2.5 mb-2.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#FCEBF3] text-[#720C3E] shrink-0 mt-0.5">
+              <FiMapPin className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Address</p>
+              <p className="text-xs font-bold text-gray-800 leading-snug">{booking.location.address}</p>
+              <p className="text-[10px] text-gray-500 font-medium mt-1">{booking.location.distance} away</p>
             </div>
           </div>
 
           {/* Map Embed */}
-          <div className="w-full h-48 rounded-lg overflow-hidden mb-3 bg-gray-200 relative group cursor-pointer" onClick={() => navigate(`/vendor/booking/${booking.id}/map`)}>
+          <div className="w-full h-36 rounded-lg overflow-hidden mb-2 bg-gray-200 relative group cursor-pointer" onClick={() => navigate(`/vendor/booking/${booking.id}/map`)}>
             {(() => {
               const hasCoordinates = booking.location.lat && booking.location.lng && booking.location.lat !== 0 && booking.location.lng !== 0;
               const mapQuery = hasCoordinates
@@ -725,7 +709,7 @@ export default function BookingDetails() {
                   ></iframe>
                   {/* Overlay to intercept clicks */}
                   <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors flex items-center justify-center">
-                    <span className="bg-white/90 px-3 py-1 rounded-full text-xs font-medium text-gray-700 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="bg-white/90 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-gray-700 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
                       View Full Map
                     </span>
                   </div>
@@ -734,16 +718,12 @@ export default function BookingDetails() {
             })()}
           </div>
 
-          <div className="flex gap-3 mt-4">
+          <div className="flex gap-2 mt-2">
             <button
               onClick={() => navigate(`/vendor/booking/${booking.id || id}/map`)}
-              className="flex-1 py-3.5 rounded-xl font-bold border-2 flex items-center justify-center gap-2 transition-all active:scale-95 bg-white"
-              style={{
-                borderColor: themeColors.button,
-                color: themeColors.button,
-              }}
+              className="flex-1 py-2 rounded-lg font-bold text-xs border border-[#720C3E] text-[#720C3E] flex items-center justify-center gap-1.5 transition-all active:scale-95 bg-white cursor-pointer"
             >
-              <FiMapPin className="w-5 h-5" />
+              <FiMapPin className="w-3.5 h-3.5" />
               View Map
             </button>
             <button
@@ -755,13 +735,13 @@ export default function BookingDetails() {
                 // Open directly to trigger app intent
                 window.location.href = `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
               }}
-              className="flex-1 py-3.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-200"
+              className="flex-1 py-2 rounded-lg font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs cursor-pointer"
               style={{
-                background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
+                background: '#720C3E',
               }}
             >
-              <FiNavigation className="w-5 h-5" />
-              Get Directions
+              <FiNavigation className="w-3.5 h-3.5" />
+              Directions
             </button>
           </div>
         </div>
@@ -793,123 +773,78 @@ export default function BookingDetails() {
 
         {/* Booked Items Details */}
         {booking.items && booking.items.length > 0 && (
-          <div
-            className="bg-white rounded-xl p-4 mb-4 shadow-md"
-            style={{ boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)' }}
-          >
-            <p className="text-sm font-bold text-gray-700 mb-4">Order Summary</p>
-
-            {/* Service Category */}
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 overflow-hidden"
-                style={{ backgroundColor: `${themeColors.button}15`, border: `1px solid ${themeColors.button}25` }}>
-                {booking.categoryIcon ? (
-                  <img src={booking.categoryIcon} alt="" className="w-5 h-5 object-contain" />
-                ) : (
-                  <FiTool className="w-4 h-4" style={{ color: themeColors.button }} />
-                )}
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Service Category</p>
-                <p className="text-sm font-bold text-gray-800">{booking.serviceCategory || booking.serviceType || 'Service'}</p>
-              </div>
-            </div>
-
-            {/* Brand */}
-            {(() => {
-              const brandName = booking.brandName || booking.items?.[0]?.brandName;
-              const brandIcon = booking.brandIcon || booking.items?.[0]?.brandIcon;
-              if (!brandName) return null;
-              return (
-                <div className="flex items-center gap-3 mb-3 pt-3 border-t border-dashed border-gray-100">
-                  <div className="w-9 h-9 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 border border-slate-100 overflow-hidden">
-                    {brandIcon ? (
-                      <img src={brandIcon} alt={brandName} className="w-6 h-6 object-contain" />
-                    ) : (
-                      <span className="text-base font-black text-slate-400">{brandName.charAt(0)}</span>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Brand</p>
-                    <p className="text-sm font-bold text-gray-800">{brandName}</p>
-                  </div>
-                </div>
-              );
-            })()}
+          <div className="bg-white rounded-xl p-3 mb-2.5 shadow-xs">
+            <p className="text-xs font-bold text-gray-800 mb-2">Order Summary</p>
 
             {/* Service Cards */}
-            <div className="pt-3 border-t border-dashed border-gray-100 space-y-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Services</p>
+            <div className="space-y-1.5">
               {booking.items.map((item, index) => (
-                <div key={index} className="flex justify-between items-start bg-gray-50 rounded-xl p-3">
+                <div key={index} className="flex justify-between items-start bg-gray-50 rounded-lg p-2">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold px-1.5 py-0.5 rounded border"
-                        style={{ color: themeColors.button, backgroundColor: `${themeColors.button}10`, borderColor: `${themeColors.button}25` }}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#FCEBF3] text-[#720C3E]">
                         ×{item.quantity}
                       </span>
-                      <span className="text-sm font-semibold text-gray-900 truncate">{item.card?.title || 'Service Item'}</span>
+                      <span className="text-xs font-semibold text-gray-900 truncate">{item.card?.title || 'Service Item'}</span>
                     </div>
-                    {item.card?.subtitle && <p className="text-xs text-gray-400 mt-0.5 ml-8 line-clamp-1">{item.card.subtitle}</p>}
-                    {item.card?.duration && <p className="text-xs text-gray-400 mt-0.5 ml-8">⏱ {item.card.duration}</p>}
+                    {item.card?.subtitle && <p className="text-[10px] text-gray-400 mt-0.5 ml-6 line-clamp-1">{item.card.subtitle}</p>}
+                    {item.card?.duration && <p className="text-[10px] text-gray-400 mt-0.5 ml-6">⏱ {item.card.duration}</p>}
                   </div>
-                  <div className="text-right ml-3 shrink-0">
-                    <p className="text-sm font-bold text-gray-900">₹{((item.card?.price || 0) * (item.quantity || 1)).toLocaleString()}</p>
-                    {item.quantity > 1 && <p className="text-xs text-gray-400">₹{item.card?.price || 0} each</p>}
+                  <div className="text-right ml-2 shrink-0">
+                    <p className="text-xs font-bold text-gray-900">₹{((item.card?.price || 0) * (item.quantity || 1)).toLocaleString()}</p>
+                    {item.quantity > 1 && <p className="text-[10px] text-gray-400">₹{item.card?.price || 0} each</p>}
                   </div>
                 </div>
               ))}
               <div className="flex justify-between items-center pt-2 border-t border-gray-100 mt-1">
-                <p className="text-sm font-semibold text-gray-700">Total Base Price</p>
-                <p className="text-base font-bold" style={{ color: themeColors.button }}>₹{(booking.basePrice || 0).toFixed(2)}</p>
+                <p className="text-xs font-semibold text-gray-700">Total Base Price</p>
+                <p className="text-sm font-bold text-[#720C3E]">₹{(booking.basePrice || 0).toFixed(2)}</p>
               </div>
             </div>
           </div>
         )}
 
         {/* Time Slot */}
-        <div
-          className="bg-white rounded-xl p-4 mb-4 shadow-md"
-          style={{
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <FiClock className="w-5 h-5" style={{ color: themeColors.icon }} />
+        <div className="bg-white rounded-xl p-3 mb-2.5 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#FCEBF3] text-[#720C3E] shrink-0">
+              <FiClock className="w-4 h-4" />
+            </div>
             <div>
-              <p className="text-sm text-gray-600">Preferred Time</p>
-              <p className="font-semibold text-gray-800">{booking.timeSlot.date}</p>
-              <p className="text-sm text-gray-600">{booking.timeSlot.time}</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Preferred Time</p>
+              <p className="font-bold text-xs text-gray-800">{booking.timeSlot.date} • {booking.timeSlot.time}</p>
             </div>
           </div>
         </div>
 
-        {/* Payment Invoice Card - Dark Header Style (Exact Match with Billing) */}
-        <div className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 mb-6">
-          <div className="bg-gray-900 px-6 py-6 text-white text-center">
-            <p className="text-gray-400 text-xs font-medium uppercase tracking-widest mb-1">TOTAL INVOICE AMOUNT</p>
-            <h2 className="text-4xl font-black">₹{finalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
+        {/* Payment Invoice Card */}
+        <div className="bg-white rounded-xl overflow-hidden shadow-xs border border-gray-100 mb-2.5">
+          <div className="px-3.5 py-2.5 text-center" style={{ background: '#720C3E' }}>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/80 mb-0.5">TOTAL INVOICE AMOUNT</p>
+            <div className="text-2xl font-black tracking-tight text-white" style={{ color: '#FFFFFF' }}>
+              ₹{finalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
             {isPlanBenefit && (
-              <span className="inline-block mt-2 bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase">
+              <span className="inline-block mt-1 bg-amber-400/20 text-amber-200 border border-amber-400/30 px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wide uppercase">
                 Plan Benefit Applied
               </span>
             )}
           </div>
 
-          <div className="p-6 space-y-6 text-sm">
+          <div className="p-3 space-y-2.5 text-xs">
             {/* Services Section */}
             <div>
-              <h4 className="font-bold text-gray-900 flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
-                <span className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs"><FiTool /></span>
+              <h4 className="font-bold text-gray-900 flex items-center gap-1.5 mb-2 pb-1.5 border-b border-gray-100 text-xs">
+                <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px]"><FiTool /></span>
                 Services
               </h4>
-              <div className="space-y-2 pl-2">
+              <div className="space-y-1.5 pl-1 text-xs">
                 <div className="flex justify-between text-gray-600">
                   <span>Original Booking : {booking.serviceType || 'Service'}</span>
                   {isPlanBenefit ? (
-                    <div className="flex items-center gap-2">
-                      <span className="line-through text-gray-400 text-xs">₹{originalBase.toFixed(2)}</span>
-                      <span className="text-emerald-600 font-bold text-[10px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">FREE</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="line-through text-gray-400 text-[11px]">₹{originalBase.toFixed(2)}</span>
+                      <span className="text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100">FREE</span>
                     </div>
                   ) : (
                     <span className="font-medium text-gray-900">₹{originalBase.toFixed(2)}</span>
@@ -924,13 +859,13 @@ export default function BookingDetails() {
                 ))}
 
                 {/* Service GST */}
-                <div className="flex justify-between text-xs text-gray-500 border-t border-dashed border-gray-100 pt-1 mt-1">
+                <div className="flex justify-between text-[11px] text-gray-500 border-t border-dashed border-gray-100 pt-1 mt-1">
                   <span>Service GST (18%)</span>
                   <span className="font-mono">₹{(originalGST + extraServiceGST).toFixed(2)}</span>
                 </div>
 
                 {/* Service Subtotal */}
-                <div className="flex justify-between font-bold text-gray-800 pt-1">
+                <div className="flex justify-between font-bold text-gray-800 pt-0.5 text-xs">
                   <span>Total Service</span>
                   <span>₹{(originalBase + extraServiceBase + originalGST + extraServiceGST).toFixed(2)}</span>
                 </div>
@@ -940,11 +875,11 @@ export default function BookingDetails() {
             {/* Parts Section */}
             {(parts.length > 0 || customItems.length > 0) && (
               <div>
-                <h4 className="font-bold text-gray-900 flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
-                  <span className="w-6 h-6 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center text-xs"><FiPackage /></span>
+                <h4 className="font-bold text-gray-900 flex items-center gap-1.5 mb-2 pb-1.5 border-b border-gray-100 text-xs">
+                  <span className="w-5 h-5 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center text-[10px]"><FiPackage /></span>
                   Parts & Material
                 </h4>
-                <div className="space-y-2 pl-2">
+                <div className="space-y-1.5 pl-1 text-xs">
                   {parts.map((p, i) => (
                     <div key={`p-${i}`} className="flex justify-between text-gray-600">
                       <span>{p.name} x {p.quantity}</span>
@@ -962,13 +897,13 @@ export default function BookingDetails() {
                   ))}
 
                   {/* Parts GST */}
-                  <div className="flex justify-between text-xs text-gray-500 border-t border-dashed border-gray-100 pt-1 mt-1">
+                  <div className="flex justify-between text-[11px] text-gray-500 border-t border-dashed border-gray-100 pt-1 mt-1">
                     <span>Parts GST (18%)</span>
                     <span className="font-mono">₹{partsGST.toFixed(2)}</span>
                   </div>
 
                   {/* Parts Subtotal */}
-                  <div className="flex justify-between font-bold text-gray-800 pt-1">
+                  <div className="flex justify-between font-bold text-gray-800 pt-0.5 text-xs">
                     <span>Total Parts</span>
                     <span>₹{(partsBase + partsGST).toFixed(2)}</span>
                   </div>
@@ -979,11 +914,11 @@ export default function BookingDetails() {
             {/* Visiting Charges */}
             {(booking.visitingCharges > 0 || bill?.visitingCharges > 0) && (
               <div>
-                <h4 className="font-bold text-gray-900 flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
-                  <span className="w-6 h-6 rounded-full bg-gray-50 text-gray-600 flex items-center justify-center text-xs"><FiClock /></span>
+                <h4 className="font-bold text-gray-900 flex items-center gap-1.5 mb-1.5 pb-1 border-b border-gray-100 text-xs">
+                  <span className="w-5 h-5 rounded-full bg-gray-50 text-gray-600 flex items-center justify-center text-[10px]"><FiClock /></span>
                   Visiting Charges
                 </h4>
-                <div className="flex justify-between pl-2 font-bold text-gray-800">
+                <div className="flex justify-between pl-1 font-bold text-gray-800 text-xs">
                   <span>Visiting Price</span>
                   <span>₹{(bill?.visitingCharges || booking.visitingCharges || 0).toFixed(2)}</span>
                 </div>
@@ -992,12 +927,12 @@ export default function BookingDetails() {
 
             {/* Transport Charges */}
             {bill?.transportCharges > 0 && (
-              <div className="mt-4">
-                <h4 className="font-bold text-gray-900 flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
-                  <span className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs"><FiPackage /></span>
+              <div className="mt-2">
+                <h4 className="font-bold text-gray-900 flex items-center gap-1.5 mb-1.5 pb-1 border-b border-gray-100 text-xs">
+                  <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px]"><FiPackage /></span>
                   Transport Charges
                 </h4>
-                <div className="flex justify-between pl-2 font-bold text-gray-800">
+                <div className="flex justify-between pl-1 font-bold text-gray-800 text-xs">
                   <span>Transport/Travel</span>
                   <span>₹{(bill.transportCharges).toFixed(2)}</span>
                 </div>
@@ -1007,8 +942,8 @@ export default function BookingDetails() {
 
           {/* Vendor Earnings Footer - ONLY SHOW WHEN COMPLETED */}
           {(booking.status === 'completed' || booking.status === 'work_done' || booking.cashCollected) ? (
-            <div className="bg-emerald-50 px-6 py-4 border-t border-emerald-100">
-              <div className="space-y-2 mb-3 text-sm">
+            <div className="bg-emerald-50 px-4 py-3 border-t border-emerald-100">
+              <div className="space-y-1.5 mb-2 text-xs">
                 <div className="flex justify-between items-center text-emerald-700">
                   <span>Service Earnings ({bill?.payoutConfig?.serviceSplitPercentage || 70}%)</span>
                   <span className="font-bold">₹{(bill?.vendorServiceEarning || (booking.vendorEarnings || 0)).toFixed(2)}</span>
@@ -1020,25 +955,25 @@ export default function BookingDetails() {
                   </div>
                 )}
               </div>
-              <div className="flex justify-between items-center pt-2 border-t border-emerald-200/50">
-                <span className="text-emerald-800 font-bold text-xs uppercase tracking-wider">
+              <div className="flex justify-between items-center pt-1.5 border-t border-emerald-200/50">
+                <span className="text-emerald-800 font-bold text-[10px] uppercase tracking-wider">
                   {(booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid' || booking?.cashCollected)
                     ? 'Total Net Earnings'
                     : 'Estimated Net Earnings'}
                 </span>
-                <span className="text-emerald-700 font-black text-xl">
+                <span className="text-emerald-700 font-black text-base">
                   ₹{(bill?.vendorTotalEarning || booking.vendorEarnings || 0).toFixed(2)}
                 </span>
               </div>
 
-              <div className="flex justify-between text-emerald-600/70 text-[10px] mt-2">
+              <div className="flex justify-between text-emerald-600/70 text-[9px] mt-1">
                 <span>Platform Commission</span>
                 <span>-₹{(booking.adminCommission || booking.platformCommission || 0).toFixed(2)}</span>
               </div>
             </div>
           ) : (
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-100/50 text-center">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center justify-center gap-2">
+            <div className="bg-gray-50 px-3 py-2 border-t border-gray-100/50 text-center">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-center gap-1.5">
                 <FiAlertCircle className="w-3 h-3" />
                 Net Earnings will be visible once completed
               </p>
@@ -1443,71 +1378,69 @@ export default function BookingDetails() {
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="space-y-3">
+        {/* Compact Action Buttons */}
+        <div className="flex items-center gap-2 mt-3">
           <button
+            type="button"
             onClick={handleViewTimeline}
-            className="w-full py-4 rounded-xl font-semibold text-white flex items-center justify-center gap-2 transition-all active:scale-95"
+            className="flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs border border-[#720C3E]/20"
             style={{
-              background: themeColors.button,
-              boxShadow: `0 4px 12px ${themeColors.button}40`,
+              background: '#FCEBF3',
+              color: '#720C3E',
             }}
           >
-            View Timeline
-            <FiArrowRight className="w-5 h-5" />
+            <span>Timeline</span>
+            <FiArrowRight className="w-3.5 h-3.5" />
           </button>
 
-          {/* Vendor Operational Buttons */}
-          <div className="space-y-3 pt-2">
-            {(booking.status === 'confirmed' || booking.status === 'assigned') && (
-              <button
-                onClick={handleStartJourney}
-                className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
-                style={{
-                  background: 'linear-gradient(135deg, #10B981, #059669)',
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
-                }}
-              >
-                <FiNavigation className="w-5 h-5" />
-                Start Journey
-              </button>
-            )}
+          {(booking.status === 'confirmed' || booking.status === 'assigned') && (
+            <button
+              type="button"
+              onClick={handleStartJourney}
+              className="flex-1 py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
+              style={{
+                background: 'linear-gradient(135deg, #10B981, #059669)',
+              }}
+            >
+              <FiNavigation className="w-3.5 h-3.5" />
+              <span>Start Journey</span>
+            </button>
+          )}
 
-            {booking.status === 'journey_started' && (
-              <button
-                onClick={async () => {
-                  try {
-                    setIsVisitModalOpen(true);
-                    await vendorReached(id);
-                  } catch (err) {
-                    console.error('Failed to notify reached:', err);
-                  }
-                }}
-                className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
-                style={{
-                  background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
-                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
-                }}
-              >
-                <FiMapPin className="w-5 h-5" />
-                Arrived (Arrived at customer's site)
-              </button>
-            )}
+          {booking.status === 'journey_started' && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  setIsVisitModalOpen(true);
+                  await vendorReached(id);
+                } catch (err) {
+                  console.error('Failed to notify reached:', err);
+                }
+              }}
+              className="flex-1 py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
+              style={{
+                background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
+              }}
+            >
+              <FiMapPin className="w-3.5 h-3.5" />
+              <span>Arrived</span>
+            </button>
+          )}
 
-            {(booking.status === 'visited' || booking.status === 'in_progress') && (
-              <button
-                onClick={() => setIsWorkDoneModalOpen(true)}
-                className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
-                style={{
-                  background: 'linear-gradient(135deg, #10B981, #059669)',
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)',
-                }}
-              >
-                <FiCheckCircle className="w-5 h-5" />
-                Work Done
-              </button>
-            )}
-          </div>
+          {(booking.status === 'visited' || booking.status === 'in_progress') && (
+            <button
+              type="button"
+              onClick={() => setIsWorkDoneModalOpen(true)}
+              className="flex-1 py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
+              style={{
+                background: 'linear-gradient(135deg, #10B981, #059669)',
+              }}
+            >
+              <FiCheckCircle className="w-3.5 h-3.5" />
+              <span>Work Done</span>
+            </button>
+          )}
         </div>
       </main>
 
@@ -1583,10 +1516,6 @@ export default function BookingDetails() {
         message={confirmDialog.message}
         type={confirmDialog.type}
       />
-
-
-
-      <BottomNav />
     </div>
   );
 }
