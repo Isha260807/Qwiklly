@@ -127,10 +127,10 @@ const Account = () => {
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center justify-between p-3 hover:bg-gray-50/80 active:bg-gray-100 transition-colors text-left group cursor-pointer"
+      className="w-full flex items-center justify-between p-3 hover:bg-[#FCEBF3]/60 active:bg-[#FCEBF3] transition-colors text-left group cursor-pointer"
     >
       <div className="flex items-center gap-3">
-        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${color === 'text-red-500' ? 'bg-red-50 text-red-500' : 'bg-gray-50 text-gray-600'}`}>
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${color === 'text-red-500' ? 'bg-red-50 text-red-500' : 'bg-[#FFF7FA] text-[#720C3E] group-hover:bg-[#FCEBF3]'}`}>
           <Icon className="w-4 h-4" />
         </div>
         <span className={`text-xs font-semibold ${color}`}>{label}</span>
@@ -141,7 +141,7 @@ const Account = () => {
             {badge}
           </span>
         )}
-        <FiChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
+        <FiChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#720C3E] transition-colors" />
       </div>
     </button>
   );
@@ -155,31 +155,30 @@ const Account = () => {
   }
 
   return (
-    <div className="min-h-screen pb-24 relative bg-[#FAFAFA]">
-      {/* Background */}
-      <div className="fixed inset-0 z-0 pointer-events-none bg-[#FAFAFA]">
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `radial-gradient(#000000 1px, transparent 1px)`,
-            backgroundSize: '24px 24px'
-          }}
-        />
-      </div>
+    <div className="min-h-screen pb-24 relative bg-transparent">
+      {/* Background provided globally by UserRoutes */}
 
       <div className="relative z-10 max-w-lg mx-auto">
-        {/* Compact Header */}
-        <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-gray-100">
+        {/* Theme Gradient Header */}
+        <header 
+          className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+          style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+        >
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
-              className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm border border-gray-100 active:scale-95 transition-transform"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
+              title="Go Back"
             >
-              <FiArrowLeft className="w-5 h-5 text-gray-800" />
+              <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </button>
-            <h1 className="text-base font-bold text-gray-900 tracking-tight">Account</h1>
+            <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">Account</h1>
           </div>
-          <NotificationBell />
+          <NotificationBell 
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm relative shrink-0 cursor-pointer"
+            iconClassName="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2]"
+            dotClassName="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#FF2D55] rounded-full ring-1 ring-white/90 shadow-xs"
+          />
         </header>
 
         <main className="px-4 py-3 space-y-3">
@@ -335,15 +334,15 @@ const Account = () => {
               <button
                 type="button"
                 onClick={() => navigate('/user/about-homestr')}
-                className="w-full flex items-center justify-between p-3 hover:bg-gray-50/80 active:bg-gray-100 transition-colors text-left group cursor-pointer"
+                className="w-full flex items-center justify-between p-3 hover:bg-[#FCEBF3]/60 active:bg-[#FCEBF3] transition-colors text-left group cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-xl bg-[#FFF7FA] text-[#720C3E] group-hover:bg-[#FCEBF3] flex items-center justify-center transition-colors">
                     <Logo className="w-5 h-5" />
                   </div>
                   <span className="text-xs font-semibold text-gray-800">About Qwiklly</span>
                 </div>
-                <FiChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                <FiChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#720C3E] transition-colors" />
               </button>
             </div>
           </div>

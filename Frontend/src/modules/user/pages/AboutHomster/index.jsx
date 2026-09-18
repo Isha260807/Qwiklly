@@ -71,18 +71,22 @@ const AboutHomestr = () => {
       initial="hidden"
       animate="visible"
       variants={containerVariants}
-      className="min-h-screen bg-[#FAFAFA] pb-12"
+      className="min-h-screen bg-transparent pb-12"
     >
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-gray-100">
+      {/* Theme Gradient Header */}
+      <header 
+        className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+        style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm border border-gray-100 active:scale-95 transition-transform"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
+            title="Go Back"
           >
-            <FiArrowLeft className="w-5 h-5 text-gray-800" />
+            <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </button>
-          <h1 className="text-base font-bold text-gray-900 tracking-tight">About Qwiklly</h1>
+          <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">About Qwiklly</h1>
         </div>
       </header>
 

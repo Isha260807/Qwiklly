@@ -1121,20 +1121,21 @@ const Checkout = () => {
 
   if (cartItems.length === 0 && currentStep === 'details' && !searchingVendors && !showVendorModal) {
     return (
-      <div className="min-h-screen bg-white pb-32">
-        <header className="bg-white">
-          <div className="px-4 pt-4 pb-3">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleBack}
-                className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <FiArrowLeft className="w-6 h-6 text-black" />
-              </button>
-              <h1 className="text-xl font-bold text-black">Your cart</h1>
-            </div>
+      <div className="min-h-screen bg-transparent pb-32">
+        <header 
+          className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+          style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+        >
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleBack}
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
+              title="Go Back"
+            >
+              <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            </button>
+            <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">Your cart</h1>
           </div>
-          <div className="border-b border-gray-200"></div>
         </header>
         <main className="px-4 py-4">
           <div className="flex flex-col items-center justify-center py-20">
@@ -1148,23 +1149,24 @@ const Checkout = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white pb-80">
-      {/* Header */}
-      <header className="bg-white">
-        <div className="px-4 pt-4 pb-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleBack}
-              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <FiArrowLeft className="w-6 h-6 text-black" />
-            </button>
-            <h1 className="text-xl font-bold text-black">
-              {category ? `${category} Checkout` : 'Your cart'}
-            </h1>
-          </div>
+    <div className="min-h-screen bg-transparent pb-80">
+      {/* Theme Gradient Header */}
+      <header 
+        className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+        style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+      >
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleBack}
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
+            title="Go Back"
+          >
+            <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+          </button>
+          <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
+            {category ? `${category} Checkout` : 'Checkout'}
+          </h1>
         </div>
-        <div className="border-b border-gray-200"></div>
       </header>
 
       <main className="px-4 py-4">

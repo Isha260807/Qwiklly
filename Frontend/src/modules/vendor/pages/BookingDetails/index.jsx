@@ -537,10 +537,12 @@ export default function BookingDetails() {
 
 
 
-  const handleCompleteWork = async (photos) => {
+  const handleCompleteWork = async (data = {}) => {
     try {
       setActionLoading(true);
-      await completeSelfJob(id, { workPhotos: photos || [] });
+      const photos = Array.isArray(data) ? data : (data.photos || []);
+      const notes = data.notes || '';
+      await completeSelfJob(id, { workPhotos: photos, workDoneDetails: { notes } });
       toast.success('Work marked done');
       setIsWorkDoneModalOpen(false);
       window.location.reload();

@@ -240,14 +240,14 @@ const ServiceDetails = () => {
   const bannerImage = service.heroBanner?.imageUrl || service.iconUrl || service.image || service.imageUrl;
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 pb-28 font-sans antialiased">
+    <div className="min-h-screen bg-transparent text-slate-900 pb-28 font-sans antialiased">
       {/* Top Banner / Hero Image Section */}
-      <div className="relative w-full bg-[#F5F6F8] border-b border-slate-200/80 overflow-hidden">
+      <div className="relative w-full bg-white/40 border-b border-[#E8D9DF]/60 overflow-hidden">
         {/* Top Floating Controls */}
         <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-20">
           <button
             onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-full bg-white/95 backdrop-blur-md shadow-xs border border-slate-200/80 text-slate-800 flex items-center justify-center hover:bg-white transition-all cursor-pointer"
+            className="w-9 h-9 rounded-full bg-white/95 backdrop-blur-md shadow-xs border border-slate-200/80 text-slate-800 flex items-center justify-center hover:bg-white active:scale-95 transition-all cursor-pointer"
             aria-label="Go Back"
           >
             <FiArrowLeft className="text-lg" />
@@ -309,11 +309,11 @@ const ServiceDetails = () => {
               </div>
             </div>
 
-            {/* Outlined / Soft Green BOOK Button */}
+            {/* Brand Theme BOOK Button */}
             <button
               onClick={handleBookNow}
               disabled={addingToCart}
-              className="px-5 py-2 bg-[#E6F4EA] hover:bg-[#d5edd9] text-[#137333] border border-[#137333]/30 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-2xs cursor-pointer disabled:opacity-50 shrink-0"
+              className="px-5 py-2 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#4D082A] hover:to-[#720C3E] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-sm shadow-[#720C3E]/20 cursor-pointer disabled:opacity-50 shrink-0"
             >
               {addingToCart ? 'Booking...' : 'BOOK'}
             </button>
@@ -545,7 +545,7 @@ const ServiceDetails = () => {
           <button
             onClick={handleBookNow}
             disabled={addingToCart}
-            className="flex-1 max-w-xs py-3 px-6 bg-[#008A45] hover:bg-[#00753b] text-white font-extrabold text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50 text-center"
+            className="flex-1 max-w-xs py-3 px-6 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#4D082A] hover:to-[#720C3E] text-white font-extrabold text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-md shadow-[#720C3E]/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50 text-center"
           >
             {addingToCart ? 'Booking...' : 'Book Service Now'}
           </button>

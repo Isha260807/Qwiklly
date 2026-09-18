@@ -104,8 +104,8 @@ const RatingModal = ({ isOpen, onClose, onSubmit, bookingName, workerName }) => 
 
               {/* Review Textarea */}
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-gray-700 font-bold">
-                  <FiMessageSquare className="w-5 h-5 text-teal-600" />
+                <div className="flex items-center gap-2 text-[#24151D] font-bold">
+                  <FiMessageSquare className="w-5 h-5 text-[#720C3E]" />
                   <span>Share your feedback</span>
                 </div>
                 <div className="relative group">
@@ -113,10 +113,10 @@ const RatingModal = ({ isOpen, onClose, onSubmit, bookingName, workerName }) => 
                     value={review}
                     onChange={(e) => setReview(e.target.value)}
                     placeholder="Tell us what you liked or what could be better..."
-                    className="w-full bg-white border-2 border-gray-100 focus:border-teal-500 rounded-2xl p-4 text-sm min-h-[120px] transition-all outline-none resize-none placeholder:text-gray-400"
+                    className="w-full bg-[#FFF7FA] border-2 border-[#E8D9DF] focus:border-[#720C3E] rounded-2xl p-4 text-sm min-h-[120px] transition-all outline-none resize-none placeholder:text-[#6F5A64]"
                     disabled={isSubmitting}
                   />
-                  <div className="absolute bottom-3 right-3 text-[10px] font-bold text-gray-300 uppercase letter-spacing-1">
+                  <div className="absolute bottom-3 right-3 text-[10px] font-bold text-[#6F5A64] uppercase letter-spacing-1">
                     {review.length} characters
                   </div>
                 </div>
@@ -145,8 +145,8 @@ const RatingModal = ({ isOpen, onClose, onSubmit, bookingName, workerName }) => 
           </div>
 
           {/* Decorative Background */}
-          <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-teal-50 rounded-full blur-2xl opacity-50 pointer-events-none" />
-          <div className="absolute -top-12 -left-12 w-32 h-32 bg-yellow-50 rounded-full blur-2xl opacity-50 pointer-events-none" />
+          <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-[#FFF7FA] rounded-full blur-2xl opacity-50 pointer-events-none" />
+          <div className="absolute -top-12 -left-12 w-32 h-32 bg-[#FCEBF3] rounded-full blur-2xl opacity-50 pointer-events-none" />
         </motion.div>
       </div>
     </AnimatePresence>

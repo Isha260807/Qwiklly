@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiBell } from 'react-icons/fi';
 import api from '../../../../services/api';
 
-const NotificationBell = ({ notificationCount }) => {
+const NotificationBell = ({ notificationCount, className, iconClassName, dotClassName }) => {
   const navigate = useNavigate();
   const [count, setCount] = useState(notificationCount || 0);
 
@@ -42,14 +42,14 @@ const NotificationBell = ({ notificationCount }) => {
         e.stopPropagation();
         navigate('/user/notifications');
       }}
-      className="w-9 h-9 rounded-full bg-white border border-gray-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex items-center justify-center relative active:scale-95 hover:bg-gray-50 transition-all shrink-0 cursor-pointer"
+      className={className || "w-9 h-9 rounded-full bg-white border border-gray-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex items-center justify-center relative active:scale-95 hover:bg-gray-50 transition-all shrink-0 cursor-pointer"}
       title="Notifications"
     >
-      <FiBell className="w-[18px] h-[18px] text-[#1E293B] stroke-[2.2]" />
+      <FiBell className={iconClassName || "w-[18px] h-[18px] text-[#1E293B] stroke-[2.2]"} />
 
-      {/* Unread indicator dot/badge */}
+      {/* Unread indicator dot/badge - compact and subtle */}
       {count > 0 && (
-        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
+        <span className={dotClassName || "absolute top-2 right-2 w-1.5 h-1.5 bg-[#FF3366] rounded-full ring-1 ring-white shadow-xs"} />
       )}
     </button>
   );

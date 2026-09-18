@@ -26,6 +26,12 @@
   --color-brand-dark: #4D082A;
 }
 
+body, html {
+  background-color: #FFF7FA;
+  color: #24151D;
+  min-height: 100%;
+}
+
 /* Slide up animation for modal */
 @keyframes slide-up {
   from {

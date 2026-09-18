@@ -27,31 +27,31 @@ const Rewards = () => {
     window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(url)}&app_id=your-app-id`, '_blank');
   };
   return (
-    <div
-      className="min-h-screen bg-white"
-      style={{ background: themeColors.backgroundGradient }}
-    >
-      {/* Header */}
-      <div className="bg-white sticky top-0 z-50 border-b border-gray-100 px-4 py-3 flex items-center justify-between shadow-sm">
+    <div className="min-h-screen bg-transparent pb-12">
+      {/* Theme Gradient Header */}
+      <header 
+        className="sticky top-0 z-50 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+        style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="p-1.5 hover:bg-gray-50 rounded-full transition-colors"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
+            title="Go Back"
           >
-            <FiArrowLeft className="w-5 h-5 text-gray-800" />
+            <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </button>
           <div className="flex items-center gap-2">
-            <FiGift className="w-5 h-5" style={{ color: '#00A6A6' }} />
-            <h1 className="text-lg font-bold text-gray-900">Refer & Earn</h1>
+            <FiGift className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">Refer & Earn</h1>
           </div>
         </div>
-        <button
-          onClick={() => navigate('/user/notifications')}
-          className="p-2 hover:bg-gray-50 rounded-full transition-colors"
-        >
-          <FiBell className="w-6 h-6 text-gray-700" />
-        </button>
-      </div>
+        <NotificationBell 
+          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm relative shrink-0 cursor-pointer"
+          iconClassName="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2]"
+          dotClassName="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#FF2D55] rounded-full ring-1 ring-white/90 shadow-xs"
+        />
+      </header>
 
       <main>
         {/* Main Referral Section */}

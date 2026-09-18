@@ -67,17 +67,25 @@ const Wallet = () => {
 
       <div className="relative z-10">
         {/* Compact Header */}
-        <header className="sticky top-0 z-40 bg-white border-b border-gray-100 px-3.5 py-2.5 flex items-center justify-between">
+        <header 
+          className="sticky top-0 z-40 text-white shadow-md select-none px-3.5 py-2.5 flex items-center justify-between"
+          style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+        >
           <div className="flex items-center gap-2.5">
             <button
               onClick={() => navigate(-1)}
-              className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors active:scale-95"
+              className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
+              title="Go Back"
             >
-              <FiArrowLeft className="w-4 h-4 text-gray-800" />
+              <FiArrowLeft className="w-4 h-4 text-white" />
             </button>
-            <h1 className="text-sm font-bold text-gray-900 tracking-tight">Wallet</h1>
+            <h1 className="text-base font-bold text-white tracking-tight">Wallet</h1>
           </div>
-          <NotificationBell />
+          <NotificationBell 
+            className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm relative shrink-0 cursor-pointer"
+            iconClassName="w-4 h-4 text-white stroke-[2]"
+            dotClassName="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#FF2D55] rounded-full ring-1 ring-white/90 shadow-xs"
+          />
         </header>
 
         <main className="px-3.5 py-3 max-w-lg mx-auto">

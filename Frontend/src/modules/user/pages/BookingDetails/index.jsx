@@ -599,18 +599,22 @@ const BookingDetails = () => {
       </div>
 
       <div className="relative z-10">
-        {/* Modern Glassmorphism Header with Compact Status Badge */}
-        <header className="sticky top-0 z-40 backdrop-blur-xl bg-white/70 border-b border-black/[0.04] px-4 py-3 flex items-center justify-between">
+        {/* Theme Gradient Header */}
+        <header 
+          className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+          style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+        >
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/user/my-bookings')}
-              className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm border border-gray-100 active:scale-95 transition-transform"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
+              title="Go Back"
             >
-              <FiArrowLeft className="w-5 h-5 text-gray-800" />
+              <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </button>
             <div>
-              <h1 className="text-base font-bold text-gray-900 tracking-tight">Booking Details</h1>
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+              <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">Booking Details</h1>
+              <p className="text-[10px] text-pink-100 font-medium uppercase tracking-wider">
                 ID: <span className="font-mono">{booking.bookingNumber || booking._id?.slice(-8).toUpperCase()}</span>
               </p>
             </div>
@@ -619,7 +623,11 @@ const BookingDetails = () => {
             <div className={`px-2 py-0.5 rounded-md flex items-center gap-1 border text-[9px] font-black uppercase tracking-wider ${getStatusColor(booking.status)}`}>
               <span>{getStatusLabel(booking.status)}</span>
             </div>
-            <NotificationBell />
+            <NotificationBell 
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm relative shrink-0 cursor-pointer"
+              iconClassName="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2]"
+              dotClassName="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#FF2D55] rounded-full ring-1 ring-white/90 shadow-xs"
+            />
           </div>
         </header>
 

@@ -83,6 +83,7 @@ const ServiceDetails = lazyLoad(() => import('../pages/ServiceDetails'));
 
 // Loading fallback component
 import LogoLoader from '../../../components/common/LogoLoader';
+import { themeColors } from '../../../theme';
 
 const LoadingFallback = () => (
   <LogoLoader />
@@ -115,8 +116,33 @@ const UserRoutes = () => {
 
   return (
     <ErrorBoundary>
+      {/* Global Brand Mesh Gradient Background across all User Pages */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `
+              radial-gradient(at 0% 0%, ${themeColors?.brand?.teal || '#720C3E'}25 0%, transparent 70%),
+              radial-gradient(at 100% 0%, ${themeColors?.brand?.yellow || '#E8A0B8'}20 0%, transparent 70%),
+              radial-gradient(at 100% 100%, ${themeColors?.brand?.orange || '#9A2459'}15 0%, transparent 75%),
+              radial-gradient(at 0% 100%, ${themeColors?.brand?.teal || '#720C3E'}10 0%, transparent 70%),
+              radial-gradient(at 50% 50%, ${themeColors?.brand?.teal || '#720C3E'}03 0%, transparent 100%),
+              #FFFFFF
+            `
+          }}
+        />
+        {/* Elegant Dot Grid Pattern */}
+        <div
+          className="absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage: `radial-gradient(${themeColors?.brand?.teal || '#720C3E'} 0.8px, transparent 0.8px)`,
+            backgroundSize: '32px 32px'
+          }}
+        />
+      </div>
+
       {/* Main content area - leaves space for bottom nav when needed */}
-      <div className={shouldShowBottomNav ? "pb-24" : ""}>
+      <div className={`relative z-10 ${shouldShowBottomNav ? "pb-24" : ""}`}>
         <Suspense fallback={<LoadingFallback />}>
           <PageTransition>
             <Routes>

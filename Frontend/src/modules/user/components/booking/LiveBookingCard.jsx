@@ -21,20 +21,20 @@ const LiveBookingCard = ({ hasBottomNav }) => {
   const getStatusInfo = (status) => {
     switch (status?.toUpperCase()) {
       case 'ASSIGNED':
-        return { label: 'Partner Assigned', icon: FiCheckCircle, color: 'bg-blue-500', sub: 'Partner will start journey soon' };
+        return { label: 'Partner Assigned', icon: FiCheckCircle, sub: 'Partner will start journey soon' };
       case 'STARTED':
       case 'JOURNEY_STARTED':
-        return { label: 'Partner on the Way', icon: FiNavigation, color: 'bg-orange-500', sub: 'Track location live', pulse: true };
+        return { label: 'Partner on the Way', icon: FiNavigation, sub: 'Track live location', pulse: true };
       case 'VISITED':
-        return { label: 'Reached & Started Work', icon: FiMapPin, color: 'bg-green-500', sub: 'At your location • Work Started' };
+        return { label: 'Partner Reached', icon: FiMapPin, sub: 'At your location • Work Started' };
       case 'IN_PROGRESS':
-        return { label: 'Reached & Working', icon: FiTool, color: 'bg-purple-500', sub: 'Work successfully started' };
+        return { label: 'Work in Progress', icon: FiTool, sub: 'Service is underway' };
       case 'WORK_DONE':
-        return { label: 'Work Completed', icon: FiCheckCircle, color: 'bg-green-600', sub: 'Review payment details' };
+        return { label: 'Work Completed', icon: FiCheckCircle, sub: 'Review & pay securely' };
       // New Finding Status
       case 'REQUESTED':
       case 'SEARCHING':
-        return { label: 'Finding Nearby Vendors', icon: FiClock, color: 'bg-teal-500', sub: 'Scanning within 10km...', pulse: true };
+        return { label: 'Finding Partner', icon: FiClock, sub: 'Scanning nearby partners...', pulse: true };
       default:
         return null;
     }
@@ -103,7 +103,7 @@ const LiveBookingCard = ({ hasBottomNav }) => {
       if (response.success) {
         toast.success('Thank you for your rating!', {
           icon: '🌟',
-          style: { borderRadius: '15px', background: '#333', color: '#fff' }
+          style: { borderRadius: '15px', background: '#720C3E', color: '#fff' }
         });
         setShowRatingModal(false);
         fetchActiveBooking(); // Refresh to hide card or update state
@@ -143,10 +143,10 @@ const LiveBookingCard = ({ hasBottomNav }) => {
     <AnimatePresence>
       <motion.div
         key="live-booking-card"
-        initial={{ y: 100, opacity: 0 }}
+        initial={{ y: 80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 100, opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+        exit={{ y: 80, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 24 }}
         onClick={() => {
           const status = activeBooking.status?.toUpperCase();
           // If worker is on the way, go to tracking map
@@ -158,44 +158,44 @@ const LiveBookingCard = ({ hasBottomNav }) => {
             navigate(`/user/booking/${activeBooking._id || activeBooking.id}`);
           }
         }}
-        className={`fixed ${hasBottomNav ? 'bottom-24' : 'bottom-6'} left-4 right-4 z-50`}
+        className={`fixed ${hasBottomNav ? 'bottom-[4.5rem] sm:bottom-20' : 'bottom-4'} left-3 right-3 sm:left-4 sm:right-4 max-w-md mx-auto z-50`}
       >
-        <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 flex items-center gap-4 relative overflow-hidden cursor-pointer active:scale-95 transition-transform group">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_6px_25px_rgba(114,12,62,0.12)] border border-[#E8D9DF] p-2.5 sm:p-3 flex items-center gap-2.5 sm:gap-3 relative overflow-hidden cursor-pointer active:scale-[0.98] transition-transform group">
 
           {/* Close Button */}
           <button
             onClick={handleDismiss}
-            className="absolute top-2 right-2 p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 hover:text-gray-700 z-20 pointer-events-auto transition-colors"
+            className="absolute top-1.5 right-1.5 p-1 bg-[#FFF7FA] hover:bg-[#FCEBF3] text-[#6F5A64] hover:text-[#720C3E] rounded-full z-20 pointer-events-auto transition-colors border border-[#E8D9DF]/40"
             title="Dismiss"
           >
-            <FiX className="w-3.5 h-3.5" />
+            <FiX className="w-3 h-3" />
           </button>
 
           {/* Progress Bar Background */}
-          <div className="absolute bottom-0 left-0 h-1 bg-gray-100 w-full">
+          <div className="absolute bottom-0 left-0 h-0.5 bg-[#FCEBF3] w-full overflow-hidden">
             <motion.div
-              className={`h-full ${statusInfo.color}`}
+              className="h-full bg-gradient-to-r from-[#720C3E] via-[#9A2459] to-[#E8A0B8]"
               initial={{ width: "0%" }}
               animate={{ width: "100%" }}
               transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
             />
           </div>
 
-          {/* Icon Box */}
-          <div className={`w-12 h-12 rounded-full ${statusInfo.color} flex items-center justify-center shrink-0 relative`}>
+          {/* Compact Icon Box */}
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#720C3E] to-[#9A2459] text-white flex items-center justify-center shrink-0 relative shadow-sm shadow-[#720C3E]/25">
             {statusInfo.pulse && (
-              <div className={`absolute inset-0 rounded-full ${statusInfo.color} animate-ping opacity-50`}></div>
+              <div className="absolute inset-0 rounded-xl bg-[#720C3E] animate-ping opacity-40"></div>
             )}
-            <Icon className="text-white w-6 h-6 relative z-10" />
+            <Icon className="text-white w-4 h-4 sm:w-5 sm:h-5 relative z-10" />
           </div>
 
           {/* Text Info */}
-          <div className="flex-1 min-w-0">
-            <h4 className="font-bold text-gray-900 text-sm truncate">
+          <div className="flex-1 min-w-0 pr-4 sm:pr-2">
+            <h4 className="font-bold text-[#24151D] text-xs sm:text-sm truncate leading-tight">
               {statusInfo.label}
             </h4>
-            <p className="text-xs text-gray-500 truncate">
-              {statusInfo.sub} • {activeBooking.serviceName}
+            <p className="text-[11px] text-[#6F5A64] truncate leading-tight mt-0.5">
+              {statusInfo.sub} • <span className="text-[#24151D] font-medium">{activeBooking.serviceName}</span>
             </p>
           </div>
 
@@ -206,13 +206,13 @@ const LiveBookingCard = ({ hasBottomNav }) => {
                 e.stopPropagation();
                 navigate(`/user/booking/${activeBooking._id || activeBooking.id}`);
               }}
-              className="px-4 py-2 bg-teal-600 text-white text-xs font-black rounded-xl shadow-lg shadow-teal-100 active:scale-95 transition-all"
+              className="px-3 py-1.5 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#4D082A] hover:to-[#720C3E] text-white text-[11px] font-bold rounded-lg shadow-sm shadow-[#720C3E]/25 active:scale-95 transition-all shrink-0 whitespace-nowrap uppercase tracking-wider"
             >
-              PAY NOW
+              Pay Now
             </button>
           ) : (
-            <div className="bg-gray-50 p-2 rounded-full">
-              <FiChevronRight className="text-gray-400 w-5 h-5" />
+            <div className="w-7 h-7 rounded-lg bg-[#FFF7FA] border border-[#E8D9DF]/60 flex items-center justify-center shrink-0 text-[#720C3E] group-hover:bg-[#FCEBF3] transition-colors">
+              <FiChevronRight className="w-4 h-4 text-[#720C3E]" />
             </div>
           )}
 

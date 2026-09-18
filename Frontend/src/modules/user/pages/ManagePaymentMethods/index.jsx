@@ -136,19 +136,21 @@ const ManagePaymentMethods = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-30">
-        <div className="px-4 pt-4 pb-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <FiArrowLeft className="w-5 h-5 text-black" />
-            </button>
-            <h1 className="text-xl font-bold text-black">Manage payment methods</h1>
-          </div>
+    <div className="min-h-screen bg-transparent pb-20">
+      {/* Theme Gradient Header */}
+      <header 
+        className="sticky top-0 z-30 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+        style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+      >
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
+            title="Go Back"
+          >
+            <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+          </button>
+          <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">Payment Methods</h1>
         </div>
       </header>
 

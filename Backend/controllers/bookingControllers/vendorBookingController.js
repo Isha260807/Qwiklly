@@ -917,16 +917,44 @@ const completeSelfJob = async (req, res) => {
     const booking = await Booking.findOne({ _id: id, vendorId });
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
-    // Status guard
-    if (booking.status !== BOOKING_STATUS.VISITED && booking.status !== BOOKING_STATUS.IN_PROGRESS) {
-      return res.status(400).json({ success: false, message: 'Cannot complete from current status' });
+    // Status guard (allow visited, in_progress, and journey_started)
+    const allowedStatuses = [
+      BOOKING_STATUS.VISITED,
+      BOOKING_STATUS.IN_PROGRESS,
+      BOOKING_STATUS.JOURNEY_STARTED,
+      'visited',
+      'in_progress',
+      'journey_started'
+    ];
+    if (!allowedStatuses.includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot complete job from current status: ${booking.status}` });
     }
 
-    // Prevent duplicate bills
+    // Prevent duplicate bills & gracefully handle already generated bills
     const VendorBill = require('../../models/VendorBill');
     const existingBill = await VendorBill.findOne({ bookingId: booking._id });
     if (existingBill) {
-      return res.status(400).json({ success: false, message: 'Bill already generated for this booking' });
+      booking.status = BOOKING_STATUS.WORK_DONE;
+      booking.finalAmount = existingBill.grandTotal;
+      booking.vendorBillId = existingBill._id;
+      const photoList = Array.isArray(workPhotos) ? workPhotos : (workPhotos?.photos || []);
+      if (photoList.length > 0) booking.workPhotos = photoList;
+      await booking.save();
+
+      return res.status(200).json({
+        success: true,
+        message: 'Work marked as done',
+        data: {
+          booking,
+          bill: {
+            id: existingBill._id,
+            grandTotal: existingBill.grandTotal,
+            totalGST: existingBill.totalGST,
+            totalServiceBase: existingBill.totalServiceBase,
+            totalPartsBase: existingBill.totalPartsBase
+          }
+        }
+      });
     }
 
     // ── Fetch Settings (frozen snapshot for this bill) ──

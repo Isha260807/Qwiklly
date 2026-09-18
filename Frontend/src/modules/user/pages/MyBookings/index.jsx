@@ -105,35 +105,34 @@ const MyBookings = () => {
   };
 
   return (
-    <div className="min-h-screen pb-24 relative bg-white">
-      {/* Background */}
-      <div className="fixed inset-0 z-0 pointer-events-none bg-[#FAFAFA]">
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `radial-gradient(#000000 1px, transparent 1px)`,
-            backgroundSize: '24px 24px'
-          }}
-        />
-      </div>
+    <div className="min-h-screen pb-24 relative bg-transparent">
+      {/* Background provided globally by UserRoutes */}
 
       <div className="relative z-10 max-w-lg mx-auto">
-        {/* Header */}
-        <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md px-4 py-3 flex items-center justify-between border-b border-gray-100">
+        {/* Theme Gradient Header */}
+        <header 
+          className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+          style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+        >
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
-              className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-gray-100 active:scale-95 transition-transform"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
+              title="Go Back"
             >
-              <FiArrowLeft className="w-5 h-5 text-gray-800" />
+              <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </button>
-            <h1 className="text-xl font-bold text-[#1E293B] tracking-tight">My Bookings</h1>
+            <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">My Bookings</h1>
           </div>
-          <NotificationBell />
+          <NotificationBell 
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm relative shrink-0 cursor-pointer"
+            iconClassName="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2]"
+            dotClassName="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#FF2D55] rounded-full ring-1 ring-white/90 shadow-xs"
+          />
         </header>
 
         {/* Filter Pills */}
-        <div className="bg-white px-4 py-3 sticky top-[57px] z-30 border-b border-gray-100">
+        <div className="bg-white/90 backdrop-blur-md px-4 py-2.5 sticky top-[48px] sm:top-[53px] z-30 border-b border-[#E8D9DF]/60 shadow-xs">
           <div
             className="flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide scroll-smooth [&::-webkit-scrollbar]:hidden"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
@@ -150,19 +149,11 @@ const MyBookings = () => {
                 <button
                   key={tab.id}
                   onClick={() => setFilter(tab.id)}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all duration-200 border ${
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 border ${
                     isActive
-                      ? 'text-white shadow-sm active:scale-95'
-                      : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                      ? 'bg-gradient-to-r from-[#720C3E] to-[#9A2459] text-white shadow-xs border-transparent active:scale-95'
+                      : 'bg-white border-[#E8D9DF] text-[#6F5A64] hover:text-[#24151D] hover:bg-[#FFF7FA]'
                   }`}
-                  style={
-                    isActive
-                      ? {
-                          backgroundColor: themeColors.button || '#A32A29',
-                          borderColor: themeColors.button || '#A32A29'
-                        }
-                      : {}
-                  }
                 >
                   {tab.label}
                 </button>

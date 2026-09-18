@@ -158,21 +158,25 @@ const Notifications = () => {
   };
 
   return (
-    <div className="min-h-screen pb-20" style={{ background: themeColors.backgroundGradient || '#f9fafb' }}>
-      {/* Header */}
-      <div className="bg-white sticky top-0 z-50 border-b border-gray-100 px-4 py-3 flex items-center justify-between shadow-sm">
+    <div className="min-h-screen pb-20 bg-transparent">
+      {/* Theme Gradient Header */}
+      <header 
+        className="sticky top-0 z-50 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+        style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="p-1.5 hover:bg-gray-50 rounded-full transition-colors"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
+            title="Go Back"
           >
-            <FiArrowLeft className="w-5 h-5 text-gray-800" />
+            <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </button>
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-bold text-gray-900">Notifications</h1>
+            <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">Notifications</h1>
           </div>
         </div>
-      </div>
+      </header>
 
       <main className="px-4 py-6">
         {/* Filter Buttons */}
