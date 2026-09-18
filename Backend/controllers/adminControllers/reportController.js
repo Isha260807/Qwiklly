@@ -53,6 +53,41 @@ const getFinanceOverview = async (req, res) => {
       totalAmountPaidToVendors: 0
     };
 
+    // If PlatformEarning is empty or zero, aggregate directly from completed bookings
+    if (!revenueStats.totalTransactionValue || revenueStats.totalTransactionValue === 0) {
+      const bookingMatch = {
+        status: { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'COMPLETED', 'work_done', 'WORK_DONE', 'paid', 'PAID'] }
+      };
+      if (startDate && endDate) {
+        bookingMatch.createdAt = {
+          $gte: new Date(startDate),
+          $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+        };
+      }
+
+      const bookingFallback = await Booking.aggregate([
+        { $match: bookingMatch },
+        {
+          $group: {
+            _id: null,
+            totalValue: { $sum: '$finalAmount' },
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+
+      if (bookingFallback.length > 0) {
+        const fb = bookingFallback[0];
+        const val = fb.totalValue || 0;
+        revenueStats.totalTransactionValue = val;
+        revenueStats.totalPlatformRevenue = Math.round(val * 0.2);
+        revenueStats.totalVendorEarnings = Math.round(val * 0.8);
+        revenueStats.totalTaxCollected = Math.round(val * 0.18);
+        revenueStats.totalTDSCollected = Math.round(val * 0.01);
+        revenueStats.count = fb.count;
+      }
+    }
+
     // Grab the live "Pending" snapshot from the latest today record to avoid manual calc
     const todayStr = new Date().toISOString().split('T')[0];
     const latestSnapshot = await PlatformEarning.findOne({ date: todayStr });
@@ -81,7 +116,7 @@ const getFinanceOverview = async (req, res) => {
     const paymentMethods = await Booking.aggregate([
       {
         $match: {
-          status: BOOKING_STATUS.COMPLETED
+          status: { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'COMPLETED', 'work_done', 'WORK_DONE', 'paid', 'PAID'] }
         }
       },
       {
@@ -103,11 +138,31 @@ const getFinanceOverview = async (req, res) => {
       .sort({ date: 1 })
       .lean();
 
-    const formattedDaily = dailyRevenue.map(d => ({
+    let formattedDaily = dailyRevenue.map(d => ({
       _id: d.date,
       revenue: d.totalRevenue,
       commission: d.platformCommission
     }));
+
+    if (formattedDaily.length === 0) {
+      const dailyBookingTrends = await Booking.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: thirtyDaysAgo },
+            status: { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'COMPLETED', 'work_done', 'WORK_DONE', 'paid', 'PAID'] }
+          }
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            revenue: { $sum: '$finalAmount' },
+            commission: { $sum: { $multiply: ['$finalAmount', 0.2] } }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]);
+      formattedDaily = dailyBookingTrends;
+    }
 
     res.status(200).json({
       success: true,
@@ -231,14 +286,24 @@ const getGSTRReport = async (req, res) => {
     const halfRate = gstRate / 2;
 
     const query = {
-      status: BOOKING_STATUS.COMPLETED
+      status: { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'COMPLETED', 'work_done', 'WORK_DONE', 'paid', 'PAID'] }
     };
 
     if (startDate && endDate) {
-      query.completedAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
-      };
+      query.$or = [
+        {
+          completedAt: {
+            $gte: new Date(startDate),
+            $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+          }
+        },
+        {
+          createdAt: {
+            $gte: new Date(startDate),
+            $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+          }
+        }
+      ];
     }
 
     // Fetch bills alongside bookings for GST data
@@ -325,15 +390,25 @@ const getTDSReport = async (req, res) => {
     const tdsRate = settings?.tdsPercentage || 1; // Default 1% if not set
 
     const query = {
-      status: BOOKING_STATUS.COMPLETED,
+      status: { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'COMPLETED', 'work_done', 'WORK_DONE', 'paid', 'PAID'] },
       vendorId: { $ne: null }
     };
 
     if (startDate && endDate) {
-      query.completedAt = {
-        $gte: new Date(startDate),
-        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
-      };
+      query.$or = [
+        {
+          completedAt: {
+            $gte: new Date(startDate),
+            $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+          }
+        },
+        {
+          createdAt: {
+            $gte: new Date(startDate),
+            $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+          }
+        }
+      ];
     }
 
     // Group by Vendor for the period

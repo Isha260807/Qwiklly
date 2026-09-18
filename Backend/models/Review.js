@@ -15,14 +15,14 @@ const reviewSchema = new mongoose.Schema({
   },
   serviceId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Service',
-    required: true,
+    ref: 'UserService',
+    required: false,
     index: true
   },
   vendorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Vendor',
-    required: true,
+    required: false,
     index: true
   },
   rating: {

@@ -754,21 +754,36 @@ const BookingTrack = () => {
       </div>
 
       {/* Bottom Status Card */}
-      <div className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] z-20 p-6 pb-8 transition-transform duration-300 ${isFullScreen ? 'translate-y-full' : ''}`}>
-        <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
+      <div className={`absolute bottom-0 left-0 right-0 max-w-lg mx-auto bg-white rounded-t-2xl sm:rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] z-20 p-3.5 sm:p-5 pb-5 max-h-[75vh] sm:max-h-[62vh] overflow-y-auto custom-scrollbar transition-transform duration-300 ${isFullScreen ? 'translate-y-full' : ''}`}>
+        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-2.5"></div>
 
-        <div className="flex items-center justify-between mb-6">
+        {/* Status & Distance Header */}
+        <div className="flex items-center justify-between mb-2.5">
           <div>
-            <p className="text-sm font-medium text-teal-600 mb-1 flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-teal-600 mb-0.5 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse"></span>
-              {duration ? `Arriving in ${duration}` : 'Calculating time...'}
+              {booking?.status?.toLowerCase() === 'work_done'
+                ? 'Work Completed'
+                : booking?.status?.toLowerCase() === 'in_progress'
+                ? 'Work In Progress'
+                : booking?.status?.toLowerCase() === 'visited'
+                ? 'Partner At Location'
+                : duration ? `Arriving in ${duration}` : 'Tracking active'}
             </p>
-            <h2 className="text-2xl font-black text-gray-900 tracking-tight">On the way</h2>
+            <h2 className="text-lg sm:text-xl font-black text-gray-900 tracking-tight leading-tight">
+              {booking?.status?.toLowerCase() === 'work_done'
+                ? 'Service Completed'
+                : booking?.status?.toLowerCase() === 'in_progress'
+                ? 'Service Ongoing'
+                : booking?.status?.toLowerCase() === 'visited'
+                ? 'Professional Arrived'
+                : 'On the way'}
+            </h2>
           </div>
-          {distance && (
+          {distance && ['journey_started', 'assigned', 'confirmed'].includes(booking?.status?.toLowerCase()) && (
             <div className="text-right">
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Distance</p>
-              <p className="text-xl font-bold text-gray-800">
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Distance</p>
+              <p className="text-sm sm:text-base font-black text-gray-800">
                 {distance}
               </p>
             </div>
@@ -776,13 +791,13 @@ const BookingTrack = () => {
         </div>
 
         {/* Address Info */}
-        <div className="bg-gray-50 rounded-2xl p-4 flex items-start gap-4 mb-4 border border-gray-100">
-          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-md text-teal-600 border border-gray-100 shrink-0">
-            <FiMapPin className="w-5 h-5" />
+        <div className="bg-gray-50 rounded-xl p-2.5 flex items-center gap-2.5 mb-2.5 border border-gray-100">
+          <div className="w-7 h-7 rounded-full bg-white flex items-center justify-center shadow-xs text-teal-600 border border-gray-100 shrink-0">
+            <FiMapPin className="w-3.5 h-3.5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-gray-900 mb-0.5">Your Location</h3>
-            <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">
+            <h3 className="font-bold text-gray-900 text-xs leading-none mb-0.5">Your Location</h3>
+            <p className="text-[11px] text-gray-500 truncate leading-snug">
               {(() => {
                 const addr = booking?.address;
                 if (!addr) return 'Loading destination...';
@@ -793,26 +808,26 @@ const BookingTrack = () => {
           </div>
         </div>
 
-        {/* Arrival OTP - New Premium Display */}
+        {/* Arrival OTP Display */}
         {(booking?.visitOtp || booking?.arrivalOTP) && ['confirmed', 'assigned', 'journey_started'].includes(booking?.status?.toLowerCase()) && (
-          <div className="mb-3 relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 p-3 shadow-lg">
+          <div className="mb-2.5 relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 p-2.5 shadow-md">
             <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10 blur-xl"></div>
-            <div className="relative z-10 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shrink-0">
-                  <FiKey className="w-5 h-5 text-white" />
+            <div className="relative z-10 flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shrink-0">
+                  <FiKey className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-blue-100 uppercase tracking-wider">Start Code</p>
-                  <p className="text-2xl font-black text-white tracking-[0.2em] leading-none mt-0.5">
+                  <p className="text-[9px] font-bold text-blue-100 uppercase tracking-wider">Start Code</p>
+                  <p className="text-xl font-black text-white tracking-[0.15em] leading-none mt-0.5">
                     {booking?.visitOtp || booking?.arrivalOTP}
                   </p>
                 </div>
               </div>
 
-              <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 flex flex-col items-center justify-center min-w-[100px]">
-                <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.5)] mb-1"></div>
-                <p className="text-[9px] text-blue-50 font-medium text-center leading-tight">Waiting for<br />arrival</p>
+              <div className="bg-white/10 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10 flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.5)]"></div>
+                <p className="text-[9px] text-blue-50 font-medium whitespace-nowrap">Waiting for arrival</p>
               </div>
             </div>
           </div>
@@ -820,12 +835,12 @@ const BookingTrack = () => {
 
         {/* Professional Arrived Notification */}
         {booking?.status?.toLowerCase() === 'visited' && !(booking.arrivalOTP || booking.visitOtp) && (
-          <div className="mb-4 relative overflow-hidden rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-700 p-4 shadow-lg flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 shrink-0">
-              <FiCheckCircle className="w-5 h-5 text-white" />
+          <div className="mb-2.5 relative overflow-hidden rounded-xl bg-gradient-to-br from-teal-500 to-emerald-700 p-2.5 shadow-md flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30 shrink-0">
+              <FiCheckCircle className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Professional Arrived</h3>
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider">Professional Arrived</h3>
               <p className="text-[10px] text-teal-50">Expert is starting the work now.</p>
             </div>
           </div>
@@ -833,14 +848,13 @@ const BookingTrack = () => {
 
         {/* Waiting for Vendor to initiate Payment */}
         {!booking?.customerConfirmationOTP && booking?.status?.toLowerCase() === 'work_done' && !booking?.cashCollected && (
-          <div className="bg-white rounded-2xl p-4 shadow-lg border border-teal-100 mb-4 flex items-center gap-4 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-20 h-20 bg-teal-50 rounded-full -translate-y-10 translate-x-10 blur-2xl"></div>
-            <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0 border border-teal-100">
-              <FiLoader className="w-5 h-5 text-teal-600 animate-spin" />
+          <div className="bg-teal-50/50 rounded-xl p-2.5 border border-teal-100 mb-2.5 flex items-center gap-2.5 relative overflow-hidden">
+            <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 border border-teal-100 shadow-2xs">
+              <FiLoader className="w-4 h-4 text-teal-600 animate-spin" />
             </div>
-            <div className="relative z-10">
-              <h3 className="font-bold text-gray-900 text-sm">Finalizing Bill</h3>
-              <p className="text-[10px] text-gray-500">Professional is finalizing payment details. Please wait...</p>
+            <div className="relative z-10 flex-1 min-w-0">
+              <h3 className="font-bold text-gray-900 text-xs">Finalizing Bill</h3>
+              <p className="text-[10px] text-gray-500 truncate">Professional is finalizing payment details. Please wait...</p>
             </div>
           </div>
         )}
@@ -849,25 +863,26 @@ const BookingTrack = () => {
         {(booking?.customerConfirmationOTP || booking?.paymentStatus === 'success') && booking?.status?.toLowerCase() === 'work_done' && !booking?.cashCollected && (
           <div
             onClick={() => setShowPaymentModal(true)}
-            className={`mb-4 relative overflow-hidden rounded-2xl p-5 shadow-lg cursor-pointer active:scale-[0.98] transition-all ${booking?.paymentStatus === 'success'
-              ? 'bg-gradient-to-br from-green-500 via-green-600 to-emerald-700'
-              : 'bg-gradient-to-br from-orange-500 via-orange-600 to-red-600'
-              }`}>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16 blur-2xl"></div>
+            className={`mb-2.5 relative overflow-hidden rounded-xl p-3 shadow-md cursor-pointer active:scale-[0.98] transition-all ${
+              booking?.paymentStatus === 'success'
+                ? 'bg-gradient-to-br from-green-500 to-emerald-700'
+                : 'bg-gradient-to-br from-orange-500 to-red-600'
+            }`}
+          >
             <div className="relative z-10 flex flex-col items-center">
-              <div className="flex items-center gap-3 w-full mb-5">
-                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30">
+              <div className="flex items-center gap-2.5 w-full mb-3">
+                <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30">
                   {booking?.paymentStatus === 'success' ? (
-                    <FiCheckCircle className="w-5 h-5 text-white" />
+                    <FiCheckCircle className="w-4 h-4 text-white" />
                   ) : (
-                    <FiDollarSign className="w-5 h-5 text-white" />
+                    <FiDollarSign className="w-4 h-4 text-white" />
                   )}
                 </div>
-                <div>
-                  <p className="text-[10px] font-bold text-white/80 uppercase tracking-widest">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[9px] font-bold text-white/80 uppercase tracking-widest leading-none">
                     {booking?.paymentStatus === 'success' ? 'Payment Received' : 'Final Payment'}
                   </p>
-                  <p className="text-white text-xs font-medium">
+                  <p className="text-white text-xs font-bold mt-0.5 truncate">
                     {booking?.paymentStatus === 'success' ? 'Verified Successfully' : `Service amount: ₹${(booking?.finalAmount || 0).toLocaleString()}`}
                   </p>
                 </div>
@@ -877,49 +892,41 @@ const BookingTrack = () => {
                 <>
                   <button
                     onClick={handleOnlinePayment}
-                    className="w-full py-4 bg-white text-orange-600 rounded-xl font-black text-sm shadow-xl hover:bg-orange-50 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-2.5 bg-white text-orange-600 rounded-lg font-black text-xs shadow-md hover:bg-orange-50 active:scale-95 transition-all flex items-center justify-center gap-1.5"
                   >
-                    <FiDollarSign className="w-4 h-4" />
-                    Pay Online Now
+                    <FiDollarSign className="w-3.5 h-3.5" /> Pay Online Now
                   </button>
 
-                  <div className="mt-6 flex flex-col items-center w-full">
-                    <p className="text-[9px] font-black text-white/60 uppercase tracking-[0.3em] mb-3">Payment Verification OTP</p>
-                    <div className="flex justify-center gap-2.5">
+                  <div className="mt-2.5 flex flex-col items-center w-full">
+                    <p className="text-[9px] font-bold text-white/70 uppercase tracking-wider mb-1.5">Payment Verification OTP</p>
+                    <div className="flex justify-center gap-2">
                       {String(booking?.customerConfirmationOTP || booking?.paymentOtp || '0000').split('').map((digit, idx) => (
                         <div
                           key={idx}
-                          className="w-10 h-12 bg-white/15 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20 shadow-md"
+                          className="w-8 h-9 bg-white/15 backdrop-blur-md rounded-lg flex items-center justify-center border border-white/20 shadow-xs"
                         >
-                          <span className="text-xl font-black text-white">{digit}</span>
+                          <span className="text-base font-black text-white">{digit}</span>
                         </div>
                       ))}
                     </div>
-                    <p className="mt-4 text-[9px] text-white/70 text-center font-medium bg-black/10 px-4 py-1.5 rounded-full">
+                    <p className="mt-2 text-[9px] text-white/80 text-center font-medium bg-black/10 px-3 py-1 rounded-full">
                       Share with professional to confirm cash payment
                     </p>
                   </div>
                 </>
               ) : (
-                <div className="w-full py-4 bg-white/10 backdrop-blur-md text-white rounded-xl font-bold text-sm border border-white/20 flex items-center justify-center gap-2">
-                  <FiCheckCircle className="w-4 h-4 text-green-200" />
-                  Booking Completed
+                <div className="w-full py-2.5 bg-white/10 backdrop-blur-md text-white rounded-lg font-bold text-xs border border-white/20 flex items-center justify-center gap-1.5">
+                  <FiCheckCircle className="w-3.5 h-3.5 text-green-200" /> Booking Completed
                 </div>
-              )}
-
-              {booking?.paymentStatus !== 'success' && (
-                <p className="mt-4 text-[10px] text-white/70 text-center font-medium">
-                  Professional will mark as completed after cash collection.
-                </p>
               )}
             </div>
           </div>
         )}
 
-        {/* Agent Info */}
+        {/* Agent / Provider Info */}
         {(provider?._id || provider?.id) && (
-          <div className="bg-gray-50 rounded-2xl p-4 flex items-center gap-4 mb-4 border border-gray-100">
-            <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center border-2 border-white shadow-md overflow-hidden relative shrink-0">
+          <div className="bg-gray-50 rounded-xl p-2.5 flex items-center gap-2.5 border border-gray-100">
+            <div className="w-9 h-9 bg-white rounded-full flex items-center justify-center border border-gray-200 shadow-xs overflow-hidden relative shrink-0">
               {(provider.profileImage || provider.profilePhoto) ? (
                 <>
                   <img
@@ -928,20 +935,20 @@ const BookingTrack = () => {
                     className="w-full h-full object-cover"
                     onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.querySelector('.fallback-icon').style.display = 'block'; }}
                   />
-                  <FiUser className="w-7 h-7 text-gray-400 fallback-icon hidden absolute" />
+                  <FiUser className="w-5 h-5 text-gray-400 fallback-icon hidden absolute" />
                 </>
               ) : (
-                <FiUser className="w-7 h-7 text-gray-400" />
+                <FiUser className="w-5 h-5 text-gray-400" />
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-gray-900 line-clamp-1 text-lg">
+              <h3 className="font-bold text-gray-900 truncate text-xs sm:text-sm">
                 {provider.name || 'Service Partner'}
               </h3>
               <div className="flex items-center gap-1 text-yellow-500">
-                <FiStar className="w-3.5 h-3.5 fill-current" />
-                <span className="text-sm font-bold text-gray-700">4.8</span>
-                <span className="text-xs text-gray-400">• Verified Professional</span>
+                <FiStar className="w-3 h-3 fill-current" />
+                <span className="text-xs font-bold text-gray-700">4.8</span>
+                <span className="text-[10px] text-gray-400 truncate">• Verified Professional</span>
               </div>
             </div>
 
@@ -949,9 +956,10 @@ const BookingTrack = () => {
             {provider.phone && (
               <a
                 href={`tel:${provider.phone}`}
-                className="w-12 h-12 bg-green-100 text-green-700 rounded-full flex items-center justify-center active:scale-90 transition-transform shadow-sm"
+                className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center active:scale-90 transition-transform shadow-2xs shrink-0"
+                title="Call Partner"
               >
-                <FiPhone className="w-5 h-5" />
+                <FiPhone className="w-3.5 h-3.5" />
               </a>
             )}
           </div>

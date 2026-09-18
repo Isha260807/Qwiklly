@@ -2,7 +2,38 @@ const Review = require('../../models/Review');
 const Booking = require('../../models/Booking');
 
 /**
- * Get all reviews with pagination and filters
+ * Sync reviews from bookings if not already in Review collection
+ */
+const syncBookingReviews = async () => {
+  try {
+    const bookingsWithReviews = await Booking.find({
+      rating: { $exists: true, $ne: null, $gt: 0 }
+    });
+
+    for (const booking of bookingsWithReviews) {
+      const exists = await Review.findOne({ bookingId: booking._id });
+      if (!exists) {
+        await Review.create({
+          bookingId: booking._id,
+          userId: booking.userId,
+          serviceId: booking.serviceId || null,
+          vendorId: booking.vendorId || null,
+          workerId: booking.workerId || null,
+          rating: booking.rating,
+          review: booking.review || '',
+          images: booking.reviewImages || [],
+          status: 'active',
+          createdAt: booking.reviewedAt || booking.updatedAt || new Date()
+        }).catch(err => console.error('Review sync item error:', err));
+      }
+    }
+  } catch (err) {
+    console.error('Error during auto-sync of reviews:', err);
+  }
+};
+
+/**
+ * Get all reviews with pagination, search, and filters
  */
 exports.getAllReviews = async (req, res) => {
   try {
@@ -11,43 +42,32 @@ exports.getAllReviews = async (req, res) => {
       limit = 10,
       status,
       rating,
+      search,
       vendorId,
       serviceId,
       userId
     } = req.query;
 
+    await syncBookingReviews();
+
     const query = {};
-    if (status) query.status = status;
-    if (rating) query.rating = parseInt(rating);
+    if (status && status !== 'All Status' && status !== 'all') {
+      query.status = status;
+    } else {
+      query.status = { $ne: 'deleted' };
+    }
+
+    if (rating && rating !== 'All Ratings') {
+      query.rating = parseInt(rating);
+    }
     if (vendorId) query.vendorId = vendorId;
     if (serviceId) query.serviceId = serviceId;
     if (userId) query.userId = userId;
 
-    // Auto-migration: If no reviews exist in Review model, check Booking model
-    const reviewCount = await Review.countDocuments();
-    if (reviewCount === 0) {
-      const bookingsWithReviews = await Booking.find({
-        rating: { $exists: true, $ne: null }
-      });
-
-      if (bookingsWithReviews.length > 0) {
-        const reviewsToCreate = bookingsWithReviews.map(booking => ({
-          bookingId: booking._id,
-          userId: booking.userId,
-          serviceId: booking.serviceId,
-          vendorId: booking.vendorId,
-          workerId: booking.workerId,
-          rating: booking.rating,
-          review: booking.review || '',
-          images: booking.reviewImages || [],
-          status: 'active',
-          createdAt: booking.reviewedAt || booking.updatedAt
-        }));
-
-        await Review.insertMany(reviewsToCreate, { ordered: false }).catch(err => {
-          console.error('Error during auto-migration of reviews:', err);
-        });
-      }
+    if (search) {
+      query.$or = [
+        { review: { $regex: search, $options: 'i' } }
+      ];
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -56,7 +76,7 @@ exports.getAllReviews = async (req, res) => {
       .populate('userId', 'name phone email profilePhoto')
       .populate('vendorId', 'businessName name phone')
       .populate('serviceId', 'title iconUrl')
-      .populate('bookingId', 'bookingNumber status')
+      .populate('bookingId', 'bookingNumber status serviceName customerName customerPhone')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -70,7 +90,7 @@ exports.getAllReviews = async (req, res) => {
         total,
         page: parseInt(page),
         limit: parseInt(limit),
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / parseInt(limit)) || 1
       }
     });
   } catch (error) {
@@ -129,7 +149,10 @@ exports.updateReviewStatus = async (req, res) => {
  */
 exports.getReviewStats = async (req, res) => {
   try {
+    await syncBookingReviews();
+
     const stats = await Review.aggregate([
+      { $match: { status: { $ne: 'deleted' } } },
       {
         $group: {
           _id: null,
@@ -144,19 +167,31 @@ exports.getReviewStats = async (req, res) => {
       }
     ]);
 
-    const statusStats = await Review.aggregate([
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
+    const activeCount = await Review.countDocuments({ status: 'active' });
+    const hiddenCount = await Review.countDocuments({ status: 'hidden' });
+
+    const defaultStats = {
+      averageRating: 0,
+      totalReviews: 0,
+      star5: 0,
+      star4: 0,
+      star3: 0,
+      star2: 0,
+      star1: 0,
+      activeReviews: 0,
+      hiddenReviews: 0
+    };
+
+    const resultStats = stats[0] ? {
+      ...stats[0],
+      averageRating: Number((stats[0].averageRating || 0).toFixed(1)),
+      activeReviews: activeCount,
+      hiddenReviews: hiddenCount
+    } : defaultStats;
 
     res.status(200).json({
       success: true,
-      stats: stats[0] || { averageRating: 0, totalReviews: 0, star5: 0, star4: 0, star3: 0, star2: 0, star1: 0 },
-      statusStats
+      stats: resultStats
     });
   } catch (error) {
     console.error('Get review stats error:', error);

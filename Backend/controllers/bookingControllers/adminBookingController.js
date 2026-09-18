@@ -23,24 +23,69 @@ const getAllBookings = async (req, res) => {
     // Build query
     const query = {};
 
-    if (status) query.status = status;
+    if (status && status !== 'ALL_STATUS' && status !== 'ALL') {
+      const s = status.toLowerCase();
+      if (s === 'pending') {
+        query.status = { $in: ['pending', 'searching', 'requested', 'awaiting_payment'] };
+      } else if (s === 'confirmed') {
+        query.status = { $in: ['confirmed', 'accepted', 'assigned'] };
+      } else if (s === 'in_progress') {
+        query.status = { $in: ['in_progress', 'journey_started', 'visited'] };
+      } else if (s === 'completed') {
+        query.status = { $in: ['completed', 'work_done'] };
+      } else if (s === 'cancelled') {
+        query.status = 'cancelled';
+      } else if (s === 'rejected') {
+        query.status = 'rejected';
+      } else {
+        query.status = { $regex: new RegExp(`^${status}$`, 'i') };
+      }
+    }
+
     if (paymentStatus) query.paymentStatus = paymentStatus;
     if (userId) query.userId = userId;
     if (vendorId) query.vendorId = vendorId;
     if (workerId) query.workerId = workerId;
 
     if (startDate || endDate) {
-      query.scheduledDate = {};
-      if (startDate) query.scheduledDate.$gte = new Date(startDate);
-      if (endDate) query.scheduledDate.$lte = new Date(endDate);
+      const dateRange = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        dateRange.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateRange.$lte = end;
+      }
+      query.$or = [
+        { createdAt: dateRange },
+        { scheduledDate: dateRange }
+      ];
     }
 
-    // Search by booking number or service name
+    // Search by booking number, service name, customer phone, or customer name
     if (search) {
-      query.$or = [
-        { bookingNumber: { $regex: search, $options: 'i' } },
-        { serviceName: { $regex: search, $options: 'i' } }
+      const searchRegex = { $regex: search, $options: 'i' };
+      const searchConditions = [
+        { bookingNumber: searchRegex },
+        { serviceName: searchRegex },
+        { customerPhone: searchRegex },
+        { customerName: searchRegex },
+        { 'items.serviceName': searchRegex },
+        { 'items.title': searchRegex }
       ];
+
+      if (query.$or) {
+        query.$and = [
+          { $or: query.$or },
+          { $or: searchConditions }
+        ];
+        delete query.$or;
+      } else {
+        query.$or = searchConditions;
+      }
     }
 
     // Pagination
@@ -84,10 +129,18 @@ const getAllBookings = async (req, res) => {
 const getBookingById = async (req, res) => {
   try {
     const { id } = req.params;
+    const mongoose = require('mongoose');
 
-    const booking = await Booking.findById(id)
+    let query = {};
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      query = { $or: [{ _id: id }, { bookingNumber: id }] };
+    } else {
+      query = { bookingNumber: id };
+    }
+
+    const booking = await Booking.findOne(query)
       .populate('userId', 'name phone email addresses')
-      .populate('vendorId', 'name businessName phone email address')
+      .populate('vendorId', 'name businessName phone email address profilePhoto')
       .populate('serviceId', 'title description iconUrl images')
       .populate('categoryId', 'title slug');
 
@@ -192,15 +245,30 @@ const getBookingAnalytics = async (req, res) => {
     const totalBookings = await Booking.countDocuments(dateFilter);
 
     // Bookings by status
-    const bookingsByStatus = await Booking.aggregate([
+    const bookingsByStatusRaw = await Booking.aggregate([
       { $match: dateFilter },
       {
         $group: {
-          _id: '$status',
+          _id: { $toLower: '$status' },
           count: { $sum: 1 }
         }
       }
     ]);
+
+    const statusMap = bookingsByStatusRaw.reduce((acc, item) => {
+      acc[item._id] = item.count;
+      return acc;
+    }, {});
+
+    const summaryStats = {
+      pending: (statusMap['pending'] || 0) + (statusMap['searching'] || 0) + (statusMap['requested'] || 0) + (statusMap['awaiting_payment'] || 0),
+      confirmed: (statusMap['confirmed'] || 0) + (statusMap['accepted'] || 0) + (statusMap['assigned'] || 0),
+      inProgress: (statusMap['in_progress'] || 0) + (statusMap['journey_started'] || 0) + (statusMap['visited'] || 0),
+      completed: (statusMap['completed'] || 0) + (statusMap['work_done'] || 0),
+      cancelled: statusMap['cancelled'] || 0,
+      rejected: statusMap['rejected'] || 0,
+      total: totalBookings
+    };
 
     // Bookings by payment status
     const bookingsByPaymentStatus = await Booking.aggregate([
@@ -258,10 +326,8 @@ const getBookingAnalytics = async (req, res) => {
       success: true,
       data: {
         totalBookings,
-        bookingsByStatus: bookingsByStatus.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {}),
+        summaryStats,
+        bookingsByStatus: statusMap,
         bookingsByPaymentStatus: bookingsByPaymentStatus.reduce((acc, item) => {
           acc[item._id] = {
             count: item.count,

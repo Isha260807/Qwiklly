@@ -69,6 +69,13 @@ const AdminHeader = ({ onMenuClick }) => {
       { path: '/admin/reviews', title: 'Reviews', description: 'Manage platform reviews and ratings' },
     ];
 
+    if (pathname.startsWith('/admin/bookings/') && !pathname.includes('/tracking') && !pathname.includes('/notifications')) {
+      return {
+        title: 'Booking Details',
+        description: 'View complete booking timeline, customer, and partner info'
+      };
+    }
+
     const match = mappings.find(m => pathname === m.path || pathname.startsWith(m.path + '/'));
 
     if (match) return match;

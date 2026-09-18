@@ -6,22 +6,63 @@ const Vendor = require('../../models/Vendor');
 const PlatformEarning = require('../../models/PlatformEarning');
 
 /**
+ * Auto-sync paid/completed bookings to Transaction collection
+ */
+const syncBookingTransactions = async () => {
+  try {
+    const bookings = await Booking.find({
+      $or: [
+        { paymentStatus: 'success' },
+        { status: { $in: ['completed', 'work_done'] } }
+      ]
+    });
+
+    for (const booking of bookings) {
+      const exists = await Transaction.findOne({
+        $or: [
+          { bookingId: booking._id },
+          { referenceId: `PAY-${booking.bookingNumber}` }
+        ]
+      });
+
+      if (!exists) {
+        await Transaction.create({
+          userId: booking.userId,
+          vendorId: booking.vendorId,
+          bookingId: booking._id,
+          referenceId: `PAY-${booking.bookingNumber || booking._id.toString().slice(-6).toUpperCase()}`,
+          razorpayOrderId: booking.razorpayOrderId || null,
+          type: booking.paymentMethod === 'pay_at_home' || booking.paymentMethod === 'cod' ? 'cash_collected' : 'payment',
+          amount: booking.finalAmount || 0,
+          status: booking.paymentStatus === 'success' || booking.status === 'completed' || booking.status === 'work_done' ? 'completed' : 'pending',
+          paymentMethod: booking.paymentMethod || 'online',
+          description: `Payment for booking #${booking.bookingNumber || booking._id}`,
+          createdAt: booking.createdAt || new Date()
+        }).catch(err => console.error('Transaction sync item error:', err));
+      }
+    }
+  } catch (err) {
+    console.error('Error during auto-sync of transactions:', err);
+  }
+};
+
+/**
  * Get all transactions with pagination and filtering
  */
 const getAllTransactions = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, status, type, entity } = req.query;
 
+    await syncBookingTransactions();
+
     // --- SPECIAL HANDLING FOR ADMIN REVENUE (Extract from Bookings) ---
     if (entity === 'admin') {
       const skip = (parseInt(page) - 1) * parseInt(limit);
 
-      // Build query for Bookings
       let bookingQuery = {
-        status: { $in: ['COMPLETED', 'completed', 'paid', 'PAID'] } // Assuming revenue realized on completion
+        status: { $in: ['COMPLETED', 'completed', 'paid', 'PAID', 'WORK_DONE', 'work_done'] }
       };
 
-      // Search filter
       if (search) {
         const searchRegex = new RegExp(search, 'i');
         const [users, vendors] = await Promise.all([
@@ -36,12 +77,8 @@ const getAllTransactions = async (req, res) => {
         ];
       }
 
-      // Helper to determine if we should include a specific type
       const shouldInclude = (t) => type === 'all' || type === t;
 
-      // We fetch bookings first
-      // Note: Pagination here applies to bookings, not rows, which might result in variable row counts per page
-      // This is an acceptable trade-off for virtualizing the data
       const bookings = await Booking.find(bookingQuery)
         .populate('userId', 'name email phone')
         .populate('vendorId', 'name email phone')
@@ -51,23 +88,16 @@ const getAllTransactions = async (req, res) => {
 
       const totalBookings = await Booking.countDocuments(bookingQuery);
 
-      // Transform bookings into virtual transactions
-      let virtualTransactions = [];
-
-      bookings.forEach(booking => {
-        // We'll look up VendorBill data lazily below
-      });
-
-      // Fetch VendorBills for these bookings
       const bookingIds = bookings.map(b => b._id);
-      const bills = await VendorBill.find({ bookingId: { $in: bookingIds }, status: 'paid' });
+      const bills = await VendorBill.find({ bookingId: { $in: bookingIds } });
       const billMap = {};
       bills.forEach(b => { billMap[b.bookingId.toString()] = b; });
+
+      let virtualTransactions = [];
 
       bookings.forEach(booking => {
         const bill = billMap[booking._id.toString()];
 
-        // 1. Company Revenue (from VendorBill)
         if (shouldInclude('commission') && bill && bill.companyRevenue > 0) {
           virtualTransactions.push({
             _id: `${booking._id}_comm`,
@@ -84,33 +114,19 @@ const getAllTransactions = async (req, res) => {
           });
         }
 
-        // 2. GST (from VendorBill)
-        if (shouldInclude('gst') && bill && bill.totalGST > 0) {
+        if (shouldInclude('payment')) {
           virtualTransactions.push({
-            _id: `${booking._id}_gst`,
-            referenceId: `GST-${booking.bookingNumber}`,
+            _id: `${booking._id}_pay`,
+            referenceId: `PAY-${booking.bookingNumber}`,
             bookingId: booking,
-            type: 'gst',
-            amount: bill.totalGST,
+            userId: booking.userId,
+            vendorId: booking.vendorId,
+            type: booking.paymentMethod === 'pay_at_home' ? 'cash_collected' : 'payment',
+            amount: booking.finalAmount || 0,
             status: 'completed',
-            paymentMethod: 'system',
-            createdAt: bill.paidAt || booking.completedAt || booking.updatedAt || booking.createdAt,
-            description: `GST for booking ${booking.bookingNumber}`
-          });
-        }
-
-        // 3. Convenience Fee (Visiting Charges)
-        if (shouldInclude('convenience_fee') && booking.visitingCharges > 0) {
-          virtualTransactions.push({
-            _id: `${booking._id}_conv`,
-            referenceId: `FEE-${booking.bookingNumber}`,
-            bookingId: booking,
-            type: 'convenience_fee',
-            amount: booking.visitingCharges,
-            status: 'completed',
-            paymentMethod: 'system',
-            createdAt: booking.completedAt || booking.updatedAt || booking.createdAt,
-            description: `Convenience Fee for booking ${booking.bookingNumber}`
+            paymentMethod: booking.paymentMethod || 'online',
+            createdAt: booking.createdAt,
+            description: `Payment for booking ${booking.bookingNumber}`
           });
         }
       });
@@ -119,83 +135,90 @@ const getAllTransactions = async (req, res) => {
         success: true,
         data: virtualTransactions,
         pagination: {
-          total: totalBookings, // Note: This is total bookings, not total rows
+          total: totalBookings,
           page: parseInt(page),
           limit: parseInt(limit),
-          pages: Math.ceil(totalBookings / parseInt(limit))
+          pages: Math.ceil(totalBookings / parseInt(limit)) || 1
         }
       });
-
     }
 
     // --- STANDARD LOGIC FOR OTHERS (User, Vendor, Worker, All) ---
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    let query = {};
+    const { startDate, endDate } = req.query;
+    let andConditions = [];
 
-    // Apply status filter
-    if (status && status !== 'all') {
-      query.status = status;
+    if (status && status !== 'all' && status !== 'All Status') {
+      andConditions.push({ status });
     }
 
-    // Apply type filter
-    if (type && type !== 'all') {
-      query.type = type;
+    if (type && type !== 'all' && type !== 'All Types') {
+      andConditions.push({ type });
     }
 
-    // Apply entity filter
+    if (startDate || endDate) {
+      let dateFilter = {};
+      if (startDate) dateFilter.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.$lte = end;
+      }
+      andConditions.push({ createdAt: dateFilter });
+    }
+
     if (entity) {
       if (entity === 'user') {
-        query.$or = [
-          { userId: { $ne: null } },
-          { type: 'cash_collected' },
-          { type: 'payment' }
-        ];
+        andConditions.push({
+          $or: [
+            { userId: { $ne: null } },
+            { type: 'cash_collected' },
+            { type: 'payment' }
+          ]
+        });
       } else if (entity === 'vendor') {
-        query.vendorId = { $ne: null };
+        andConditions.push({ vendorId: { $ne: null } });
       } else if (entity === 'worker') {
-        query.workerId = { $ne: null };
+        andConditions.push({ workerId: { $ne: null } });
       }
     }
 
-    // Apply search filter (Transaction ID, Order ID, or Customer/Vendor/Worker Name/Email)
     if (search) {
       const searchRegex = new RegExp(search, 'i');
-
-      // We need to find matching users, vendors and bookings first
       const [users, vendors, bookings] = await Promise.all([
-        User.find({ $or: [{ name: searchRegex }, { email: searchRegex }] }).select('_id'),
-        Vendor.find({ $or: [{ name: searchRegex }, { email: searchRegex }] }).select('_id'),
-        Booking.find({ bookingNumber: searchRegex }).select('_id')
+        User.find({ $or: [{ name: searchRegex }, { email: searchRegex }, { phone: searchRegex }] }).select('_id'),
+        Vendor.find({ $or: [{ name: searchRegex }, { email: searchRegex }, { businessName: searchRegex }] }).select('_id'),
+        Booking.find({ $or: [{ bookingNumber: searchRegex }, { customerPhone: searchRegex }] }).select('_id')
       ]);
 
       const userIds = users.map(u => u._id);
       const vendorIds = vendors.map(v => v._id);
       const bookingIds = bookings.map(b => b._id);
 
-      // Find bookings where the USER matches the search (for indirect transactions like cash_collected)
-      const userBookingIds = await Booking.find({ userId: { $in: userIds } }).select('_id');
-      const allBookingIds = [...bookingIds, ...userBookingIds.map(b => b._id)];
-
-      query.$or = [
+      const searchOr = [
         { referenceId: searchRegex },
+        { razorpayOrderId: searchRegex },
+        { description: searchRegex },
         { userId: { $in: userIds } },
         { vendorId: { $in: vendorIds } },
-        { workerId: { $in: workerIds } },
-        { bookingId: { $in: allBookingIds } }
+        { bookingId: { $in: bookingIds } }
       ];
 
-      // If it looks like an ObjectId, search by ID too
       if (search.match(/^[0-9a-fA-F]{24}$/)) {
-        query.$or.push({ _id: search });
+        searchOr.push({ _id: search });
       }
+
+      andConditions.push({ $or: searchOr });
     }
+
+    const query = andConditions.length > 0 ? { $and: andConditions } : {};
 
     const transactions = await Transaction.find(query)
       .populate('userId', 'name email phone')
-      .populate('vendorId', 'name email phone')
+      .populate('vendorId', 'businessName name email phone')
       .populate({
         path: 'bookingId',
-        select: 'bookingNumber userId',
+        select: 'bookingNumber userId serviceName finalAmount customerPhone customerName',
         populate: {
           path: 'userId',
           select: 'name email phone'
@@ -214,7 +237,7 @@ const getAllTransactions = async (req, res) => {
         total,
         page: parseInt(page),
         limit: parseInt(limit),
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / parseInt(limit)) || 1
       }
     });
   } catch (error) {
@@ -233,7 +256,9 @@ const getTransactionStats = async (req, res) => {
   try {
     const { entity } = req.query;
 
-    // --- SPECIAL HANDLING FOR ADMIN REVENUE (Extract from Bookings) ---
+    await syncBookingTransactions();
+
+    // --- SPECIAL HANDLING FOR ADMIN REVENUE ---
     if (entity === 'admin') {
       const stats = await PlatformEarning.aggregate([
         {
@@ -263,18 +288,20 @@ const getTransactionStats = async (req, res) => {
 
     // --- STANDARD LOGIC FOR OTHERS ---
     let matchQuery = {
-      status: 'completed',
-      type: { $in: ['credit', 'debit', 'refund', 'commission', 'cash_collected', 'payment'] }
+      status: { $in: ['completed', 'success'] }
     };
 
-    // Apply entity filter
     if (entity) {
-      if (entity === 'user') matchQuery.userId = { $ne: null };
+      if (entity === 'user') {
+        matchQuery.$or = [
+          { userId: { $ne: null } },
+          { type: { $in: ['payment', 'cash_collected', 'credit', 'debit'] } }
+        ];
+      }
       if (entity === 'vendor') matchQuery.vendorId = { $ne: null };
       if (entity === 'worker') matchQuery.workerId = { $ne: null };
     }
 
-    // We count 'completed' transactions for revenue
     const revenueStats = await Transaction.aggregate([
       {
         $match: matchQuery
@@ -284,12 +311,12 @@ const getTransactionStats = async (req, res) => {
           _id: null,
           totalRevenue: {
             $sum: {
-              $cond: [{ $in: ['$type', ['credit', 'commission', 'cash_collected', 'payment', 'platform_fee', 'convenience_fee', 'gst', 'penalty', 'tds_deduction']] }, '$amount', 0]
+              $cond: [{ $ne: ['$type', 'refund'] }, '$amount', 0]
             }
           },
           totalRefunds: {
             $sum: {
-              $cond: [{ $in: ['$type', ['refund', 'withdrawal']] }, '$amount', 0] // Withdrawal is not exactly refund but money out
+              $cond: [{ $eq: ['$type', 'refund'] }, '$amount', 0]
             }
           }
         }
