@@ -8,6 +8,7 @@ import { themeColors } from '../../../../theme';
 import AddressSelectionModal from './components/AddressSelectionModal';
 import TimeSlotModal from './components/TimeSlotModal';
 import VendorSearchModal from './components/VendorSearchModal';
+import CouponSection from './components/CouponSection';
 import { bookingService } from '../../../../services/bookingService';
 import { paymentService } from '../../../../services/paymentService';
 import { cartService } from '../../../../services/cartService';
@@ -60,6 +61,10 @@ const Checkout = () => {
   const [visitedFee, setVisitedFee] = useState(29);
   const [gstPercentage, setGstPercentage] = useState(18);
   const [bookingType, setBookingType] = useState('instant'); // 'instant' | 'scheduled'
+
+  // Coupon State
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponDiscount, setCouponDiscount] = useState(0);
 
   // Dynamic Booking Slot Settings from Admin
   const [slotConfig, setSlotConfig] = useState({
@@ -391,6 +396,9 @@ const Checkout = () => {
         categoryIcon: firstItem.categoryIcon || firstItem.icon || null,
         brandName: firstItem.sectionTitle || firstItem.brand || '',
         brandIcon: firstItem.sectionIcon || null,
+
+        // Pass applied coupon code
+        couponCode: appliedCoupon?.code || null,
 
         contactDetails: {
           name: contactDetails.name,
@@ -1058,24 +1066,19 @@ const Checkout = () => {
     return sum + original;
   }, 0);
 
-  const savings = totalOriginalPrice - itemTotal;
-  const taxesAndFee = Math.round((itemTotal * gstPercentage) / 100);
-  // Visited fee logic: if Total is 0 (All free), user might still pay visited fee?
-  // User says "no payemtn". So maybe visited fee also waived? Or user pays visited fee?
-  // "ask direct servicebooking" -> implies fully free.
-  // I'll set visitedFee to 0 if itemTotal is 0?
-  // Configurable?
-  // Assuming "Free under plan" means NO Payment.
+  const planSavings = totalOriginalPrice - itemTotal;
+  const taxableAmount = Math.max(0, itemTotal - couponDiscount);
+  const taxesAndFee = itemTotal === 0 ? 0 : Math.round((taxableAmount * gstPercentage) / 100);
   const finalVisitedFee = itemTotal === 0 ? 0 : visitedFee;
 
-  const totalAmount = itemTotal + taxesAndFee + finalVisitedFee;
+  const totalAmount = itemTotal === 0 ? 0 : (taxableAmount + taxesAndFee + finalVisitedFee);
   const amountToPay = totalAmount;
 
   // Helper for Free Plan Full Breakdown Display
-  // If the booking is free, we still want to show what the Tax/Fee WOULD have been
   const displayTax = totalAmount === 0 ? Math.round((totalOriginalPrice * gstPercentage) / 100) : taxesAndFee;
   const displayFee = totalAmount === 0 ? visitedFee : finalVisitedFee;
-  const displaySavings = totalAmount === 0 ? (totalOriginalPrice + displayTax + displayFee) : savings;
+  const displaySavings = totalAmount === 0 ? (totalOriginalPrice + displayTax + displayFee) : (planSavings + couponDiscount);
+  const savings = displaySavings;
 
   // Date and time slot helper functions
   const getDates = () => {
@@ -1363,6 +1366,27 @@ const Checkout = () => {
           </div>
         </div>
 
+        {/* Coupon & Offers Section (For standard booking only) */}
+        {!plan && (
+          <CouponSection
+            appliedCoupon={appliedCoupon}
+            onCouponApplied={(coupon, pricing) => {
+              setAppliedCoupon(coupon);
+              setCouponDiscount(pricing.couponDiscount || 0);
+            }}
+            onCouponRemoved={() => {
+              setAppliedCoupon(null);
+              setCouponDiscount(0);
+            }}
+            cartItems={cartItems}
+            serviceId={cartItems[0]?.serviceId?._id || cartItems[0]?.serviceId}
+            address={addressDetails}
+            paymentMethod={paymentMethod}
+            visitingCharges={visitedFee}
+            disabled={searchingVendors}
+          />
+        )}
+
         {/* Payment Summary */}
         <div className="bg-white border-2 border-slate-100 rounded-2xl p-5 mb-6 shadow-sm overflow-hidden relative">
           {/* Decorative Background for Header */}
@@ -1382,11 +1406,24 @@ const Checkout = () => {
               </span>
             </div>
 
-            {/* Discount Line */}
-            {displaySavings > 0 && (
+            {/* Plan Discount Line */}
+            {planSavings > 0 && (
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-green-600">Discount</span>
-                <span className="text-sm font-medium text-green-600">-₹{displaySavings.toLocaleString('en-IN')}</span>
+                <span className="text-sm font-medium text-green-600">Plan Discount</span>
+                <span className="text-sm font-medium text-green-600">-₹{planSavings.toLocaleString('en-IN')}</span>
+              </div>
+            )}
+
+            {/* Coupon Discount Line */}
+            {couponDiscount > 0 && appliedCoupon && (
+              <div className="flex justify-between items-center bg-green-50/60 px-2 py-1.5 rounded-lg border border-green-100">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-black uppercase text-green-800 bg-green-200 px-1.5 py-0.5 rounded">
+                    {appliedCoupon.code}
+                  </span>
+                  <span className="text-xs font-semibold text-green-700">Coupon Discount</span>
+                </div>
+                <span className="text-xs font-bold text-green-700">-₹{couponDiscount.toLocaleString('en-IN')}</span>
               </div>
             )}
 

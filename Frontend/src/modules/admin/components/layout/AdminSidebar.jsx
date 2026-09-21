@@ -19,6 +19,7 @@ import {
   FiSearch,
   FiLayout,
   FiImage,
+  FiTag,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
 import dashboardService from "../../services/dashboardService";
@@ -32,6 +33,7 @@ const iconMap = {
   "User Catalog": FiGrid,
   "Page Builder": FiLayout,
   Banners: FiImage,
+  Coupons: FiTag,
   "Vendor Services": FiGrid,
   "Vendor Parts": FiPackage,
   Payments: FiDollarSign,

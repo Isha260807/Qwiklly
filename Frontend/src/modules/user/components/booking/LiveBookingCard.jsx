@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiClock, FiMapPin, FiTool, FiCheckCircle, FiChevronRight, FiNavigation, FiX } from 'react-icons/fi';
@@ -16,6 +16,7 @@ const LiveBookingCard = ({ hasBottomNav }) => {
   const [loading, setLoading] = useState(true);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
+  const isFetchingRef = useRef(false);
 
   // Status mapping for UI
   const getStatusInfo = (status) => {
@@ -40,7 +41,14 @@ const LiveBookingCard = ({ hasBottomNav }) => {
     }
   };
 
+  const isBookingPage = location.pathname.startsWith('/user/my-bookings') || 
+                        location.pathname.startsWith('/user/booking/') || 
+                        location.pathname.startsWith('/user/booking-confirmation') ||
+                        location.pathname.startsWith('/user/checkout');
+
   useEffect(() => {
+    if (isBookingPage) return;
+
     fetchActiveBooking();
 
     if (socket) {
@@ -57,10 +65,12 @@ const LiveBookingCard = ({ hasBottomNav }) => {
         socket.off('notification', fetchActiveBooking);
       }
     };
-  }, [socket]);
+  }, [socket, isBookingPage]);
 
   const fetchActiveBooking = async () => {
+    if (isFetchingRef.current || isBookingPage) return;
     try {
+      isFetchingRef.current = true;
       const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
       if (!token) {
         setActiveBooking(null);
@@ -83,6 +93,7 @@ const LiveBookingCard = ({ hasBottomNav }) => {
     } catch (error) {
       // Failed to fetch active booking
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
     }
   };
@@ -118,11 +129,6 @@ const LiveBookingCard = ({ hasBottomNav }) => {
   // Check dismissed state on activeBooking or route
   const bookingId = activeBooking?._id || activeBooking?.id;
   const isAlreadyDismissed = isDismissed || (bookingId && sessionStorage.getItem(`dismissed_live_booking_${bookingId}`) === 'true');
-
-  // Don't show LiveBookingCard on My Bookings or Booking Details / Confirmation pages
-  const isBookingPage = location.pathname.startsWith('/user/my-bookings') || 
-                        location.pathname.startsWith('/user/booking/') || 
-                        location.pathname.startsWith('/user/booking-confirmation');
 
   if (!activeBooking || isAlreadyDismissed || isBookingPage) return null;
 

@@ -6,6 +6,9 @@ const Cart = require('../../models/Cart');
 const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
 const Review = require('../../models/Review');
+const Coupon = require('../../models/Coupon');
+const CouponUsage = require('../../models/CouponUsage');
+const { calculateBookingPrice } = require('../../services/pricingService');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
@@ -48,7 +51,8 @@ const createBooking = async (req, res) => {
       categoryIcon: reqCategoryIcon,
       brandName: reqBrandName,
       brandIcon: reqBrandIcon,
-      bookingType // Extract bookingType
+      bookingType, // Extract bookingType
+      couponCode // Extract optional coupon code
     } = req.body;
 
     let visitingCharges = reqVisitingCharges !== undefined ? reqVisitingCharges : (reqVisitationFee || 0);
@@ -146,101 +150,38 @@ const createBooking = async (req, res) => {
     console.log(`[CreateBooking] Found ${nearbyVendors.length} nearby vendors for booking`);
     // --- END VENDOR SEARCH BLOCK ---
 
-    // Calculate pricing - use amount from frontend if provided, otherwise calculate
-    let basePrice, discount, tax, finalAmount;
+    // -------------------------------------------------------------------------
+    // CENTRALIZED PRICING CALCULATION LOGIC
+    // -------------------------------------------------------------------------
+    const pricing = await calculateBookingPrice({
+      user,
+      bookedItems: (Array.isArray(bookedItems) && bookedItems.length > 0) ? bookedItems : [],
+      serviceId,
+      couponCode: couponCode || null,
+      address,
+      paymentMethod,
+      visitingChargesOverride: reqVisitingCharges !== undefined ? reqVisitingCharges : (reqVisitationFee || null)
+    });
+
+    if (couponCode && pricing.couponValidationError) {
+      return res.status(400).json({
+        success: false,
+        code: pricing.couponValidationError.code || 'COUPON_INVALID',
+        message: pricing.couponValidationError.error || 'Invalid coupon code'
+      });
+    }
+
+    let basePrice = pricing.basePrice;
+    let discount = pricing.planDiscount;
+    let couponDiscount = pricing.couponDiscount;
+    let tax = pricing.tax;
+    let visitingChargesCalculated = pricing.visitingCharges;
+    let finalAmount = pricing.finalAmount;
+
     let bookingStatus = BOOKING_STATUS.SEARCHING;
-    let bookingPaymentStatus = PAYMENT_STATUS.PENDING;
-
-    // -------------------------------------------------------------------------
-    // PRICING CALCULATION LOGIC
-    // -------------------------------------------------------------------------
-
-    // 1. Determine if we can use Plan Benefits
-    let usePlanBenefits = false;
-    if (paymentMethod === 'plan_benefit') {
-      if (user.plans && user.plans.isActive) {
-        if (user.plans.expiry && new Date() > new Date(user.plans.expiry)) {
-          // Plan expired - update status and FALLBACK to normal
-          console.log(`[CreateBooking] Plan expired for user ${userId}. Falling back to normal booking.`);
-          user.plans.isActive = false;
-          await user.save();
-          paymentMethod = 'pay_at_home'; // Fallback to Pay at Home
-        } else {
-          usePlanBenefits = true;
-        }
-      } else {
-        // No active plan or invalid status - Fallback
-        paymentMethod = 'pay_at_home';
-      }
-    }
-
-    // 2. Logic Branch: Plan Benefit vs Standard
-    if (usePlanBenefits) {
-      const Plan = require('../../models/Plan');
-      const userPlan = await Plan.findOne({ name: user.plans.name });
-
-      if (!userPlan) {
-        // Fallback if data missing (rare)
-        usePlanBenefits = false;
-        paymentMethod = 'pay_at_home';
-      } else {
-        // Check Coverage
-        const isCategoryCovered = categoryId && userPlan.freeCategories &&
-          userPlan.freeCategories.some(cat => String(cat) === String(categoryId));
-        const isServiceCovered = serviceId && userPlan.freeServices &&
-          userPlan.freeServices.some(svc => String(svc) === String(serviceId));
-
-        if (isCategoryCovered || isServiceCovered) {
-          // >>> APPLY FREE PRICING <<<
-          basePrice = totalServiceValue > 0 ? totalServiceValue : (service.basePrice || 500);
-          discount = basePrice; // Full discount
-          tax = 0;
-          visitingCharges = 0;
-          finalAmount = pendingPenalty; // User only pays penalty
-
-          bookingStatus = BOOKING_STATUS.SEARCHING;
-          bookingPaymentStatus = finalAmount > 0 ? PAYMENT_STATUS.PENDING : PAYMENT_STATUS.PLAN_COVERED;
-        } else {
-          // Not covered -> Fallback
-          usePlanBenefits = false;
-          paymentMethod = 'pay_at_home';
-        }
-      }
-    }
-
-    // 3. Standard Pricing (Fallback) if NOT using Plan Benefits
-    if (!usePlanBenefits) {
-      if (amount && amount > 0) {
-        // Use amount from frontend logic
-        if (reqBasePrice !== undefined && reqTax !== undefined) {
-          // Use breakdown provided by frontend
-          basePrice = reqBasePrice;
-          discount = reqDiscount || 0;
-          tax = reqTax;
-          visitingCharges = (reqVisitingCharges !== undefined) ? reqVisitingCharges : (visitingCharges || 49);
-          finalAmount = (basePrice - discount + tax + visitingCharges) + pendingPenalty;
-        } else {
-          // Backward compatibility: Reverse calculate
-          if (!visitingCharges) visitingCharges = 49;
-          basePrice = Math.round((amount - visitingCharges) / 1.18);
-          tax = amount - basePrice - visitingCharges;
-          discount = 0;
-          finalAmount = amount + pendingPenalty;
-        }
-      } else {
-        // Fallback to service pricing (if no amount sent)
-        if (!visitingCharges) visitingCharges = 49;
-        basePrice = service.basePrice || 500;
-        discount = service.discountPrice ? (basePrice - service.discountPrice) : 0;
-        tax = Math.round(basePrice * 0.18);
-        finalAmount = (basePrice - discount + tax + visitingCharges) + pendingPenalty;
-      }
-    }
-
-    // NOTE: vendor earnings are NOT calculated at booking creation.
-    // They are computed ONLY at bill generation (completeSelfJob) and stored in VendorBill.
-    // This prevents inconsistency between Booking and VendorBill.
-    console.log(`[CreateBooking] Payment=${paymentMethod}, FinalAmount=${finalAmount}, Penalty=${pendingPenalty}`);
+    let bookingPaymentStatus = pricing.isFreeUnderPlan
+      ? (finalAmount > 0 ? PAYMENT_STATUS.PENDING : PAYMENT_STATUS.PLAN_COVERED)
+      : PAYMENT_STATUS.PENDING;
 
     // Clear penalty from user wallet if we charged it
     if (pendingPenalty > 0) {
@@ -248,10 +189,7 @@ const createBooking = async (req, res) => {
       await user.save();
     }
 
-    // Ensure minimum amount for Razorpay (₹1) for paid bookings
-    if (finalAmount < 1 && paymentMethod !== 'plan_benefit') {
-      finalAmount = 1;
-    }
+    console.log(`[CreateBooking] Payment=${paymentMethod}, FinalAmount=${finalAmount}, CouponDiscount=${couponDiscount}, Penalty=${pendingPenalty}`);
 
     // Create booking
     const bookingNumber = `BK${Date.now()}${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
@@ -259,14 +197,13 @@ const createBooking = async (req, res) => {
     // Improve Category Fetching if ID is missing (Fallback to title match)
     let finalCategory = category;
     if (!finalCategory && service.category) {
-      // Try finding by name if ID lookup failed
       const Category = require('../../models/Category');
       finalCategory = await Category.findOne({ title: service.category });
     }
 
     // Map booked items to new schema (sectionTitle -> brandName)
     const formattedBookedItems = (Array.isArray(bookedItems) && bookedItems.length > 0) ? bookedItems.map(item => ({
-      brandName: item.brandName || item.sectionTitle || item.brand || '', // Robust fallback
+      brandName: item.brandName || item.sectionTitle || item.brand || '',
       brandIcon: item.brandIcon || item.sectionIcon || item.icon || null,
       card: item.card || item,
       quantity: item.quantity || 1
@@ -280,13 +217,10 @@ const createBooking = async (req, res) => {
     let brandIcon = null;
 
     if (formattedBookedItems.length > 0) {
-      // Try to find a distinct brand name
       const distinctBrands = [...new Set(formattedBookedItems.map(item => item.brandName).filter(Boolean))];
       if (distinctBrands.length > 0) {
         brandName = distinctBrands.join(', ');
       }
-
-      // Try to find brand icon
       brandIcon = formattedBookedItems[0].brandIcon || null;
     }
 
@@ -298,7 +232,6 @@ const createBooking = async (req, res) => {
       categoryId: finalCategory?._id || categoryId,
       serviceName: service.title,
       serviceCategory: reqServiceCategory || finalCategory?.title || service.category || 'General',
-      // Visual Identity Fields
       categoryIcon: reqCategoryIcon || categoryIcon,
       brandName: reqBrandName || brandName,
       brandIcon: reqBrandIcon || brandIcon,
@@ -309,8 +242,10 @@ const createBooking = async (req, res) => {
       bookedItems: formattedBookedItems,
       basePrice,
       discount,
+      couponDiscount,
+      coupon: pricing.couponInfo || { couponId: null, code: null, discountType: null, discountValue: 0, discountAmount: 0 },
       tax,
-      visitingCharges,
+      visitingCharges: visitingChargesCalculated,
       finalAmount,
       userPayableAmount: finalAmount,
       address: {
@@ -330,13 +265,33 @@ const createBooking = async (req, res) => {
         start: timeSlot.start,
         end: timeSlot.end
       },
-      // userNotes: userNotes || null, // Removed
-      // isPlusAdded: isPlusAdded || false, // Removed
       paymentMethod: paymentMethod || null,
       status: bookingStatus,
       paymentStatus: bookingPaymentStatus
-      // notifiedVendors will be set after wave sorting
     });
+
+    // Create Audit / Coupon Usage Record if a coupon was used
+    if (pricing.couponInfo && pricing.couponInfo.couponId) {
+      try {
+        await CouponUsage.create({
+          couponId: pricing.couponInfo.couponId,
+          couponCode: pricing.couponInfo.code,
+          userId: user._id,
+          bookingId: booking._id,
+          discountAmount: pricing.couponDiscount,
+          orderAmount: pricing.basePrice,
+          finalAmount: pricing.finalAmount,
+          status: (pricing.isFreeUnderPlan || paymentMethod === 'cash') ? 'CONSUMED' : 'APPLIED'
+        });
+
+        // If free or COD cash, increment coupon usage count immediately
+        if (pricing.isFreeUnderPlan || paymentMethod === 'cash') {
+          await Coupon.findByIdAndUpdate(pricing.couponInfo.couponId, { $inc: { usedCount: 1 } });
+        }
+      } catch (usageErr) {
+        console.error('[CreateBooking] CouponUsage logging error:', usageErr);
+      }
+    }
 
     // --- IMMEDIATE RESPONSE ---
     // Send immediate response to the client. All subsequent operations will run in the background.
@@ -580,18 +535,18 @@ const getUserBookings = async (req, res) => {
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Get bookings
-    const bookings = await Booking.find(query)
-      .populate('vendorId', 'name businessName phone profilePhoto')
-      .populate('serviceId', 'title iconUrl')
-      .populate('categoryId', 'title slug')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
-
-    // Get total count
-    const total = await Booking.countDocuments(query);
+    // Get bookings and total count in parallel
+    const [bookings, total] = await Promise.all([
+      Booking.find(query)
+        .populate('vendorId', 'name businessName phone profilePhoto')
+        .populate('serviceId', 'title iconUrl')
+        .populate('categoryId', 'title slug')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      Booking.countDocuments(query)
+    ]);
 
     res.status(200).json({
       success: true,
@@ -808,6 +763,22 @@ const cancelBooking = async (req, res) => {
     booking.cancellationReason = cancellationReason || 'Cancelled by user';
 
     await booking.save();
+
+    // ── Restore Coupon if Applicable ──
+    if (booking.coupon && booking.coupon.couponId) {
+      try {
+        const usage = await CouponUsage.findOne({ bookingId: booking._id });
+        if (usage) {
+          if (usage.status === 'CONSUMED') {
+            await Coupon.findByIdAndUpdate(usage.couponId, { $inc: { usedCount: -1 } });
+          }
+          usage.status = 'CANCELLED';
+          await usage.save();
+        }
+      } catch (couponRestoreErr) {
+        console.error('[CancelBooking] Error restoring coupon usage:', couponRestoreErr);
+      }
+    }
 
     // Send notification to user
     await createNotification({

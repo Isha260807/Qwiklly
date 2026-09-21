@@ -121,6 +121,18 @@ const bookingSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  couponDiscount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  coupon: {
+    couponId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coupon', default: null },
+    code: { type: String, default: null },
+    discountType: { type: String, enum: ['PERCENTAGE', 'FIXED', null], default: null },
+    discountValue: { type: Number, default: 0 },
+    discountAmount: { type: Number, default: 0 }
+  },
   tax: {
     type: Number,
     default: 0,

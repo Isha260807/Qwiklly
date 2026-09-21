@@ -139,6 +139,25 @@ const verifyPaymentWebhook = async (req, res) => {
 
     await booking.save();
 
+    // ── Atomic Coupon Consumption on Payment Success ──
+    if (booking.coupon && booking.coupon.couponId) {
+      try {
+        const Coupon = require('../../models/Coupon');
+        const CouponUsage = require('../../models/CouponUsage');
+        const usage = await CouponUsage.findOne({ bookingId: booking._id });
+        if (usage && usage.status !== 'CONSUMED') {
+          usage.status = 'CONSUMED';
+          usage.paymentId = razorpay_payment_id;
+          await usage.save();
+
+          // Increment global coupon used count atomically
+          await Coupon.findByIdAndUpdate(booking.coupon.couponId, { $inc: { usedCount: 1 } });
+        }
+      } catch (couponUsageErr) {
+        console.error('[PaymentVerification] Error finalizing coupon usage:', couponUsageErr);
+      }
+    }
+
     // ── Credit Vendor Wallet from VendorBill (single source of truth) ──
     const Transaction = require('../../models/Transaction');
     const Vendor = require('../../models/Vendor');

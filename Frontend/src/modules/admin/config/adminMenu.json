@@ -113,6 +113,16 @@
     "children": []
   },
   {
+    "section": "OPERATIONS & CATALOG",
+    "title": "Coupons",
+    "route": "/admin/coupons",
+    "allowedRoles": [
+      "super_admin",
+      "admin"
+    ],
+    "children": []
+  },
+  {
     "section": "FINANCE & SETTLEMENTS",
     "title": "Payments",
     "route": "/admin/payments",

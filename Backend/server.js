@@ -169,6 +169,7 @@ app.use('/api/user/wallet', require('./routes/user-routes/userWallet.routes'));
 app.use('/api/users/bookings', require('./routes/user-routes/booking.routes'));
 app.use('/api/users', require('./routes/user-routes/cart.routes'));
 app.use('/api/users/fcm-tokens', require('./routes/user-routes/fcmToken.routes'));
+app.use('/api/coupons', require('./routes/user-routes/coupon.routes'));
 
 // API Routes
 
@@ -197,6 +198,7 @@ app.use('/api/admin', require('./routes/admin-routes/vendorCatalogManagement.rou
 app.use('/api/admin', require('./routes/admin-routes/homePageManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/bannerManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/bookingManagement.routes'));
+app.use('/api/admin/coupons', require('./routes/admin-routes/couponManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/paymentManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/transactionManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/upload.routes'));
