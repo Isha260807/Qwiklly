@@ -95,6 +95,16 @@
   },
   {
     "section": "OPERATIONS & CATALOG",
+    "title": "Banners",
+    "route": "/admin/banners",
+    "allowedRoles": [
+      "super_admin",
+      "admin"
+    ],
+    "children": []
+  },
+  {
+    "section": "OPERATIONS & CATALOG",
     "title": "Reviews",
     "route": "/admin/reviews",
     "allowedRoles": [

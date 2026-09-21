@@ -13,6 +13,7 @@ import { registerFCMToken } from '../../../../services/pushNotificationService';
 import { motion } from 'framer-motion';
 
 import PromoCarousel from './components/PromoCarousel';
+import TopHeroBanner from './components/TopHeroBanner';
 import ServicesWeOffer from './components/ServicesWeOffer';
 import DirectServiceDetailModal from './components/DirectServiceDetailModal';
 // Lazy load OTHER heavy components
@@ -275,6 +276,7 @@ const Home = () => {
 
   const [categories, setCategories] = useState([]);
   const [services, setServices] = useState([]);
+  const [banners, setBanners] = useState([]);
   const [selectedDirectService, setSelectedDirectService] = useState(null);
   const [isDirectServiceModalOpen, setIsDirectServiceModalOpen] = useState(false);
   const [homeContent, setHomeContent] = useState(null);
@@ -315,6 +317,12 @@ const Home = () => {
 
           if (response.services) {
             setServices(response.services);
+          }
+
+          if (response.banners && response.banners.length > 0) {
+            setBanners(response.banners);
+          } else if (response.homeContent?.banners && response.homeContent.banners.length > 0) {
+            setBanners(response.homeContent.banners);
           }
 
           if (response.homeContent) {
@@ -558,6 +566,78 @@ const Home = () => {
             </div>
           ) : (
             <>
+              {/* Top Hero Banner Carousel */}
+              {banners.filter(b => b.bannerType === 'top' || b.bannerType === 'hero' || (!b.bannerType && b.bannerType !== 'footer' && b.bannerType !== 'bottom')).length > 0 && (
+                <motion.section variants={itemVariants} className="relative z-0">
+                  <TopHeroBanner
+                    banners={banners.filter(b => b.bannerType === 'top' || b.bannerType === 'hero' || (!b.bannerType && b.bannerType !== 'footer' && b.bannerType !== 'bottom'))}
+                    categories={categories}
+                    onCategoryClick={handleCategoryClick}
+                    onServiceClick={(svc) => {
+                      const serviceId = svc?._id || svc?.id || svc?.slug || svc;
+                      const matched = services.find(s => s._id === serviceId || s.id === serviceId || s.slug === serviceId);
+                      if (serviceId) navigate(`/user/service/${serviceId}`, { state: { service: matched || svc } });
+                    }}
+                    onBannerClick={(b) => {
+                      if (!b) return;
+
+                      // 1. Direct Service Redirection
+                      if (b.targetType === 'service' || b.targetServiceId || b.targetService) {
+                        const svcId = b.targetServiceId?._id || b.targetServiceId?.id || b.targetServiceId || b.targetService?._id || b.targetService?.id;
+                        let matchedSvc = services.find(s => s._id === svcId || s.id === svcId);
+                        
+                        // Fallback: If service wasn't explicitly selected in dropdown, match by banner title
+                        if (!matchedSvc && b.title) {
+                          matchedSvc = services.find(s => 
+                            s.title?.toLowerCase().trim() === b.title?.toLowerCase().trim() ||
+                            b.title?.toLowerCase().includes(s.title?.toLowerCase()) ||
+                            s.title?.toLowerCase().includes(b.title?.toLowerCase())
+                          );
+                        }
+
+                        const finalId = matchedSvc?._id || matchedSvc?.id || svcId;
+                        if (finalId) {
+                          navigate(`/user/service/${finalId}`, { state: { service: matchedSvc } });
+                          return;
+                        }
+                      }
+
+                      // 2. Category Redirection
+                      if (b.targetType === 'category' || b.targetCategoryId || b.targetCategory) {
+                        const catId = b.targetCategoryId?._id || b.targetCategoryId?.id || b.targetCategoryId || b.targetCategory?._id;
+                        const cat = categories.find(c => c.id === catId || c._id === catId);
+                        if (cat) {
+                          handleCategoryClick(cat);
+                          return;
+                        }
+                      }
+
+                      // 3. Custom URL Redirection
+                      if (b.targetType === 'url' && b.targetUrl) {
+                        if (b.targetUrl.startsWith('http')) {
+                          window.open(b.targetUrl, '_blank');
+                        } else {
+                          navigate(b.targetUrl);
+                        }
+                        return;
+                      }
+
+                      // 4. Smart fallback if title matches a service directly
+                      if (b.title) {
+                        const matched = services.find(s => 
+                          s.title?.toLowerCase().trim() === b.title?.toLowerCase().trim() ||
+                          b.title?.toLowerCase().includes(s.title?.toLowerCase()) ||
+                          s.title?.toLowerCase().includes(b.title?.toLowerCase())
+                        );
+                        if (matched) {
+                          navigate(`/user/service/${matched._id || matched.id}`, { state: { service: matched } });
+                        }
+                      }
+                    }}
+                  />
+                </motion.section>
+              )}
+
               {/* Hero Section - Promo Carousel */}
               {homeContent?.isPromosVisible !== false && homeContent?.promos && homeContent.promos.length > 0 && (
                 <motion.section variants={itemVariants} className="relative z-0">
@@ -665,28 +745,6 @@ const Home = () => {
                 </motion.div>
               )}
 
-              {/* Dynamic Banner 1 */}
-              {homeContent?.isBannersVisible !== false && (
-                <motion.div variants={itemVariants}>
-                  <Suspense fallback={<div className="h-32 bg-gray-50 animate-pulse rounded-xl mx-4" />}>
-                    <Banner
-                      imageUrl={homeContent?.banners?.[0] ? toAssetUrl(homeContent.banners[0].imageUrl) : null}
-                      onClick={() => {
-                        const b = homeContent?.banners?.[0];
-                        if (b?.slug) {
-                          navigate(`/user/${b.slug}`);
-                          return;
-                        }
-                        if (b?.targetCategoryId) {
-                          const cat = categories.find(c => c.id === b.targetCategoryId);
-                          if (cat) handleCategoryClick(cat);
-                        }
-                      }}
-                    />
-                  </Suspense>
-                </motion.div>
-              )}
-
               {/* Dynamic Sections */}
               {homeContent?.isCategorySectionsVisible !== false && (homeContent?.categorySections || []).sort((a, b) => (a.order || 0) - (b.order || 0)).map((section, sIdx) => (
                 <motion.div key={section._id || sIdx} variants={itemVariants}>
@@ -722,22 +780,39 @@ const Home = () => {
                 </motion.div>
               ))}
 
-              {/* Dynamic Banner 2 */}
-              {homeContent?.isBannersVisible !== false && (
-                <motion.div variants={itemVariants}>
-                  <Suspense fallback={<div className="h-32 bg-gray-50 animate-pulse rounded-xl mx-4" />}>
-                    <Banner
-                      imageUrl={homeContent?.banners?.[1] ? toAssetUrl(homeContent.banners[1].imageUrl) : null}
+              {/* Footer / Bottom Banners (Only shown if configured as Footer Banner) */}
+              {banners.filter(b => b.bannerType === 'footer' || b.bannerType === 'bottom').length > 0 && (
+                <motion.section variants={itemVariants} className="px-4 mb-6">
+                  {banners.filter(b => b.bannerType === 'footer' || b.bannerType === 'bottom').map(fb => (
+                    <div
+                      key={fb.id || fb._id}
                       onClick={() => {
-                        const b = homeContent?.banners?.[1];
-                        if (b?.targetCategoryId) {
-                          const cat = categories.find(c => (c.id === b.targetCategoryId || c._id === b.targetCategoryId));
+                        if (fb.targetType === 'category' || fb.targetCategoryId) {
+                          const catId = fb.targetCategoryId?._id || fb.targetCategoryId;
+                          const cat = categories.find(c => c.id === catId || c._id === catId);
                           if (cat) handleCategoryClick(cat);
+                        } else if (fb.targetType === 'service' || fb.targetServiceId) {
+                          const svcId = fb.targetServiceId?._id || fb.targetServiceId?.id || fb.targetServiceId;
+                          if (svcId) navigate(`/user/service/${svcId}`);
+                        } else if (fb.targetType === 'url' && fb.targetUrl) {
+                          if (fb.targetUrl.startsWith('http')) {
+                            window.open(fb.targetUrl, '_blank');
+                          } else {
+                            navigate(fb.targetUrl);
+                          }
                         }
                       }}
-                    />
-                  </Suspense>
-                </motion.div>
+                      className="cursor-pointer overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all mb-4 aspect-[16/6] bg-gray-100"
+                    >
+                      <img
+                        src={toAssetUrl(fb.imageUrl)}
+                        alt={fb.title || 'Special Promotion'}
+                        className="w-full h-full object-cover rounded-2xl"
+                        loading="lazy"
+                      />
+                    </div>
+                  ))}
+                </motion.section>
               )}
             </>
           )}

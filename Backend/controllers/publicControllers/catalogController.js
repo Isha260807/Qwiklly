@@ -2,6 +2,7 @@ const Category = require('../../models/Category');
 const Brand = require('../../models/Brand');
 const Service = require('../../models/UserService');
 const HomeContent = require('../../models/HomeContent');
+const Banner = require('../../models/Banner');
 
 /**
  * Public Catalog Controllers
@@ -418,8 +419,14 @@ const getPublicHomeData = async (req, res) => {
       ];
     }
 
+    // Query banners
+    const bannerQuery = { isActive: true };
+    if (cityId) {
+      bannerQuery.$or = [{ cityId: cityId }, { cityId: null }];
+    }
+
     // Fetch all in parallel
-    const [categoriesRes, servicesRes, homeContent] = await Promise.all([
+    const [categoriesRes, servicesRes, homeContent, bannersRes] = await Promise.all([
       Category.find({ status: 'active', cityIds: cityId ? cityId : { $exists: true } })
         .select('title slug homeIconUrl homeBadge hasSaleBadge')
         .sort({ homeOrder: 1 })
@@ -427,7 +434,12 @@ const getPublicHomeData = async (req, res) => {
       Service.find(serviceQuery)
         .sort({ displayOrder: 1, createdAt: -1 })
         .lean(),
-      HomeContent.getHomeContent(cityId)
+      HomeContent.getHomeContent(cityId),
+      Banner.find(bannerQuery)
+        .populate('targetCategoryId', 'title slug homeIconUrl')
+        .populate('targetServiceId', 'title slug iconUrl')
+        .sort({ order: 1, createdAt: -1 })
+        .lean()
     ]);
 
     const formattedCategories = categoriesRes.map(cat => ({
@@ -461,11 +473,30 @@ const getPublicHomeData = async (req, res) => {
       inclusions: svc.inclusions || []
     }));
 
+    const formattedBanners = (bannersRes || []).map(b => ({
+      id: b._id.toString(),
+      title: b.title || '',
+      subtitle: b.subtitle || '',
+      imageUrl: b.imageUrl,
+      bannerType: b.bannerType || 'hero',
+      position: b.position || 'top',
+      targetType: b.targetType || 'none',
+      targetCategoryId: b.targetCategoryId?._id?.toString() || b.targetCategoryId?.toString() || null,
+      targetCategory: b.targetCategoryId || null,
+      targetServiceId: b.targetServiceId?._id?.toString() || b.targetServiceId?.toString() || null,
+      targetService: b.targetServiceId || null,
+      targetUrl: b.targetUrl || '',
+      buttonText: b.buttonText || 'Book Now',
+      badgeText: b.badgeText || '',
+      gradientClass: b.gradientClass || 'from-blue-600 to-indigo-700',
+      order: b.order || 0
+    }));
+
     let formattedContent = null;
     if (homeContent) {
       const contentObj = homeContent.toObject();
       formattedContent = {
-        banners: (contentObj.banners || []).map(item => ({
+        banners: formattedBanners.length > 0 ? formattedBanners : (contentObj.banners || []).map(item => ({
           imageUrl: item.imageUrl,
           targetCategoryId: item.targetCategoryId?.toString() || null,
           slug: item.slug,
@@ -523,6 +554,7 @@ const getPublicHomeData = async (req, res) => {
       success: true,
       categories: formattedCategories,
       services: formattedServices,
+      banners: formattedBanners,
       homeContent: formattedContent
     });
   } catch (error) {
@@ -534,11 +566,67 @@ const getPublicHomeData = async (req, res) => {
   }
 };
 
+/**
+ * Get public active banners
+ * GET /api/public/banners
+ */
+const getPublicBanners = async (req, res) => {
+  try {
+    const { cityId, bannerType, position } = req.query;
+    const query = { isActive: true };
+
+    if (bannerType && bannerType !== 'all') query.bannerType = bannerType;
+    if (position && position !== 'all') query.position = position;
+
+    if (cityId) {
+      query.$or = [{ cityId: cityId }, { cityId: null }];
+    } else {
+      query.cityId = null;
+    }
+
+    const banners = await Banner.find(query)
+      .populate('targetCategoryId', 'title slug homeIconUrl')
+      .populate('targetServiceId', 'title slug iconUrl')
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      banners: banners.map(b => ({
+        id: b._id.toString(),
+        title: b.title || '',
+        subtitle: b.subtitle || '',
+        imageUrl: b.imageUrl,
+        bannerType: b.bannerType || 'hero',
+        position: b.position || 'top',
+        targetType: b.targetType || 'none',
+        targetCategoryId: b.targetCategoryId?._id?.toString() || b.targetCategoryId?.toString() || null,
+        targetCategory: b.targetCategoryId || null,
+        targetServiceId: b.targetServiceId?._id?.toString() || b.targetServiceId?.toString() || null,
+        targetService: b.targetServiceId || null,
+        targetUrl: b.targetUrl || '',
+        buttonText: b.buttonText || 'Book Now',
+        badgeText: b.badgeText || '',
+        gradientClass: b.gradientClass || 'from-blue-600 to-indigo-700',
+        order: b.order || 0
+      }))
+    });
+  } catch (error) {
+    console.error('Get public banners error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch banners',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getPublicCategories,
   getPublicBrands,
   getPublicBrandBySlug,
   getPublicServices,
   getPublicHomeContent,
-  getPublicHomeData
+  getPublicHomeData,
+  getPublicBanners
 };

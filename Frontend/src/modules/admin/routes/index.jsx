@@ -25,6 +25,7 @@ const Notifications = lazy(() => import('../pages/Notifications'));
 const Plans = lazy(() => import('../pages/Plans/Plans'));
 const Settlements = lazy(() => import('../pages/Settlements'));
 const Reviews = lazy(() => import('../pages/Reviews'));
+const Banners = lazy(() => import('../pages/Banners'));
 
 
 
@@ -61,6 +62,7 @@ const AdminRoutes = () => {
           <Route path="bookings/tracking" element={<BookingTracking />} />
           <Route path="bookings/notifications" element={<BookingNotifications />} />
           <Route path="user-categories/*" element={<UserCategories />} />
+          <Route path="banners" element={<Banners />} />
           <Route path="payments/*" element={<Payments />} />
           <Route path="reports/*" element={<Reports />} />
           <Route path="notifications/*" element={<Notifications />} />

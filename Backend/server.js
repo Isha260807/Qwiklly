@@ -195,6 +195,7 @@ app.use('/api/admin', require('./routes/admin-routes/brandManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/serviceManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/vendorCatalogManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/homePageManagement.routes'));
+app.use('/api/admin', require('./routes/admin-routes/bannerManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/bookingManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/paymentManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/transactionManagement.routes'));
