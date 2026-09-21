@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX } from 'react-icons/fi';
+import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiClock, FiCheck, FiSlash, FiCalendar } from 'react-icons/fi';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus } from '../../services/settingsService';
 import { cityService } from '../../services/cityService';
 import CityManagement from '../Cities';
@@ -26,6 +26,18 @@ const AdminSettings = () => {
     searchRadius: 10,
     isOnlinePaymentEnabled: true
   });
+
+  // Dynamic Booking Slots State
+  const [slotSettings, setSlotSettings] = useState({
+    slotStartHour: 9,
+    slotEndHour: 21,
+    slotIntervalMins: 60,
+    maxDaysInAdvance: 7,
+    leadTimeHours: 1,
+    slotServiceDurationMins: 45,
+    disabledSlots: []
+  });
+  const [slotLoading, setSlotLoading] = useState(false);
 
   // Billing Configuration State
   const [billingSettings, setBillingSettings] = useState({
@@ -142,6 +154,16 @@ const AdminSettings = () => {
             supportEmail: res.settings.supportEmail || '',
             supportPhone: res.settings.supportPhone || '',
             supportWhatsapp: res.settings.supportWhatsapp || ''
+          });
+          // Load slot settings
+          setSlotSettings({
+            slotStartHour: res.settings.slotStartHour ?? 9,
+            slotEndHour: res.settings.slotEndHour ?? 21,
+            slotIntervalMins: res.settings.slotIntervalMins ?? 60,
+            maxDaysInAdvance: res.settings.maxDaysInAdvance ?? 7,
+            leadTimeHours: res.settings.leadTimeHours ?? 1,
+            slotServiceDurationMins: res.settings.slotServiceDurationMins ?? 45,
+            disabledSlots: res.settings.disabledSlots || []
           });
         }
       } catch (error) {
@@ -304,6 +326,89 @@ const AdminSettings = () => {
     }
   };
 
+  // Dynamic Slots Handlers
+  const handleSlotChange = (e) => {
+    const { name, value } = e.target;
+    setSlotSettings(prev => ({
+      ...prev,
+      [name]: Number(value)
+    }));
+  };
+
+  const toggleSlotDisabled = (slotValue) => {
+    setSlotSettings(prev => {
+      const currentDisabled = prev.disabledSlots || [];
+      const exists = currentDisabled.includes(slotValue);
+      const updatedDisabled = exists
+        ? currentDisabled.filter(s => s !== slotValue)
+        : [...currentDisabled, slotValue];
+      return { ...prev, disabledSlots: updatedDisabled };
+    });
+  };
+
+  const handleEnableAllSlots = () => {
+    setSlotSettings(prev => ({ ...prev, disabledSlots: [] }));
+    toast.success('All generated slots enabled');
+  };
+
+  const handleDisableAllSlots = () => {
+    const all = generateSlotsList(slotSettings.slotStartHour, slotSettings.slotEndHour, slotSettings.slotIntervalMins);
+    setSlotSettings(prev => ({ ...prev, disabledSlots: all.map(s => s.value) }));
+    toast.success('All generated slots blocked');
+  };
+
+  const generateSlotsList = (startHour = 9, endHour = 21, interval = 60) => {
+    const slots = [];
+    let currentTotalMinutes = Number(startHour) * 60;
+    const endTotalMinutes = Number(endHour) * 60;
+
+    while (currentTotalMinutes < endTotalMinutes) {
+      const h = Math.floor(currentTotalMinutes / 60);
+      const m = currentTotalMinutes % 60;
+      const endTotal = currentTotalMinutes + Number(interval);
+      const endH = Math.floor(endTotal / 60);
+      const endM = endTotal % 60;
+
+      const valStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      const endStr = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const displayH = h % 12 === 0 ? 12 : h % 12;
+      const displayM = m === 0 ? '00' : String(m).padStart(2, '0');
+
+      const endAmpm = endH >= 12 ? (endH === 24 ? 'AM' : 'PM') : 'AM';
+      const endDisplayH = endH % 12 === 0 ? (endH === 24 ? 12 : 12) : endH % 12;
+      const endDisplayM = endM === 0 ? '00' : String(endM).padStart(2, '0');
+
+      slots.push({
+        value: valStr,
+        end: endStr,
+        display: `${displayH}:${displayM} ${ampm}`,
+        fullRange: `${displayH}:${displayM} ${ampm} - ${endDisplayH}:${endDisplayM} ${endAmpm}`
+      });
+
+      currentTotalMinutes += Number(interval);
+    }
+    return slots;
+  };
+
+  const handleSlotSave = async (e) => {
+    if (e) e.preventDefault();
+    if (slotSettings.slotStartHour >= slotSettings.slotEndHour) {
+      return toast.error('Start hour must be earlier than End hour');
+    }
+    setSlotLoading(true);
+    try {
+      await updateSettings(slotSettings);
+      toast.success('Booking slot settings updated successfully');
+    } catch (error) {
+      toast.error('Failed to update slot settings');
+    } finally {
+      setSlotLoading(false);
+    }
+  };
+
+
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     if (profile.newPassword && profile.newPassword !== profile.confirmPassword) {
@@ -453,6 +558,18 @@ const AdminSettings = () => {
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">System & Support</h3>
           <p className="text-sm text-gray-500">Manage auto-assignment and help contact info</p>
+        </div>
+      )}
+
+      {/* Booking Slots & Timing Card - Super Admin Only */}
+      {isSuperAdmin && (
+        <div onClick={() => setActiveView('slots')}
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
+          <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-indigo-100 transition-colors">
+            <FiClock className="w-6 h-6 text-indigo-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Booking Slots & Timing</h3>
+          <p className="text-sm text-gray-500">Configure working hours, slot interval, and toggle active slots</p>
         </div>
       )}
 
@@ -1019,6 +1136,215 @@ const AdminSettings = () => {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </motion.div>
+          )
+        }
+        {/* Booking Slots & Timing View - Super Admin Only */}
+        {
+          activeView === 'slots' && isSuperAdmin && (
+            <motion.div key="slots" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}
+              className="space-y-6">
+              
+              {/* Slot Generation & Operating Rules */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between pb-4 mb-6 border-b border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                      <FiClock className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-800">Booking Time Slots Configuration</h2>
+                      <p className="text-xs text-gray-500">Manage daily operating hours, interval duration, and advance scheduling window</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleSlotSave}
+                    disabled={slotLoading}
+                    className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 flex items-center gap-2 shadow-lg shadow-indigo-100 disabled:opacity-70 transition-all"
+                  >
+                    {slotLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiSave className="w-4 h-4" />}
+                    Save Slot Settings
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Service Start Time (Daily)</label>
+                    <select
+                      name="slotStartHour"
+                      value={slotSettings.slotStartHour}
+                      onChange={handleSlotChange}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                    >
+                      <option value={6}>6:00 AM</option>
+                      <option value={7}>7:00 AM</option>
+                      <option value={8}>8:00 AM</option>
+                      <option value={9}>9:00 AM (Default)</option>
+                      <option value={10}>10:00 AM</option>
+                      <option value={11}>11:00 AM</option>
+                      <option value={12}>12:00 PM</option>
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">First available slot of the day</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Service End Time (Daily)</label>
+                    <select
+                      name="slotEndHour"
+                      value={slotSettings.slotEndHour}
+                      onChange={handleSlotChange}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                    >
+                      <option value={18}>6:00 PM</option>
+                      <option value={19}>7:00 PM</option>
+                      <option value={20}>8:00 PM</option>
+                      <option value={21}>9:00 PM (Default)</option>
+                      <option value={22}>10:00 PM</option>
+                      <option value={23}>11:00 PM</option>
+                      <option value={24}>12:00 AM (Midnight)</option>
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">Closing time of booking operations</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Slot Interval / Gap</label>
+                    <select
+                      name="slotIntervalMins"
+                      value={slotSettings.slotIntervalMins}
+                      onChange={handleSlotChange}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                    >
+                      <option value={30}>30 Minutes</option>
+                      <option value={45}>45 Minutes</option>
+                      <option value={60}>60 Minutes (1 Hour)</option>
+                      <option value={90}>90 Minutes (1.5 Hours)</option>
+                      <option value={120}>120 Minutes (2 Hours)</option>
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">Time difference between consecutive slots</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Advance Booking Window (Days)</label>
+                    <select
+                      name="maxDaysInAdvance"
+                      value={slotSettings.maxDaysInAdvance}
+                      onChange={handleSlotChange}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                    >
+                      <option value={3}>3 Days Ahead</option>
+                      <option value={5}>5 Days Ahead</option>
+                      <option value={7}>7 Days (1 Week - Default)</option>
+                      <option value={10}>10 Days Ahead</option>
+                      <option value={14}>14 Days (2 Weeks)</option>
+                      <option value={30}>30 Days (1 Month)</option>
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">Number of dates visible in user calendar</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Same-Day Minimum Notice (Hours)</label>
+                    <select
+                      name="leadTimeHours"
+                      value={slotSettings.leadTimeHours}
+                      onChange={handleSlotChange}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                    >
+                      <option value={0}>0 Hours (Immediate)</option>
+                      <option value={1}>1 Hour Notice (Default)</option>
+                      <option value={2}>2 Hours Notice</option>
+                      <option value={3}>3 Hours Notice</option>
+                      <option value={4}>4 Hours Notice</option>
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">Buffer before user can book a slot today</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Approx. Service Duration (Mins)</label>
+                    <input
+                      type="number"
+                      name="slotServiceDurationMins"
+                      value={slotSettings.slotServiceDurationMins}
+                      onChange={handleSlotChange}
+                      min="15"
+                      max="360"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1">Displayed as subtitle: "Service will take approx. X mins"</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive Live Slot Activation Grid */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 mb-4 border-b border-gray-100">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
+                      <span>Live Slot Availability Matrix</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+                        {generateSlotsList(slotSettings.slotStartHour, slotSettings.slotEndHour, slotSettings.slotIntervalMins).length} Total Slots
+                      </span>
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Click any slot chip to toggle between Active (Available) and Blocked (Disabled) for customers.</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleEnableAllSlots}
+                      className="px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg transition-colors"
+                    >
+                      Enable All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDisableAllSlots}
+                      className="px-3 py-1.5 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
+                    >
+                      Block All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Slots Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
+                  {generateSlotsList(slotSettings.slotStartHour, slotSettings.slotEndHour, slotSettings.slotIntervalMins).map((slot) => {
+                    const isBlocked = (slotSettings.disabledSlots || []).includes(slot.value);
+                    return (
+                      <button
+                        key={slot.value}
+                        type="button"
+                        onClick={() => toggleSlotDisabled(slot.value)}
+                        className={`p-3 rounded-xl border text-left flex flex-col transition-all cursor-pointer relative group ${
+                          isBlocked
+                            ? 'bg-red-50/50 border-red-200 text-red-700 hover:bg-red-100/60'
+                            : 'bg-white border-green-200 text-gray-800 hover:border-green-400 hover:shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-black">{slot.display}</span>
+                          {isBlocked ? (
+                            <span className="w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-[10px] font-bold">
+                              <FiSlash className="w-3 h-3" />
+                            </span>
+                          ) : (
+                            <span className="w-5 h-5 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-[10px] font-bold">
+                              <FiCheck className="w-3 h-3" />
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-[10px] font-medium ${isBlocked ? 'text-red-500 line-through' : 'text-gray-400'}`}>
+                          {slot.fullRange}
+                        </span>
+                        <span className={`mt-2 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded w-fit ${
+                          isBlocked ? 'bg-red-200/60 text-red-800' : 'bg-green-100 text-green-700'
+                        }`}>
+                          {isBlocked ? 'Blocked' : 'Active'}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </motion.div>

@@ -172,7 +172,52 @@ const settingsSchema = new mongoose.Schema({
   isOnlinePaymentEnabled: {
     type: Boolean,
     default: true
-  }
+  },
+
+  // Dynamic Booking & Time Slot Configuration
+  slotStartHour: {
+    type: Number,
+    default: 9, // 9 AM
+    min: 0,
+    max: 23
+  },
+  slotEndHour: {
+    type: Number,
+    default: 21, // 9 PM
+    min: 1,
+    max: 24
+  },
+  slotIntervalMins: {
+    type: Number,
+    default: 60, // 60 min intervals
+    enum: [30, 45, 60, 90, 120]
+  },
+  maxDaysInAdvance: {
+    type: Number,
+    default: 7, // 7 days in date picker
+    min: 1,
+    max: 30
+  },
+  leadTimeHours: {
+    type: Number,
+    default: 1, // 1 hour minimum notice for same-day
+    min: 0
+  },
+  slotServiceDurationMins: {
+    type: Number,
+    default: 45, // "Service will take approx 45 mins"
+    min: 15
+  },
+  disabledSlots: {
+    type: [String], // Array of slot values like ["13:00", "14:00"]
+    default: []
+  },
+  customSlots: [{
+    value: { type: String, required: true },
+    end: { type: String, required: true },
+    display: { type: String, required: true },
+    isActive: { type: Boolean, default: true }
+  }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('Settings', settingsSchema);

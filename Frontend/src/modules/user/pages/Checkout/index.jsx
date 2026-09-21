@@ -61,6 +61,17 @@ const Checkout = () => {
   const [gstPercentage, setGstPercentage] = useState(18);
   const [bookingType, setBookingType] = useState('instant'); // 'instant' | 'scheduled'
 
+  // Dynamic Booking Slot Settings from Admin
+  const [slotConfig, setSlotConfig] = useState({
+    slotStartHour: 9,
+    slotEndHour: 21,
+    slotIntervalMins: 60,
+    maxDaysInAdvance: 7,
+    leadTimeHours: 1,
+    slotServiceDurationMins: 45,
+    disabledSlots: []
+  });
+
   // Check if Razorpay is loaded (defer to avoid blocking initial render)
   useEffect(() => {
     // Defer Razorpay check until after page load
@@ -124,6 +135,17 @@ const Checkout = () => {
           if (response.success) {
             setVisitedFee(0); // Plans usually have 0 visitor fee
             setGstPercentage(response.settings?.serviceGstPercentage || 18);
+            if (response.settings) {
+              setSlotConfig({
+                slotStartHour: response.settings.slotStartHour ?? 9,
+                slotEndHour: response.settings.slotEndHour ?? 21,
+                slotIntervalMins: response.settings.slotIntervalMins ?? 60,
+                maxDaysInAdvance: response.settings.maxDaysInAdvance ?? 7,
+                leadTimeHours: response.settings.leadTimeHours ?? 1,
+                slotServiceDurationMins: response.settings.slotServiceDurationMins ?? 45,
+                disabledSlots: response.settings.disabledSlots || []
+              });
+            }
 
             if (response.user?.addresses?.length > 0) {
               const defaultAddr = response.user.addresses.find(a => a.isDefault) || response.user.addresses[0];
@@ -146,6 +168,17 @@ const Checkout = () => {
             // Set Config
             setVisitedFee(response.settings?.visitedCharges || 29);
             setGstPercentage(response.settings?.serviceGstPercentage || 18);
+            if (response.settings) {
+              setSlotConfig({
+                slotStartHour: response.settings.slotStartHour ?? 9,
+                slotEndHour: response.settings.slotEndHour ?? 21,
+                slotIntervalMins: response.settings.slotIntervalMins ?? 60,
+                maxDaysInAdvance: response.settings.maxDaysInAdvance ?? 7,
+                leadTimeHours: response.settings.leadTimeHours ?? 1,
+                slotServiceDurationMins: response.settings.slotServiceDurationMins ?? 45,
+                disabledSlots: response.settings.disabledSlots || []
+              });
+            }
 
             // Set Addresses
             if (response.user?.addresses?.length > 0) {
@@ -1048,7 +1081,8 @@ const Checkout = () => {
   const getDates = () => {
     const dates = [];
     const today = new Date();
-    for (let i = 0; i < 7; i++) {
+    const daysCount = slotConfig.maxDaysInAdvance || 7;
+    for (let i = 0; i < daysCount; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
       dates.push(date);
@@ -1057,22 +1091,44 @@ const Checkout = () => {
   };
 
   const getTimeSlots = () => {
-    const allSlots = [
-      { value: '09:00', end: '10:00', display: '9:00 AM' },
-      { value: '10:00', end: '11:00', display: '10:00 AM' },
-      { value: '11:00', end: '12:00', display: '11:00 AM' },
-      { value: '12:00', end: '13:00', display: '12:00 PM' },
-      { value: '13:00', end: '14:00', display: '1:00 PM' },
-      { value: '14:00', end: '15:00', display: '2:00 PM' },
-      { value: '15:00', end: '16:00', display: '3:00 PM' },
-      { value: '16:00', end: '17:00', display: '4:00 PM' },
-      { value: '17:00', end: '18:00', display: '5:00 PM' },
-      { value: '18:00', end: '19:00', display: '6:00 PM' },
-      { value: '19:00', end: '20:00', display: '7:00 PM' },
-      { value: '20:00', end: '21:00', display: '8:00 PM' },
-    ];
+    const startHour = Number(slotConfig.slotStartHour ?? 9);
+    const endHour = Number(slotConfig.slotEndHour ?? 21);
+    const interval = Number(slotConfig.slotIntervalMins || 60);
+    const disabled = slotConfig.disabledSlots || [];
 
-    // If today is selected, filter out past time slots
+    const allSlots = [];
+    let currentTotalMinutes = startHour * 60;
+    const endTotalMinutes = endHour * 60;
+
+    while (currentTotalMinutes < endTotalMinutes) {
+      const h = Math.floor(currentTotalMinutes / 60);
+      const m = currentTotalMinutes % 60;
+      const endTotal = currentTotalMinutes + interval;
+      const endH = Math.floor(endTotal / 60);
+      const endM = endTotal % 60;
+
+      const valStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      const endStr = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const displayH = h % 12 === 0 ? 12 : h % 12;
+      const displayM = m === 0 ? '00' : String(m).padStart(2, '0');
+      const display = `${displayH}:${displayM} ${ampm}`;
+
+      // Only include active / enabled slots
+      if (!disabled.includes(valStr)) {
+        allSlots.push({
+          value: valStr,
+          end: endStr,
+          display,
+          startMinutes: currentTotalMinutes
+        });
+      }
+
+      currentTotalMinutes += interval;
+    }
+
+    // If today is selected, filter out slots within the minimum lead time
     const now = new Date();
     const isToday = selectedDate && selectedDate.toDateString() === now.toDateString();
 
@@ -1080,14 +1136,10 @@ const Checkout = () => {
       return allSlots;
     }
 
-    // Get current hour + 1 (minimum 1 hour buffer for vendors to accept)
-    const currentHour = now.getHours();
-    const minHour = currentHour + 1;
+    const leadHours = Number(slotConfig.leadTimeHours ?? 1);
+    const currentMinutes = (now.getHours() * 60) + now.getMinutes() + (leadHours * 60);
 
-    return allSlots.filter(slot => {
-      const slotHour = parseInt(slot.value.split(':')[0], 10);
-      return slotHour >= minHour;
-    });
+    return allSlots.filter(slot => slot.startMinutes >= currentMinutes);
   };
 
   const formatDate = (date) => {
@@ -1663,6 +1715,7 @@ const Checkout = () => {
         formatDate={formatDate}
         isDateSelected={isDateSelected}
         isTimeSelected={isTimeSelected}
+        approxDuration={slotConfig.slotServiceDurationMins || 45}
       />
     </div>
   );

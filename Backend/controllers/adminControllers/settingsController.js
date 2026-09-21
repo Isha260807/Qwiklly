@@ -50,7 +50,9 @@ exports.updateSettings = async (req, res, next) => {
       // Booking Timing
       maxSearchTime, waveDuration, searchRadius,
       // Payment Control
-      isOnlinePaymentEnabled
+      isOnlinePaymentEnabled,
+      // Dynamic Booking Slots Configuration
+      slotStartHour, slotEndHour, slotIntervalMins, maxDaysInAdvance, leadTimeHours, slotServiceDurationMins, disabledSlots, customSlots
     } = req.body;
 
     let settings = await Settings.findOne({ type: 'global' });
@@ -65,14 +67,22 @@ exports.updateSettings = async (req, res, next) => {
         partsPayoutPercentage,
         tdsPercentage,
         platformFeePercentage,
-        vendorCashLimit, // Add this
+        vendorCashLimit,
         cancellationPenalty,
         razorpayKeyId,
         razorpayKeySecret,
         razorpayWebhookSecret,
         cloudinaryCloudName,
         cloudinaryApiKey,
-        cloudinaryApiSecret
+        cloudinaryApiSecret,
+        slotStartHour,
+        slotEndHour,
+        slotIntervalMins,
+        maxDaysInAdvance,
+        leadTimeHours,
+        slotServiceDurationMins,
+        disabledSlots,
+        customSlots
       });
     } else {
       // Update fields if provided
@@ -83,15 +93,13 @@ exports.updateSettings = async (req, res, next) => {
       if (partsPayoutPercentage !== undefined) settings.partsPayoutPercentage = partsPayoutPercentage;
       if (tdsPercentage !== undefined) settings.tdsPercentage = tdsPercentage;
       if (platformFeePercentage !== undefined) settings.platformFeePercentage = platformFeePercentage;
-      if (vendorCashLimit !== undefined) settings.vendorCashLimit = vendorCashLimit; // Add this
+      if (vendorCashLimit !== undefined) settings.vendorCashLimit = vendorCashLimit;
       if (cancellationPenalty !== undefined) settings.cancellationPenalty = cancellationPenalty;
       if (razorpayKeyId !== undefined) settings.razorpayKeyId = razorpayKeyId;
       if (razorpayKeySecret !== undefined) settings.razorpayKeySecret = razorpayKeySecret;
       if (razorpayWebhookSecret !== undefined) settings.razorpayWebhookSecret = razorpayWebhookSecret;
       if (cloudinaryCloudName !== undefined) settings.cloudinaryCloudName = cloudinaryCloudName;
       if (cloudinaryApiKey !== undefined) settings.cloudinaryApiKey = cloudinaryApiKey;
-      if (cloudinaryApiSecret !== undefined) settings.cloudinaryApiSecret = cloudinaryApiSecret;
-
       if (cloudinaryApiSecret !== undefined) settings.cloudinaryApiSecret = cloudinaryApiSecret;
 
       // Billing update
@@ -118,6 +126,16 @@ exports.updateSettings = async (req, res, next) => {
       if (searchRadius !== undefined) settings.searchRadius = searchRadius;
       if (isOnlinePaymentEnabled !== undefined) settings.isOnlinePaymentEnabled = isOnlinePaymentEnabled;
 
+      // Dynamic Slots update
+      if (slotStartHour !== undefined) settings.slotStartHour = slotStartHour;
+      if (slotEndHour !== undefined) settings.slotEndHour = slotEndHour;
+      if (slotIntervalMins !== undefined) settings.slotIntervalMins = slotIntervalMins;
+      if (maxDaysInAdvance !== undefined) settings.maxDaysInAdvance = maxDaysInAdvance;
+      if (leadTimeHours !== undefined) settings.leadTimeHours = leadTimeHours;
+      if (slotServiceDurationMins !== undefined) settings.slotServiceDurationMins = slotServiceDurationMins;
+      if (disabledSlots !== undefined) settings.disabledSlots = disabledSlots;
+      if (customSlots !== undefined) settings.customSlots = customSlots;
+
       await settings.save();
     }
 
@@ -125,7 +143,7 @@ exports.updateSettings = async (req, res, next) => {
     if (vendorCashLimit !== undefined) {
       console.log(`Updating all vendors with new cash limit: ${vendorCashLimit}`);
       await Vendor.updateMany(
-        {}, // Filter: all vendors
+        {},
         { $set: { 'wallet.cashLimit': vendorCashLimit } }
       );
     }
@@ -152,10 +170,12 @@ exports.updateSettings = async (req, res, next) => {
     });
   }
 };
-// Get Public Settings (Visited Charges, GST)
+// Get Public Settings (Visited Charges, GST, Slots)
 exports.getPublicSettings = async (req, res, next) => {
   try {
-    let settings = await Settings.findOne({ type: 'global' }).select('visitedCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty companyName companyAddress companyCity companyState companyPincode companyPhone companyEmail isOnlinePaymentEnabled');
+    let settings = await Settings.findOne({ type: 'global' }).select(
+      'visitedCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty companyName companyAddress companyCity companyState companyPincode companyPhone companyEmail isOnlinePaymentEnabled slotStartHour slotEndHour slotIntervalMins maxDaysInAdvance leadTimeHours slotServiceDurationMins disabledSlots customSlots'
+    );
 
     // Default if not found (fallback values)
     if (!settings) {

@@ -14,7 +14,8 @@ const TimeSlotModal = ({
   getTimeSlots,
   formatDate,
   isDateSelected,
-  isTimeSelected
+  isTimeSelected,
+  approxDuration = 45
 }) => {
   const [isClosing, setIsClosing] = useState(false);
 
@@ -100,7 +101,7 @@ const TimeSlotModal = ({
             }}
           >
             <h2 className="text-xl font-bold text-black mb-1">When should the professional arrive?</h2>
-            <p className="text-sm text-gray-600 mb-4">Service will take approx. 45 mins</p>
+            <p className="text-sm text-gray-600 mb-4">Service will take approx. {approxDuration} mins</p>
 
             {/* Date Selection */}
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide mb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
