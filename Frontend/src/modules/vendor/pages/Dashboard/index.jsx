@@ -504,17 +504,17 @@ const Dashboard = memo(() => {
           {/* Performance Metrics */}
           <div>
             <h2 className="text-base font-bold text-gray-800 mb-3">Performance</h2>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 items-stretch">
               {/* Completed Jobs Card */}
-              <div className="bg-white rounded-xl p-3.5 relative overflow-hidden border border-gray-200 shadow-sm hover:shadow-md hover:border-[#720C3E]/20 transition-all duration-200">
+              <div className="bg-white rounded-xl p-3 sm:p-3.5 relative overflow-hidden border border-gray-200/90 shadow-sm hover:shadow-md hover:border-[#720C3E]/20 transition-all duration-200 flex flex-col justify-between h-full">
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-[11px] font-bold text-[#6F5A64] uppercase tracking-wider">Completed</span>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-[#6F5A64] uppercase tracking-wider">Completed</span>
                   <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center bg-[#FCEBF3] text-[#720C3E]">
                     <FiCheckCircle className="w-4 h-4" />
                   </div>
                 </div>
                 <div>
-                  <p className="text-xl font-black text-[#24151D] leading-tight mb-0.5">
+                  <p className="text-lg sm:text-xl font-black text-[#24151D] leading-tight mb-0.5">
                     {stats.completedJobs}
                   </p>
                   <p className="text-[11px] text-[#6F5A64] font-medium">Total jobs</p>
@@ -522,15 +522,15 @@ const Dashboard = memo(() => {
               </div>
 
               {/* Rating Card */}
-              <div className="bg-white rounded-xl p-3.5 relative overflow-hidden border border-gray-200 shadow-sm hover:shadow-md hover:border-[#720C3E]/20 transition-all duration-200">
+              <div className="bg-white rounded-xl p-3 sm:p-3.5 relative overflow-hidden border border-gray-200/90 shadow-sm hover:shadow-md hover:border-[#720C3E]/20 transition-all duration-200 flex flex-col justify-between h-full">
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-[11px] font-bold text-[#6F5A64] uppercase tracking-wider">Rating</span>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-[#6F5A64] uppercase tracking-wider">Rating</span>
                   <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center bg-[#FCEBF3] text-[#720C3E]">
                     <FiTrendingUp className="w-4 h-4" />
                   </div>
                 </div>
                 <div>
-                  <p className="text-xl font-black text-[#24151D] leading-tight mb-0.5">
+                  <p className="text-lg sm:text-xl font-black text-[#24151D] leading-tight mb-0.5">
                     {stats.rating > 0 ? stats.rating.toFixed(1) : 'N/A'}
                   </p>
                   <p className="text-[11px] text-[#6F5A64] font-medium">Average rating</p>
