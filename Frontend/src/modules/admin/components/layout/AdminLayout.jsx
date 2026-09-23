@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import AdminBottomNav from './AdminBottomNav';
+import EmergencySOSAlertModal from '../common/EmergencySOSAlertModal';
 import useAdminHeaderHeight from '../../hooks/useAdminHeaderHeight';
 
 const AdminLayout = () => {
@@ -44,6 +45,9 @@ const AdminLayout = () => {
 
       {/* Bottom Navigation - Mobile Only */}
       <AdminBottomNav />
+
+      {/* Real-time Emergency SOS Alert Modal for Admins */}
+      <EmergencySOSAlertModal />
     </div>
   );
 };

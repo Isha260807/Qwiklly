@@ -177,6 +177,11 @@ export const SocketProvider = ({ children }) => {
           newSocket.emit('join_vendor_room', vendorId);
         }
       }
+
+      // If admin, join admin room
+      if (userType === 'admin') {
+        newSocket.emit('join_admin_room');
+      }
     });
 
     newSocket.on('disconnect', () => {
@@ -188,9 +193,32 @@ export const SocketProvider = ({ children }) => {
       // console.error(`Socket connection error (${userType}):`, err);
     });
 
+    // Listen for Emergency SOS Alerts (Admin)
+    newSocket.on('emergency_sos', (data) => {
+      console.log('🚨 EMERGENCY SOS ALERT RECEIVED:', data);
+      window.dispatchEvent(new CustomEvent('adminEmergencySOSAlert', { detail: data }));
+      window.dispatchEvent(new Event('adminNotificationsUpdated'));
+      toast.error(`🚨 EMERGENCY SOS: ${data.vendorName || data.businessName || 'Vendor'}!`, {
+        duration: 8000,
+        position: 'top-center',
+        style: {
+          background: '#DC2626',
+          color: '#FFFFFF',
+          fontWeight: 'bold',
+          fontSize: '15px'
+        }
+      });
+    });
+
     // Listen for generic notifications
     newSocket.on('notification', (data) => {
-      // console.log('🔔 App Notification received:', data);
+      // If emergency_sos notification, update notification count/list and skip duplicate modal dispatch & generic sound
+      if (data.type === 'emergency_sos') {
+        if (userType === 'admin') {
+          window.dispatchEvent(new Event('adminNotificationsUpdated'));
+        }
+        return;
+      }
 
       if (isSoundEnabled(userType)) {
         playNotificationSound();

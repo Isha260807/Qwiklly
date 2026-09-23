@@ -60,6 +60,7 @@ const notificationSchema = new mongoose.Schema({
       'payout_requested',
       'payout_processed',
       'vendor_withdrawal_request',
+      'emergency_sos',
       'general'
     ],
     index: true
@@ -82,7 +83,7 @@ const notificationSchema = new mongoose.Schema({
   },
   relatedType: {
     type: String,
-    enum: ['booking', 'payment', 'user', 'vendor', 'service', 'withdrawal'],
+    enum: ['booking', 'payment', 'user', 'vendor', 'service', 'withdrawal', 'sos'],
     default: null
   },
   // Notification Status

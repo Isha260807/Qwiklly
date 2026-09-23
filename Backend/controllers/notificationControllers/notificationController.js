@@ -506,6 +506,98 @@ const deleteAllNotifications = async (req, res) => {
   }
 };
 
+/**
+ * Trigger Emergency SOS from Vendor
+ */
+const triggerEmergencySOS = async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+    const Vendor = require('../../models/Vendor');
+    const Admin = require('../../models/Admin');
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor not found'
+      });
+    }
+
+    const { location, note, bookingId } = req.body || {};
+
+    const finalLocation = {
+      lat: location?.lat || vendor.location?.lat || null,
+      lng: location?.lng || vendor.location?.lng || null,
+      address: location?.address || vendor.address?.addressLine1 || vendor.address?.street || 'Location not specified',
+      accuracy: location?.accuracy || null
+    };
+
+    const sosPayload = {
+      vendorId: vendor._id,
+      vendorName: vendor.name || 'Vendor',
+      businessName: vendor.businessName || vendor.name || 'Vendor Partner',
+      phone: vendor.phone || vendor.mobileNumber || 'N/A',
+      location: finalLocation,
+      note: note || 'Emergency SOS triggered by vendor',
+      bookingId: bookingId || null,
+      createdAt: new Date().toISOString()
+    };
+
+    console.log(`[SOS ALERT] 🚨 Emergency SOS triggered by vendor: ${vendor.name} (${vendor._id})`);
+
+    // Find all active admins
+    const admins = await Admin.find({ isActive: { $ne: false } }).select('_id');
+
+    // Create notifications for admins
+    const notificationPromises = admins.map(admin =>
+      createNotification({
+        adminId: admin._id,
+        type: 'emergency_sos',
+        title: `🚨 EMERGENCY SOS: ${vendor.name || vendor.businessName}`,
+        message: `Vendor ${vendor.name} (${vendor.phone || 'No phone'}) triggered an Emergency SOS alert! Immediate action required.`,
+        relatedId: vendor._id,
+        relatedType: 'vendor',
+        data: sosPayload,
+        pushData: {
+          type: 'emergency_sos',
+          priority: 'high',
+          link: '/admin/vendors'
+        },
+        priority: 'high'
+      })
+    );
+
+    await Promise.allSettled(notificationPromises);
+
+    // Direct Socket Broadcast to all admins
+    try {
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io) {
+        io.to('admin_room').emit('emergency_sos', sosPayload);
+        io.to('admins').emit('emergency_sos', sosPayload);
+        admins.forEach(admin => {
+          io.to(`admin_${admin._id.toString()}`).emit('emergency_sos', sosPayload);
+        });
+      }
+    } catch (socketErr) {
+      console.error('[SOS ALERT] Socket broadcast failed:', socketErr.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Emergency SOS alert sent to admin successfully',
+      data: sosPayload
+    });
+  } catch (error) {
+    console.error('Trigger emergency SOS error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to trigger emergency SOS. Please try again or call emergency services.'
+    });
+  }
+};
+
 module.exports = {
   createNotification,
   getUserNotifications,
@@ -515,6 +607,8 @@ module.exports = {
   markAsRead,
   markAllAsRead,
   deleteNotification,
-  deleteAllNotifications
+  deleteAllNotifications,
+  triggerEmergencySOS
 };
+
 

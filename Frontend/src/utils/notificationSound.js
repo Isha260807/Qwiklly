@@ -157,6 +157,133 @@ export const stopAlertRing = () => {
   }
 };
 
+// Emergency Alarm Audio Controller
+const emergencyAudioInstances = new Set();
+let emergencySynthInterval = null;
+let unlockAudioHandler = null;
+let isEmergencyAlarmStopped = false;
+
+const removeEmergencyUnlockListeners = () => {
+  if (unlockAudioHandler) {
+    window.removeEventListener('click', unlockAudioHandler, true);
+    window.removeEventListener('touchstart', unlockAudioHandler, true);
+    window.removeEventListener('keydown', unlockAudioHandler, true);
+    window.removeEventListener('pointerdown', unlockAudioHandler, true);
+    unlockAudioHandler = null;
+  }
+};
+
+export const playEmergencyAlarm = (loop = true) => {
+  try {
+    isEmergencyAlarmStopped = false;
+    // Stop any existing emergency audio instances and remove old unlock listeners
+    stopEmergencyAlarm();
+    isEmergencyAlarmStopped = false;
+
+    const soundUrls = ['/emergecyalarm.mp3', '/emergencyalrm.mp3', '/emergencyalarm.mp3'];
+    let currentUrlIndex = 0;
+
+    const createAndPlayAudio = (url) => {
+      if (isEmergencyAlarmStopped) return;
+
+      const audio = new Audio(url);
+      audio.loop = loop;
+      audio.volume = 1.0;
+      emergencyAudioInstances.add(audio);
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            if (isEmergencyAlarmStopped) {
+              audio.pause();
+              audio.currentTime = 0;
+              audio.src = '';
+              emergencyAudioInstances.delete(audio);
+              return;
+            }
+            console.log('🚨 [SOS Sound] Emergency alarm playing successfully:', url);
+          })
+          .catch((err) => {
+            if (isEmergencyAlarmStopped) return;
+            console.warn('[SOS Sound] Autoplay restriction or load error:', err.message);
+
+            // If url failed and we have more urls to try
+            if (err.name !== 'NotAllowedError' && currentUrlIndex < soundUrls.length - 1) {
+              currentUrlIndex++;
+              createAndPlayAudio(soundUrls[currentUrlIndex]);
+              return;
+            }
+
+            // If browser autoplay policy blocked sound, unlock on user interaction
+            removeEmergencyUnlockListeners();
+            unlockAudioHandler = () => {
+              if (isEmergencyAlarmStopped) {
+                removeEmergencyUnlockListeners();
+                return;
+              }
+              emergencyAudioInstances.forEach((inst) => {
+                inst.play().catch(() => {});
+              });
+              removeEmergencyUnlockListeners();
+            };
+
+            window.addEventListener('click', unlockAudioHandler, { once: true, capture: true });
+            window.addEventListener('touchstart', unlockAudioHandler, { once: true, capture: true });
+            window.addEventListener('keydown', unlockAudioHandler, { once: true, capture: true });
+            window.addEventListener('pointerdown', unlockAudioHandler, { once: true, capture: true });
+          });
+      }
+
+      audio.onended = () => {
+        if (!loop) {
+          emergencyAudioInstances.delete(audio);
+        }
+      };
+    };
+
+    createAndPlayAudio(soundUrls[0]);
+    return true;
+  } catch (error) {
+    console.error('Error in playEmergencyAlarm:', error);
+    return false;
+  }
+};
+
+export const stopEmergencyAlarm = () => {
+  isEmergencyAlarmStopped = true;
+  removeEmergencyUnlockListeners();
+
+  emergencyAudioInstances.forEach((audio) => {
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = '';
+      audio.removeAttribute('src');
+      audio.load();
+    } catch (e) {
+      console.warn('Error stopping emergency audio instance:', e);
+    }
+  });
+  emergencyAudioInstances.clear();
+
+  if (emergencySynthInterval) {
+    clearInterval(emergencySynthInterval);
+    emergencySynthInterval = null;
+  }
+
+  // Also stop any alert rings if active
+  if (currentAudio) {
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      currentAudio = null;
+    } catch (e) {}
+  }
+
+  return true;
+};
+
 // Check if sound is enabled in settings
 export const isSoundEnabled = (userType = 'vendor') => {
   let storageKey = 'vendorData';
@@ -180,5 +307,8 @@ export default {
   playNotificationSound,
   playSingleBeep,
   playAlertRing,
+  stopAlertRing,
+  playEmergencyAlarm,
+  stopEmergencyAlarm,
   isSoundEnabled
 };

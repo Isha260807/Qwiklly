@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiBell, FiCheck, FiX, FiChevronRight } from 'react-icons/fi';
+import { FiBell, FiCheck, FiX, FiChevronRight, FiAlertTriangle } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 
 // NotificationWindow now controlled by parent (AdminHeader)
@@ -42,9 +42,14 @@ const NotificationWindow = ({
     if (!notification.isRead && onMarkAsRead) {
       onMarkAsRead(notification._id);
     }
+
+    if (notification.type === 'emergency_sos') {
+      window.dispatchEvent(new CustomEvent('adminEmergencySOSAlert', { detail: notification.data || notification }));
+      onClose();
+      return;
+    }
+
     if (notification.relatedId && notification.relatedType === 'booking') {
-      // Navigate to booking details if possible, or just bookings list
-      // For now, if we have bookingId in data, use it.
       const bookingId = notification.relatedId || notification.bookingId;
       if (bookingId) {
         navigate(`/admin/bookings`);
@@ -116,50 +121,73 @@ const NotificationWindow = ({
                 </div>
               ) : (
                 <div className="p-2">
-                  {notifications.map((n) => (
-                    <div
-                      key={n._id}
-                      className={`p-3 rounded-xl border mb-2 cursor-pointer transition-colors ${n.isRead ? 'bg-white border-gray-200' : 'bg-primary-50 border-primary-300'
+                  {notifications.map((n) => {
+                    const isSOS = n.type === 'emergency_sos';
+                    return (
+                      <div
+                        key={n._id}
+                        className={`p-3 rounded-xl border mb-2 cursor-pointer transition-colors ${
+                          isSOS
+                            ? 'bg-red-50/90 border-red-300 hover:bg-red-100/80 shadow-xs'
+                            : n.isRead
+                            ? 'bg-white border-gray-200 hover:bg-gray-50'
+                            : 'bg-primary-50 border-primary-300 hover:bg-primary-100/70'
                         }`}
-                      onClick={() => handleNotificationClick(n)}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                          <FiBell className="text-gray-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-gray-800 text-sm">{n.title}</p>
-                          <p className="text-xs text-gray-600 mt-1 line-clamp-2">{n.message}</p>
-                          <p className="text-[11px] text-gray-400 mt-2">{new Date(n.createdAt).toLocaleString()}</p>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          {!n.isRead && (
+                        onClick={() => handleNotificationClick(n)}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                              isSOS ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {isSOS ? <FiAlertTriangle className="animate-pulse text-lg" /> : <FiBell />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className={`font-bold text-sm ${isSOS ? 'text-red-900 font-extrabold' : 'text-gray-800'}`}>
+                                {n.title}
+                              </p>
+                              {isSOS && (
+                                <span className="px-1.5 py-0.2 bg-red-600 text-white text-[9px] font-black rounded-full uppercase">
+                                  SOS
+                                </span>
+                              )}
+                            </div>
+                            <p className={`text-xs mt-1 line-clamp-2 ${isSOS ? 'text-red-800 font-medium' : 'text-gray-600'}`}>
+                              {n.message}
+                            </p>
+                            <p className="text-[11px] text-gray-400 mt-2">{new Date(n.createdAt).toLocaleString()}</p>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {!n.isRead && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onMarkAsRead && onMarkAsRead(n._id);
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 text-green-600"
+                                title="Mark as read"
+                              >
+                                <FiCheck />
+                              </button>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onMarkAsRead && onMarkAsRead(n._id);
+                                onDelete && onDelete(n._id);
                               }}
-                              className="p-1.5 rounded-lg hover:bg-gray-100 text-green-600"
-                              title="Mark as read"
+                              className="p-1.5 rounded-lg hover:bg-gray-100 text-red-600"
+                              title="Delete"
                             >
-                              <FiCheck />
+                              <FiX />
                             </button>
-                          )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDelete && onDelete(n._id);
-                            }}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-red-600"
-                            title="Delete"
-                          >
-                            <FiX />
-                          </button>
+                          </div>
+                          <FiChevronRight className="text-gray-300 mt-1" />
                         </div>
-                        <FiChevronRight className="text-gray-300 mt-1" />
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -52,11 +52,22 @@ const initializeSocket = (server) => {
       socket.join(`worker_${socket.userId.toString()}`);
       // Update worker online status
       updateWorkerOnlineStatus(socket.userId, true, socket.id);
-    } else if (socket.userRole === 'ADMIN') {
+    } else if (socket.userRole === 'ADMIN' || socket.userRole === 'admin' || socket.userRole === 'super_admin') {
       socket.join(`admin_${socket.userId.toString()}`);
+      socket.join('admin_room');
+      socket.join('admins');
+      console.log(`Socket ${socket.id} (Admin) joined admin_room and admins`);
     }
 
     // Explicit Room Join Events (Fallback/Frontend Initiated)
+    socket.on('join_admin_room', () => {
+      if (socket.userRole === 'ADMIN' || socket.userRole === 'admin' || socket.userRole === 'super_admin') {
+        socket.join('admin_room');
+        socket.join('admins');
+        console.log(`Socket ${socket.id} explicitly joined admin_room`);
+      }
+    });
+
     socket.on('join_vendor_room', (vendorId) => {
       // Security check: ensure the socket user actually IS this vendor
       if (socket.userRole === 'VENDOR' && socket.userId.toString() === vendorId.toString()) {

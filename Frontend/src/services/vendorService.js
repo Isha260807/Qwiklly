@@ -40,6 +40,12 @@ const vendorService = {
   getRevenueAnalytics: async (period) => {
     const response = await api.get(`/vendors/dashboard/revenue?period=${period}`);
     return response.data;
+  },
+
+  // Trigger Emergency SOS
+  triggerEmergencySOS: async (data = {}) => {
+    const response = await api.post('/notifications/emergency-sos', data);
+    return response.data;
   }
 };
 

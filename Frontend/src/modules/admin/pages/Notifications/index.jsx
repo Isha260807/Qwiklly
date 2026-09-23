@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiBell, FiRefreshCw, FiCheck, FiCheckCircle, FiTrash2, FiFilter, FiUser, FiDollarSign, FiUserCheck } from 'react-icons/fi';
+import { FiBell, FiRefreshCw, FiCheck, FiCheckCircle, FiTrash2, FiFilter, FiUser, FiDollarSign, FiUserCheck, FiAlertTriangle, FiPhoneCall, FiMapPin } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { formatDistanceToNow } from 'date-fns';
 import api from '../../../../services/api';
@@ -30,6 +30,10 @@ const Notifications = () => {
 
   useEffect(() => {
     fetchNotifications();
+
+    const handleUpdate = () => fetchNotifications();
+    window.addEventListener('adminNotificationsUpdated', handleUpdate);
+    return () => window.removeEventListener('adminNotificationsUpdated', handleUpdate);
   }, [fetchNotifications]);
 
   const handleRefresh = async () => {
@@ -74,6 +78,8 @@ const Notifications = () => {
 
   const getIcon = (type) => {
     switch (type) {
+      case 'emergency_sos':
+        return <FiAlertTriangle className="text-red-600 animate-pulse text-lg" />;
       case 'vendor_withdrawal_request':
         return <FiDollarSign className="text-green-500" />;
       case 'vendor_approval_request':
@@ -186,63 +192,97 @@ const Notifications = () => {
         ) : (
           <div className="divide-y divide-gray-50">
             <AnimatePresence>
-              {filteredNotifications.map(notification => (
-                <motion.div
-                  key={notification._id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className={`p-4 hover:bg-gray-50 transition-colors flex items-start gap-3 ${!notification.isRead ? 'bg-blue-50/30' : ''
+              {filteredNotifications.map(notification => {
+                const isSOS = notification.type === 'emergency_sos';
+                return (
+                  <motion.div
+                    key={notification._id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className={`p-4 transition-colors flex items-start gap-3 ${
+                      isSOS
+                        ? 'bg-red-50/70 border-l-4 border-l-red-600 hover:bg-red-100/60'
+                        : !notification.isRead
+                        ? 'bg-blue-50/30 hover:bg-gray-50'
+                        : 'hover:bg-gray-50'
                     }`}
-                >
-                  {/* Icon */}
-                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                    {getIcon(notification.type)}
-                  </div>
+                  >
+                    {/* Icon */}
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        isSOS ? 'bg-red-100' : 'bg-gray-100'
+                      }`}
+                    >
+                      {getIcon(notification.type)}
+                    </div>
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className={`text-sm ${!notification.isRead ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
-                          {notification.title}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
-                          {notification.message}
-                        </p>
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className={`text-sm ${isSOS ? 'font-black text-red-900' : !notification.isRead ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                              {notification.title}
+                            </p>
+                            {isSOS && (
+                              <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-full uppercase animate-pulse">
+                                SOS ALERT
+                              </span>
+                            )}
+                          </div>
+                          <p className={`text-xs mt-0.5 line-clamp-2 ${isSOS ? 'text-red-800 font-medium' : 'text-gray-500'}`}>
+                            {notification.message}
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">
+                          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">
-                        {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-                      </span>
-                    </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 mt-2">
-                      {!notification.isRead && (
+                      {/* Actions */}
+                      <div className="flex items-center gap-3 mt-2.5">
+                        {isSOS && (
+                          <button
+                            onClick={() => {
+                              window.dispatchEvent(
+                                new CustomEvent('adminEmergencySOSAlert', {
+                                  detail: notification.data || notification
+                                })
+                              );
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
+                          >
+                            <FiAlertTriangle className="text-xs" />
+                            View Emergency Details
+                          </button>
+                        )}
+                        {!notification.isRead && (
+                          <button
+                            onClick={() => markAsRead(notification._id)}
+                            className="text-[11px] font-semibold text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <FiCheck className="text-xs" />
+                            Mark as read
+                          </button>
+                        )}
                         <button
-                          onClick={() => markAsRead(notification._id)}
-                          className="text-[10px] font-semibold text-blue-600 hover:underline flex items-center gap-1"
+                          onClick={() => deleteNotification(notification._id)}
+                          className="text-[11px] font-semibold text-red-500 hover:underline flex items-center gap-1 cursor-pointer"
                         >
-                          <FiCheck className="text-xs" />
-                          Mark as read
+                          <FiTrash2 className="text-xs" />
+                          Delete
                         </button>
-                      )}
-                      <button
-                        onClick={() => deleteNotification(notification._id)}
-                        className="text-[10px] font-semibold text-red-500 hover:underline flex items-center gap-1"
-                      >
-                        <FiTrash2 className="text-xs" />
-                        Delete
-                      </button>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Unread indicator */}
-                  {!notification.isRead && (
-                    <div className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0 mt-2"></div>
-                  )}
-                </motion.div>
-              ))}
+                    {/* Unread indicator */}
+                    {!notification.isRead && (
+                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-2 ${isSOS ? 'bg-red-600' : 'bg-blue-600'}`}></div>
+                    )}
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
           </div>
         )}
