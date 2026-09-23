@@ -99,7 +99,7 @@ export default function BookingDetails() {
         },
         // Price Breakdown
         basePrice: parseFloat(apiData.basePrice || 0),
-        tax: parseFloat(apiData.tax || (apiData.paymentMethod === 'plan_benefit' ? (apiData.basePrice || 0) * 0.18 : 0)),
+        tax: parseFloat(apiData.tax || 0),
         visitingCharges: parseFloat(apiData.visitingCharges || apiData.visitationFee || (apiData.paymentMethod === 'plan_benefit' ? 49 : 0)),
         discount: parseFloat(apiData.discount || 0),
         platformCommission: parseFloat(apiData.adminCommission || apiData.platformFee || apiData.commission || 0),
@@ -614,8 +614,8 @@ export default function BookingDetails() {
     partsGST += (parseFloat(c.gstAmount) || 0);
   });
 
-  // Tax Logic
-  const originalGST = bill ? (bill.originalGST || 0) : (originalBase * 0.18);
+  // When bill exists: use bill.originalGST. Otherwise: use booking.tax (calculated by backend from admin settings)
+  const originalGST = bill ? (bill.originalGST || 0) : (parseFloat(booking?.tax) || 0);
   const totalGST = originalGST + extraServiceGST + partsGST;
 
   // Final Total from bill or booking

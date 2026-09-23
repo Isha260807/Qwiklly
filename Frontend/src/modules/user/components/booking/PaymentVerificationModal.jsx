@@ -72,8 +72,8 @@ const PaymentVerificationModal = ({ isOpen, onClose, booking, onPayOnline }) => 
     partsGST += (parseFloat(c.gstAmount) || 0);
   });
 
-  // Tax Logic
-  const originalGST = bill ? (bill.originalGST || 0) : (originalBase * 0.18);
+  // When bill exists: use bill.originalGST. Otherwise: use booking.tax (calculated by backend from admin settings)
+  const originalGST = bill ? (bill.originalGST || 0) : (parseFloat(booking.tax) || 0);
   const totalGST = originalGST + extraServiceGST + partsGST;
 
   // Final Total

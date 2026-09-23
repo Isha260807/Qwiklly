@@ -108,8 +108,8 @@ const BookingConfirmation = () => {
           const data = { ...response.data };
           // Calculate notional display values for plan_benefit
           if (data.paymentMethod === 'plan_benefit') {
-            if (!data.tax) data.tax = (data.basePrice || 0) * 0.18;
-            if (!data.visitingCharges && !data.visitationFee) data.visitingCharges = 49;
+            if (!data.tax) data.tax = 0;
+            if (!data.visitingCharges && !data.visitationFee) data.visitingCharges = 0;
           }
           setBooking(data);
 
@@ -147,8 +147,8 @@ const BookingConfirmation = () => {
 
           // Calculate notional display values for plan_benefit
           if (updatedBooking.paymentMethod === 'plan_benefit') {
-            if (!updatedBooking.tax) updatedBooking.tax = (updatedBooking.basePrice || 0) * 0.18;
-            if (!updatedBooking.visitingCharges && !updatedBooking.visitationFee) updatedBooking.visitingCharges = 49;
+            if (!updatedBooking.tax) updatedBooking.tax = 0;
+            if (!updatedBooking.visitingCharges && !updatedBooking.visitationFee) updatedBooking.visitingCharges = 0;
           }
 
           setBooking(updatedBooking);

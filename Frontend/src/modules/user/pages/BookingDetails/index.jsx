@@ -65,6 +65,7 @@ const BookingDetails = () => {
     email: 'support@homestr.com',
     phone: ''
   });
+  const [serviceGstPct, setServiceGstPct] = useState(0);
 
   const socket = useAppNotifications();
 
@@ -74,11 +75,12 @@ const BookingDetails = () => {
       try {
         const response = await api.get('/public/config');
         if (response.data?.success && response.data?.settings) {
-          const { supportEmail, supportPhone } = response.data.settings;
+          const { supportEmail, supportPhone, serviceGstPercentage } = response.data.settings;
           setSupportInfo({
             email: supportEmail || 'help@homestr.in',
             phone: supportPhone || '+919999999999'
           });
+          setServiceGstPct(serviceGstPercentage ?? 0);
         }
       } catch (error) {
         console.error('Failed to fetch support settings:', error);
@@ -100,8 +102,8 @@ const BookingDetails = () => {
         const data = { ...response.data };
         // Calculate notional display values for plan_benefit
         if (data.paymentMethod === 'plan_benefit') {
-          if (!data.tax) data.tax = (data.basePrice || 0) * 0.18;
-          if (!data.visitingCharges && !data.visitationFee) data.visitingCharges = 49;
+          if (!data.tax) data.tax = 0;
+          if (!data.visitingCharges && !data.visitationFee) data.visitingCharges = 0;
         }
         setBooking(data);
       } else {
@@ -184,8 +186,8 @@ const BookingDetails = () => {
 
             // Calculate notional display values for plan_benefit
             if (newData.paymentMethod === 'plan_benefit') {
-              if (!newData.tax) newData.tax = (newData.basePrice || 0) * 0.18;
-              if (!newData.visitingCharges && !newData.visitationFee) newData.visitingCharges = 49;
+              if (!newData.tax) newData.tax = 0;
+              if (!newData.visitingCharges && !newData.visitationFee) newData.visitingCharges = 0;
             }
             return newData;
           });
@@ -563,8 +565,8 @@ const BookingDetails = () => {
     partsGST += (parseFloat(c.gstAmount) || 0);
   });
 
-  // Use bill.originalGST if available
-  const originalGST = bill ? (bill.originalGST || 0) : (originalBase * 0.18);
+  // When bill exists: use bill.originalGST. Otherwise: use booking.tax (calculated by backend from admin settings)
+  const originalGST = bill ? (bill.originalGST || 0) : (parseFloat(booking.tax) || 0);
   const totalGST = originalGST + extraServiceGST + partsGST;
 
   // Final Total
