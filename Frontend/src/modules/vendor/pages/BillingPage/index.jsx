@@ -186,10 +186,10 @@ const BillingPage = () => {
         if (billRes.bill.payoutConfig) {
           const pc = billRes.bill.payoutConfig;
           setPayoutSettings({
-            serviceGstPct: pc.serviceGstPercentage ?? 18,
-            partsGstPct: pc.partsGstPercentage ?? 18,
-            servicePayoutPct: pc.serviceSplitPercentage ?? 70,
-            partsPayoutPct: pc.partsSplitPercentage ?? 10
+            serviceGstPct: pc.serviceGstPercentage ?? 0,
+            partsGstPct: pc.partsGstPercentage ?? 0,
+            servicePayoutPct: pc.serviceSplitPercentage ?? 0,
+            partsPayoutPct: pc.partsSplitPercentage ?? 0
           });
         }
 
@@ -223,10 +223,10 @@ const BillingPage = () => {
           if (data.success && data.data?.global) {
             const g = data.data.global;
             setPayoutSettings({
-              serviceGstPct: g.serviceGstPercentage ?? 18,
-              partsGstPct: g.partsGstPercentage ?? 18,
-              servicePayoutPct: g.servicePayoutPercentage ?? 70,
-              partsPayoutPct: g.partsPayoutPercentage ?? 10
+              serviceGstPct: g.serviceGstPercentage ?? 0,
+              partsGstPct: g.partsGstPercentage ?? 0,
+              servicePayoutPct: g.servicePayoutPercentage ?? 0,
+              partsPayoutPct: g.partsPayoutPercentage ?? 0
             });
           }
         } catch (e) { console.error('Error fetching global settings:', e); }

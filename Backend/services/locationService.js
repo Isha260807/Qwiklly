@@ -98,7 +98,7 @@ const _buildVendorQuery = (filters = {}) => {
 /**
  * Find vendors within specified radius of a location
  */
-const findNearbyVendors = async (centerLocation, radiusKm = 10, filters = {}) => {
+const findNearbyVendors = async (centerLocation, radiusKm = 5, filters = {}) => {
   const Vendor = require('../models/Vendor');
   const Settings = require('../models/Settings');
   const { getNearbyVendorsFromCache, isRedisConnected } = require('./redisService');
@@ -113,7 +113,7 @@ const findNearbyVendors = async (centerLocation, radiusKm = 10, filters = {}) =>
 
   try {
     // Fetch default radius from settings
-    if (radiusKm === 10) {
+    if (radiusKm === 5) {
       const globalSettings = await Settings.findOne({ type: 'global' }).select('searchRadius').lean();
       if (globalSettings?.searchRadius) radiusKm = globalSettings.searchRadius;
     }

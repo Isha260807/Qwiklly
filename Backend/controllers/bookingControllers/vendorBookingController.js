@@ -960,10 +960,10 @@ const completeSelfJob = async (req, res) => {
     // ── Fetch Settings (frozen snapshot for this bill) ──
     const Settings = require('../../models/Settings');
     const settings = await Settings.findOne({ type: 'global' });
-    const serviceSplitPct = settings?.servicePayoutPercentage ?? 70;
-    const partsSplitPct = settings?.partsPayoutPercentage ?? 10;
-    const serviceGstPct = settings?.serviceGstPercentage ?? 18;
-    const partsGstPct = settings?.partsGstPercentage ?? 18;
+    const serviceSplitPct = settings?.servicePayoutPercentage ?? 0;
+    const partsSplitPct = settings?.partsPayoutPercentage ?? 0;
+    const serviceGstPct = settings?.serviceGstPercentage ?? 0;
+    const partsGstPct = settings?.partsGstPercentage ?? 0;
 
     // ═══════════════════════════════════════════
     // STEP 1: BUILD LINE ITEMS

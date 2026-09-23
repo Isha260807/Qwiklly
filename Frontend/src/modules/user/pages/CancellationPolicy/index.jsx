@@ -17,8 +17,8 @@ const CancellationPolicy = () => {
         const res = await configService.getSettings();
         if (res.success && res.settings) {
           setFees({
-            penalty: res.settings.cancellationPenalty || 49,
-            visitingCharges: res.settings.visitedCharges || 49
+            penalty: res.settings.cancellationPenalty ?? 0,
+            visitingCharges: res.settings.visitedCharges ?? 0
           });
         }
       } catch (error) {

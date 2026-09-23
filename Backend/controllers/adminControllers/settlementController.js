@@ -649,7 +649,7 @@ module.exports = {
       const Settings = require('../../models/Settings');
       const settings = await Settings.findOne({ type: 'global' });
       const tdsRate = settings?.tdsPercentage || 1;
-      const platformFeeRate = settings?.platformFeePercentage || 1;
+      const platformFeeRate = settings?.platformFeePercentage ?? 0;
 
       const withdrawal = await Withdrawal.findById(withdrawalId);
       if (!withdrawal) return res.status(404).json({ success: false, message: 'Withdrawal not found' });

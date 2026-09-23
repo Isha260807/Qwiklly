@@ -13,30 +13,30 @@ const settingsSchema = new mongoose.Schema({
   },
   instantBookingCharges: {
     type: Number,
-    default: 49,
+    default: 0,
     min: 0
   },
   serviceGstPercentage: {
     type: Number,
-    default: 18,
+    default: 0,
     min: 0,
     max: 100
   },
   partsGstPercentage: {
     type: Number,
-    default: 18,
+    default: 0,
     min: 0,
     max: 100
   },
   servicePayoutPercentage: {
     type: Number,
-    default: 90, // Vendor gets 90% of service base price
+    default: 0,
     min: 0,
     max: 100
   },
   partsPayoutPercentage: {
     type: Number,
-    default: 100, // Vendor gets 100% of parts base price
+    default: 0,
     min: 0,
     max: 100
   },
@@ -48,18 +48,18 @@ const settingsSchema = new mongoose.Schema({
   },
   platformFeePercentage: {
     type: Number,
-    default: 1, // 1% default platform fee
+    default: 0,
     min: 0,
     max: 100
   },
   vendorCashLimit: {
     type: Number,
-    default: 10000,
+    default: 0,
     min: 0
   },
   cancellationPenalty: {
     type: Number,
-    default: 49,
+    default: 0,
     min: 0
   },
   maxSearchTime: {
@@ -74,7 +74,7 @@ const settingsSchema = new mongoose.Schema({
   },
   searchRadius: {
     type: Number,
-    default: 10, // 10 km default search radius
+    default: 5, // 5 km default search radius
     min: 1
   },
   // Razorpay Settings

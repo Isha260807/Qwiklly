@@ -58,9 +58,9 @@ const Checkout = () => {
   const [selectedDate, setSelectedDate] = useState(null);
 
   const [selectedTime, setSelectedTime] = useState(null);
-  const [visitedFee, setVisitedFee] = useState(29);
-  const [instantBookingCharges, setInstantBookingCharges] = useState(49);
-  const [gstPercentage, setGstPercentage] = useState(18);
+  const [visitedFee, setVisitedFee] = useState(0);
+  const [instantBookingCharges, setInstantBookingCharges] = useState(0);
+  const [gstPercentage, setGstPercentage] = useState(0);
   const [bookingType, setBookingType] = useState('instant'); // 'instant' | 'scheduled'
 
   // Coupon State
@@ -141,7 +141,7 @@ const Checkout = () => {
           if (response.success) {
             setVisitedFee(0); // Plans usually have 0 visitor fee
             setInstantBookingCharges(0); // Plans have 0 instant fee
-            setGstPercentage(response.settings?.serviceGstPercentage || 18);
+            setGstPercentage(response.settings?.serviceGstPercentage ?? 0);
             if (response.settings) {
               setSlotConfig({
                 slotStartHour: response.settings.slotStartHour ?? 9,
@@ -173,9 +173,9 @@ const Checkout = () => {
           const response = await userAuthService.getCheckoutData();
           if (response.success) {
             // Set Config
-            setVisitedFee(response.settings?.visitedCharges || 29);
-            setInstantBookingCharges(response.settings?.instantBookingCharges !== undefined ? response.settings.instantBookingCharges : 49);
-            setGstPercentage(response.settings?.serviceGstPercentage || 18);
+            setVisitedFee(response.settings?.visitedCharges ?? 0);
+            setInstantBookingCharges(response.settings?.instantBookingCharges !== undefined ? response.settings.instantBookingCharges : 0);
+            setGstPercentage(response.settings?.serviceGstPercentage ?? 0);
             if (response.settings) {
               setSlotConfig({
                 slotStartHour: response.settings.slotStartHour ?? 9,

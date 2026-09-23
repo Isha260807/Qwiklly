@@ -100,8 +100,8 @@ export const getPayoutBreakdown = async (filters = {}) => {
     // Mock implementation
     return {
       totalEarnings: 0,
-      servicePayoutPercentage: 90,
-      partsPayoutPercentage: 100,
+      servicePayoutPercentage: 0,
+      partsPayoutPercentage: 0,
       netEarnings: 0,
     };
   } catch (error) {

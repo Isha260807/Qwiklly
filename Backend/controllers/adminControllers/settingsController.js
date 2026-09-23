@@ -182,7 +182,7 @@ exports.getPublicSettings = async (req, res, next) => {
 
     // Default if not found (fallback values)
     if (!settings) {
-      settings = { visitedCharges: 29, instantBookingCharges: 49, serviceGstPercentage: 18, partsGstPercentage: 18 };
+      settings = { visitedCharges: 0, instantBookingCharges: 0, serviceGstPercentage: 0, partsGstPercentage: 0 };
     }
 
     res.status(200).json({

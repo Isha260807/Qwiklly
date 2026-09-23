@@ -13,18 +13,18 @@ const AdminSettings = () => {
 
   const [financialSettings, setFinancialSettings] = useState({
     visitedCharges: 0,
-    instantBookingCharges: 49,
-    serviceGstPercentage: 18,
-    partsGstPercentage: 18,
-    servicePayoutPercentage: 90,
-    partsPayoutPercentage: 100,
-    vendorCashLimit: 10000,
-    cancellationPenalty: 49,
+    instantBookingCharges: 0,
+    serviceGstPercentage: 0,
+    partsGstPercentage: 0,
+    servicePayoutPercentage: 0,
+    partsPayoutPercentage: 0,
+    vendorCashLimit: 0,
+    cancellationPenalty: 0,
     tdsPercentage: 1,
-    platformFeePercentage: 1,
+    platformFeePercentage: 0,
     maxSearchTime: 5,
     waveDuration: 60,
-    searchRadius: 10,
+    searchRadius: 5,
     isOnlinePaymentEnabled: true
   });
 
@@ -125,16 +125,16 @@ const AdminSettings = () => {
         if (res.success && res.settings) {
           setFinancialSettings({
             visitedCharges: res.settings.visitedCharges || 0,
-            instantBookingCharges: res.settings.instantBookingCharges !== undefined ? res.settings.instantBookingCharges : 49,
-            serviceGstPercentage: res.settings.serviceGstPercentage ?? 18,
-            partsGstPercentage: res.settings.partsGstPercentage ?? 18,
-            servicePayoutPercentage: res.settings.servicePayoutPercentage ?? 90,
-            partsPayoutPercentage: res.settings.partsPayoutPercentage ?? 100,
+            instantBookingCharges: res.settings.instantBookingCharges !== undefined ? res.settings.instantBookingCharges : 0,
+            serviceGstPercentage: res.settings.serviceGstPercentage ?? 0,
+            partsGstPercentage: res.settings.partsGstPercentage ?? 0,
+            servicePayoutPercentage: res.settings.servicePayoutPercentage ?? 0,
+            partsPayoutPercentage: res.settings.partsPayoutPercentage ?? 0,
             tdsPercentage: res.settings.tdsPercentage || 1,
-            platformFeePercentage: res.settings.platformFeePercentage || 1,
-            vendorCashLimit: res.settings.vendorCashLimit || 10000,
-            cancellationPenalty: res.settings.cancellationPenalty !== undefined ? res.settings.cancellationPenalty : 49,
-            searchRadius: res.settings.searchRadius || 10,
+            platformFeePercentage: res.settings.platformFeePercentage ?? 0,
+            vendorCashLimit: res.settings.vendorCashLimit ?? 0,
+            cancellationPenalty: res.settings.cancellationPenalty !== undefined ? res.settings.cancellationPenalty : 0,
+            searchRadius: res.settings.searchRadius || 5,
             isOnlinePaymentEnabled: res.settings.isOnlinePaymentEnabled !== undefined ? res.settings.isOnlinePaymentEnabled : true
           });
           // Load billing settings

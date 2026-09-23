@@ -28,10 +28,10 @@ const getSettings = async (req, res) => {
         settings: vendor.settings || {},
         businessHours: vendor.businessHours || {},
         global: {
-          serviceGstPercentage: globalSettings?.serviceGstPercentage ?? 18,
-          partsGstPercentage: globalSettings?.partsGstPercentage ?? 18,
-          servicePayoutPercentage: globalSettings?.servicePayoutPercentage ?? 70,
-          partsPayoutPercentage: globalSettings?.partsPayoutPercentage ?? 10
+          serviceGstPercentage: globalSettings?.serviceGstPercentage ?? 0,
+          partsGstPercentage: globalSettings?.partsGstPercentage ?? 0,
+          servicePayoutPercentage: globalSettings?.servicePayoutPercentage ?? 0,
+          partsPayoutPercentage: globalSettings?.partsPayoutPercentage ?? 0
         }
       }
     });

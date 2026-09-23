@@ -17,10 +17,10 @@ const getGlobalSettings = async () => {
   }
   try {
     const settings = await Settings.findOne({ type: 'global' }).lean();
-    cachedSettings = settings || { visitedCharges: 29, serviceGstPercentage: 18 };
+    cachedSettings = settings || { visitedCharges: 0, serviceGstPercentage: 0, instantBookingCharges: 0 };
     cachedSettingsExpiry = now + 60 * 1000; // 60 seconds
   } catch (err) {
-    cachedSettings = { visitedCharges: 29, serviceGstPercentage: 18 };
+    cachedSettings = { visitedCharges: 0, serviceGstPercentage: 0, instantBookingCharges: 0 };
   }
   return cachedSettings;
 };
@@ -243,9 +243,9 @@ const calculateBookingPrice = async ({
 }) => {
   // 1. Fetch Global Settings (From in-memory cache)
   const settings = await getGlobalSettings();
-  const gstPercentage = settings.serviceGstPercentage ?? 18;
-  const standardVisitingFee = settings.visitedCharges ?? 29;
-  const standardInstantFee = settings.instantBookingCharges ?? 49;
+  const gstPercentage = settings.serviceGstPercentage ?? 0;
+  const standardVisitingFee = settings.visitedCharges ?? 0;
+  const standardInstantFee = settings.instantBookingCharges ?? 0;
 
   // 2. Fetch Service and Category Details in parallel
   let service = null;

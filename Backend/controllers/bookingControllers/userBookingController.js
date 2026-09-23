@@ -665,7 +665,7 @@ const cancelBooking = async (req, res) => {
 
     // Fetch dynamic cancellation penalty from Settings
     const Settings = require('../../models/Settings');
-    let settingsPenalty = 49; // Default
+    let settingsPenalty = 0; // Default — admin se set hoga
     try {
       const globalSettings = await Settings.findOne({ type: 'global' });
       if (globalSettings && globalSettings.cancellationPenalty !== undefined) {

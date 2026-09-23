@@ -280,7 +280,7 @@ const getGSTRReport = async (req, res) => {
 
     // Fetch global GST setting
     const settings = await Settings.findOne({ type: 'global' });
-    const gstRate = settings?.serviceGstPercentage || 18; // Default 18% if not set
+    const gstRate = settings?.serviceGstPercentage ?? 0; // Default 0% if not set
 
     // CGST/SGST split logic implies 50-50 split of the total GST rate
     const halfRate = gstRate / 2;
