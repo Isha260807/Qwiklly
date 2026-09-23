@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiLayers } from 'react-icons/fi';
-import { FaWallet } from 'react-icons/fa';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiLayers, FiHeadphones, FiPhoneCall, FiX, FiClock } from 'react-icons/fi';
+import { FaWallet, FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 import { vendorTheme as themeColors } from '../../../../theme';
 import { vendorAuthService } from '../../../../services/authService';
+import { configService } from '../../../../services/configService';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import LogoLoader from '../../../../components/common/LogoLoader';
@@ -20,16 +22,23 @@ const Profile = () => {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
 
+  const [profile, setProfile] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [supportInfo, setSupportInfo] = useState({
+    phone: '',
+    email: '',
+    whatsapp: ''
+  });
+
   const menuItems = [
     { id: 5, label: 'My Ratings', icon: FiStar, path: '/vendor/my-ratings' },
     { id: 7, label: 'Manage Address', icon: FiMapPin, path: '/vendor/address-management' },
     { id: 8, label: 'Settings', icon: FiSettings, path: '/vendor/settings' },
+    { id: 'support', label: 'Help & Support', icon: FiHeadphones, onClick: () => setShowSupportModal(true) },
     { id: 9, label: 'About Qwiklly', icon: null, customIcon: 'Q', path: '/vendor/about-homestr' },
   ];
-
-  const [profile, setProfile] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useLayoutEffect(() => {
     const html = document.documentElement;
@@ -125,7 +134,23 @@ const Profile = () => {
       }
     };
 
+    const fetchSupportConfig = async () => {
+      try {
+        const res = await configService.getSettings();
+        if (res?.settings) {
+          setSupportInfo({
+            phone: res.settings.supportPhone || res.settings.companyPhone || '',
+            email: res.settings.supportEmail || res.settings.companyEmail || '',
+            whatsapp: res.settings.supportWhatsapp || ''
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to fetch support settings:', err);
+      }
+    };
+
     fetchProfile();
+    fetchSupportConfig();
     window.addEventListener('vendorDataUpdated', fetchProfile);
     window.addEventListener('vendorProfileUpdated', fetchProfile);
 
@@ -321,7 +346,13 @@ const Profile = () => {
             return (
               <button
                 key={item.id}
-                onClick={() => navigate(item.path)}
+                onClick={() => {
+                  if (item.onClick) {
+                    item.onClick();
+                  } else if (item.path) {
+                    navigate(item.path);
+                  }
+                }}
                 className="w-full flex items-center justify-between p-2.5 bg-white rounded-xl shadow-xs hover:shadow-sm transition-all active:scale-[0.99] cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
@@ -383,6 +414,124 @@ const Profile = () => {
           </button>
         </div>
       </main>
+
+      {/* Help & Support Modal */}
+      <AnimatePresence>
+        {showSupportModal && (
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSupportModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-xs"
+            />
+
+            {/* Modal Content */}
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="relative w-full max-w-sm bg-white rounded-2xl p-5 shadow-2xl z-10 max-h-[90vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#FCEBF3] text-[#720C3E] flex items-center justify-center">
+                    <FiHeadphones className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#24151D]">Help & Support</h3>
+                    <p className="text-[10px] text-gray-500 font-medium">Qwiklly Partner Helpline</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSupportModal(false)}
+                  className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 transition-all cursor-pointer"
+                >
+                  <FiX className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Support Body */}
+              <div className="py-4 space-y-3">
+                {/* Direct Call Box */}
+                <div className="p-3.5 rounded-xl border border-[#720C3E]/15 bg-[#FCEBF3]/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold text-[#720C3E] uppercase tracking-wider flex items-center gap-1">
+                      <FiPhoneCall className="w-3.5 h-3.5" /> Call Admin Support
+                    </span>
+                    <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
+                      Toll Free / Direct
+                    </span>
+                  </div>
+
+                  {supportInfo.phone ? (
+                    <div>
+                      <div className="text-sm font-bold text-[#24151D] mb-2.5 tracking-wide">
+                        {supportInfo.phone}
+                      </div>
+                      <a
+                        href={`tel:${supportInfo.phone}`}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-white font-bold text-xs shadow-sm active:scale-98 transition-all cursor-pointer"
+                        style={{
+                          background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)',
+                        }}
+                      >
+                        <FiPhone className="w-3.5 h-3.5" />
+                        Call Support Now
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="text-center py-2">
+                      <p className="text-xs text-gray-500 font-medium mb-1">
+                        Admin support phone number is not configured yet.
+                      </p>
+                      <p className="text-[10px] text-gray-400">
+                        Please check back or contact via email.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* WhatsApp Chat Option if configured */}
+                {(supportInfo.whatsapp || supportInfo.phone) && (
+                  <a
+                    href={`https://wa.me/${(supportInfo.whatsapp || supportInfo.phone).replace(/\D/g, '')}?text=${encodeURIComponent(
+                      `Hello Qwiklly Support Team, I am registered partner ${profile?.name || ''} (${profile?.phone || ''}) requesting assistance.`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center justify-between p-3 rounded-xl border border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50 active:scale-98 transition-all text-emerald-800"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center">
+                        <FaWhatsapp className="w-4 h-4" />
+                      </div>
+                      <div className="text-left">
+                        <div className="text-xs font-bold text-gray-900">WhatsApp Chat</div>
+                        <div className="text-[10px] text-gray-500">Fast replies via WhatsApp</div>
+                      </div>
+                    </div>
+                    <FiChevronRight className="w-4 h-4 text-emerald-600" />
+                  </a>
+                )}
+              </div>
+
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setShowSupportModal(false)}
+                className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-700 text-xs font-bold hover:bg-gray-50 active:scale-98 transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
