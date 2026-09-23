@@ -29,6 +29,7 @@ exports.updateSettings = async (req, res, next) => {
   try {
     const {
       visitedCharges,
+      instantBookingCharges,
       serviceGstPercentage,
       partsGstPercentage,
       servicePayoutPercentage,
@@ -61,6 +62,7 @@ exports.updateSettings = async (req, res, next) => {
       settings = await Settings.create({
         type: 'global',
         visitedCharges,
+        instantBookingCharges,
         serviceGstPercentage,
         partsGstPercentage,
         servicePayoutPercentage,
@@ -87,6 +89,7 @@ exports.updateSettings = async (req, res, next) => {
     } else {
       // Update fields if provided
       if (visitedCharges !== undefined) settings.visitedCharges = visitedCharges;
+      if (instantBookingCharges !== undefined) settings.instantBookingCharges = instantBookingCharges;
       if (serviceGstPercentage !== undefined) settings.serviceGstPercentage = serviceGstPercentage;
       if (partsGstPercentage !== undefined) settings.partsGstPercentage = partsGstPercentage;
       if (servicePayoutPercentage !== undefined) settings.servicePayoutPercentage = servicePayoutPercentage;
@@ -174,12 +177,12 @@ exports.updateSettings = async (req, res, next) => {
 exports.getPublicSettings = async (req, res, next) => {
   try {
     let settings = await Settings.findOne({ type: 'global' }).select(
-      'visitedCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty companyName companyAddress companyCity companyState companyPincode companyPhone companyEmail isOnlinePaymentEnabled slotStartHour slotEndHour slotIntervalMins maxDaysInAdvance leadTimeHours slotServiceDurationMins disabledSlots customSlots'
+      'visitedCharges instantBookingCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty companyName companyAddress companyCity companyState companyPincode companyPhone companyEmail isOnlinePaymentEnabled slotStartHour slotEndHour slotIntervalMins maxDaysInAdvance leadTimeHours slotServiceDurationMins disabledSlots customSlots'
     );
 
     // Default if not found (fallback values)
     if (!settings) {
-      settings = { visitedCharges: 29, serviceGstPercentage: 18, partsGstPercentage: 18 };
+      settings = { visitedCharges: 29, instantBookingCharges: 49, serviceGstPercentage: 18, partsGstPercentage: 18 };
     }
 
     res.status(200).json({

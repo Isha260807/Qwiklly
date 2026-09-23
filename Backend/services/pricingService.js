@@ -238,12 +238,14 @@ const calculateBookingPrice = async ({
   couponCode = null,
   address = null,
   paymentMethod = 'online',
+  bookingType = 'instant',
   visitingChargesOverride = null
 }) => {
   // 1. Fetch Global Settings (From in-memory cache)
   const settings = await getGlobalSettings();
   const gstPercentage = settings.serviceGstPercentage ?? 18;
   const standardVisitingFee = settings.visitedCharges ?? 29;
+  const standardInstantFee = settings.instantBookingCharges ?? 49;
 
   // 2. Fetch Service and Category Details in parallel
   let service = null;
@@ -353,11 +355,17 @@ const calculateBookingPrice = async ({
       : standardVisitingFee;
   }
 
-  // 8. Pending Penalty
+  // 8. Instant Booking Charges (Only for instant bookings)
+  let instantBookingCharges = 0;
+  if (!isFreeUnderPlan && bookingType === 'instant') {
+    instantBookingCharges = Number(standardInstantFee) || 0;
+  }
+
+  // 9. Pending Penalty
   const pendingPenalty = user?.wallet?.penalty || 0;
 
-  // 9. Final Payable Amount
-  let finalAmount = taxableAmount + tax + visitingCharges + pendingPenalty;
+  // 10. Final Payable Amount
+  let finalAmount = taxableAmount + tax + visitingCharges + instantBookingCharges + pendingPenalty;
 
   // For non-plan paid bookings, maintain Razorpay minimum ₹1 if positive
   if (finalAmount < 1 && !isFreeUnderPlan && (basePrice > 0 || pendingPenalty > 0)) {
@@ -373,6 +381,7 @@ const calculateBookingPrice = async ({
     tax,
     gstPercentage,
     visitingCharges,
+    instantBookingCharges,
     pendingPenalty,
     finalAmount,
     isFreeUnderPlan,

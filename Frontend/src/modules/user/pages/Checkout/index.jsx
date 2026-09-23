@@ -59,6 +59,7 @@ const Checkout = () => {
 
   const [selectedTime, setSelectedTime] = useState(null);
   const [visitedFee, setVisitedFee] = useState(29);
+  const [instantBookingCharges, setInstantBookingCharges] = useState(49);
   const [gstPercentage, setGstPercentage] = useState(18);
   const [bookingType, setBookingType] = useState('instant'); // 'instant' | 'scheduled'
 
@@ -139,6 +140,7 @@ const Checkout = () => {
           const response = await userAuthService.getCheckoutData();
           if (response.success) {
             setVisitedFee(0); // Plans usually have 0 visitor fee
+            setInstantBookingCharges(0); // Plans have 0 instant fee
             setGstPercentage(response.settings?.serviceGstPercentage || 18);
             if (response.settings) {
               setSlotConfig({
@@ -172,6 +174,7 @@ const Checkout = () => {
           if (response.success) {
             // Set Config
             setVisitedFee(response.settings?.visitedCharges || 29);
+            setInstantBookingCharges(response.settings?.instantBookingCharges !== undefined ? response.settings.instantBookingCharges : 49);
             setGstPercentage(response.settings?.serviceGstPercentage || 18);
             if (response.settings) {
               setSlotConfig({
@@ -1070,14 +1073,16 @@ const Checkout = () => {
   const taxableAmount = Math.max(0, itemTotal - couponDiscount);
   const taxesAndFee = itemTotal === 0 ? 0 : Math.round((taxableAmount * gstPercentage) / 100);
   const finalVisitedFee = itemTotal === 0 ? 0 : visitedFee;
+  const finalInstantFee = (bookingType === 'instant' && itemTotal > 0) ? instantBookingCharges : 0;
 
-  const totalAmount = itemTotal === 0 ? 0 : (taxableAmount + taxesAndFee + finalVisitedFee);
+  const totalAmount = itemTotal === 0 ? 0 : (taxableAmount + taxesAndFee + finalVisitedFee + finalInstantFee);
   const amountToPay = totalAmount;
 
   // Helper for Free Plan Full Breakdown Display
   const displayTax = totalAmount === 0 ? Math.round((totalOriginalPrice * gstPercentage) / 100) : taxesAndFee;
   const displayFee = totalAmount === 0 ? visitedFee : finalVisitedFee;
-  const displaySavings = totalAmount === 0 ? (totalOriginalPrice + displayTax + displayFee) : (planSavings + couponDiscount);
+  const displayInstantFee = totalAmount === 0 ? (bookingType === 'instant' ? instantBookingCharges : 0) : finalInstantFee;
+  const displaySavings = totalAmount === 0 ? (totalOriginalPrice + displayTax + displayFee + displayInstantFee) : (planSavings + couponDiscount);
   const savings = displaySavings;
 
   // Date and time slot helper functions
@@ -1451,6 +1456,16 @@ const Checkout = () => {
               </div>
             )}
 
+            {/* Instant / Priority Booking Fee */}
+            {bookingType === 'instant' && displayInstantFee > 0 && (
+              <div className="flex justify-between items-center bg-amber-50/70 px-2.5 py-1.5 rounded-lg border border-amber-200/60">
+                <span className="text-xs font-bold text-amber-800 flex items-center gap-1">
+                  <span>⚡</span> Instant Booking Fee
+                </span>
+                <span className="text-xs font-bold text-amber-900">₹{displayInstantFee.toLocaleString('en-IN')}</span>
+              </div>
+            )}
+
             {/* Divider */}
             <div className="border-t border-slate-200 pt-4 mt-2">
               <div className="flex justify-between items-center">
@@ -1544,7 +1559,7 @@ const Checkout = () => {
           </div>
           {bookingType === 'instant' && (
             <p className="text-xs text-center text-green-600 font-medium mt-1 mb-1">
-              <span className="font-bold">⚡ Priority Service:</span> Vendor arrives in ~45 mins
+              <span className="font-bold">⚡ Priority Service:</span> Vendor arrives in ~45 mins {instantBookingCharges > 0 ? `(+₹${instantBookingCharges} instant fee)` : ''}
             </p>
           )}
         </div>

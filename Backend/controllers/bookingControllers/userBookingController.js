@@ -160,6 +160,7 @@ const createBooking = async (req, res) => {
       couponCode: couponCode || null,
       address,
       paymentMethod,
+      bookingType: bookingType || 'instant',
       visitingChargesOverride: reqVisitingCharges !== undefined ? reqVisitingCharges : (reqVisitationFee || null)
     });
 
@@ -176,6 +177,7 @@ const createBooking = async (req, res) => {
     let couponDiscount = pricing.couponDiscount;
     let tax = pricing.tax;
     let visitingChargesCalculated = pricing.visitingCharges;
+    let instantBookingChargesCalculated = pricing.instantBookingCharges || 0;
     let finalAmount = pricing.finalAmount;
 
     let bookingStatus = BOOKING_STATUS.SEARCHING;
@@ -189,7 +191,7 @@ const createBooking = async (req, res) => {
       await user.save();
     }
 
-    console.log(`[CreateBooking] Payment=${paymentMethod}, FinalAmount=${finalAmount}, CouponDiscount=${couponDiscount}, Penalty=${pendingPenalty}`);
+    console.log(`[CreateBooking] Payment=${paymentMethod}, FinalAmount=${finalAmount}, InstantCharges=${instantBookingChargesCalculated}, CouponDiscount=${couponDiscount}, Penalty=${pendingPenalty}`);
 
     // Create booking
     const bookingNumber = `BK${Date.now()}${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
@@ -235,7 +237,7 @@ const createBooking = async (req, res) => {
       categoryIcon: reqCategoryIcon || categoryIcon,
       brandName: reqBrandName || brandName,
       brandIcon: reqBrandIcon || brandIcon,
-      bookingType: bookingType || 'scheduled',
+      bookingType: bookingType || 'instant',
 
       description: service.description,
       serviceImages: service.images || [],
@@ -246,6 +248,7 @@ const createBooking = async (req, res) => {
       coupon: pricing.couponInfo || { couponId: null, code: null, discountType: null, discountValue: 0, discountAmount: 0 },
       tax,
       visitingCharges: visitingChargesCalculated,
+      instantBookingCharges: instantBookingChargesCalculated,
       finalAmount,
       userPayableAmount: finalAmount,
       address: {

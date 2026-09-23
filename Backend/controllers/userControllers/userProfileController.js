@@ -185,7 +185,7 @@ const getCheckoutData = async (req, res) => {
       User.findById(userId).select('addresses phone name'),
       Cart.findOne({ userId }).populate('items.serviceId', 'title iconUrl slug').populate('items.categoryId', 'title slug'),
       Settings.findOne({ type: 'global' }).select(
-        'visitedCharges serviceGstPercentage partsGstPercentage slotStartHour slotEndHour slotIntervalMins maxDaysInAdvance leadTimeHours slotServiceDurationMins disabledSlots customSlots'
+        'visitedCharges instantBookingCharges serviceGstPercentage partsGstPercentage slotStartHour slotEndHour slotIntervalMins maxDaysInAdvance leadTimeHours slotServiceDurationMins disabledSlots customSlots'
       )
     ]);
 
@@ -207,6 +207,7 @@ const getCheckoutData = async (req, res) => {
       cartItems: cart ? cart.items : [],
       settings: settings || {
         visitedCharges: 29,
+        instantBookingCharges: 49,
         serviceGstPercentage: 18,
         partsGstPercentage: 18,
         slotStartHour: 9,

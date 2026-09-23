@@ -13,6 +13,7 @@ const AdminSettings = () => {
 
   const [financialSettings, setFinancialSettings] = useState({
     visitedCharges: 0,
+    instantBookingCharges: 49,
     serviceGstPercentage: 18,
     partsGstPercentage: 18,
     servicePayoutPercentage: 90,
@@ -124,6 +125,7 @@ const AdminSettings = () => {
         if (res.success && res.settings) {
           setFinancialSettings({
             visitedCharges: res.settings.visitedCharges || 0,
+            instantBookingCharges: res.settings.instantBookingCharges !== undefined ? res.settings.instantBookingCharges : 49,
             serviceGstPercentage: res.settings.serviceGstPercentage ?? 18,
             partsGstPercentage: res.settings.partsGstPercentage ?? 18,
             servicePayoutPercentage: res.settings.servicePayoutPercentage ?? 90,
@@ -699,7 +701,16 @@ const AdminSettings = () => {
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Visit Charges (₹)</label>
                       <input type="number" name="visitedCharges" value={financialSettings.visitedCharges} onChange={handleFinancialChange}
+                        min="0"
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
+                      <p className="text-[10px] text-gray-400 mt-1">Base convenience/visiting fee</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Instant Booking Charges (₹)</label>
+                      <input type="number" name="instantBookingCharges" value={financialSettings.instantBookingCharges} onChange={handleFinancialChange}
+                        min="0"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
+                      <p className="text-[10px] text-gray-400 mt-1">Extra fee charged when customer selects Instant / ASAP booking</p>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Vendor Cash Limit (₹)</label>
