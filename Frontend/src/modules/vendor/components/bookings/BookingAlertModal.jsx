@@ -57,7 +57,7 @@ const BookingAlertCard = ({ booking, onAccept, onReject, maxSearchTimeMins = 1 }
     if (!booking) return;
 
     const bookingId = booking.id || booking._id;
-    const totalDurationMins = Number(maxSearchTimeMins) || 5;
+    const totalDurationMins = Number(maxSearchTimeMins) || 1;
     const initialDurationSecs = totalDurationMins * 60;
 
     const calculateRemaining = () => {
@@ -70,11 +70,11 @@ const BookingAlertCard = ({ booking, onAccept, onReject, maxSearchTimeMins = 1 }
           }
         }
 
-        if (booking.createdAt) {
-          const start = new Date(booking.createdAt).getTime();
+        if (booking.waveStartedAt) {
+          const start = new Date(booking.waveStartedAt).getTime();
           if (!isNaN(start)) {
             const elapsed = Math.floor((Date.now() - start) / 1000);
-            return Math.max(0, initialDurationSecs - elapsed);
+            return Math.max(0, 60 - elapsed);
           }
         }
 
@@ -89,7 +89,6 @@ const BookingAlertCard = ({ booking, onAccept, onReject, maxSearchTimeMins = 1 }
     setTimeLeft(remaining);
 
     if (remaining <= 0) {
-      onReject?.(bookingId);
       window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: bookingId } }));
       return;
     }
@@ -100,13 +99,12 @@ const BookingAlertCard = ({ booking, onAccept, onReject, maxSearchTimeMins = 1 }
 
       if (currentRemaining <= 0) {
         clearInterval(timer);
-        onReject?.(bookingId);
         window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: bookingId } }));
       }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [booking, onReject, booking.expiresAt, booking.createdAt, maxSearchTimeMins]);
+  }, [booking, booking.expiresAt, booking.waveStartedAt, maxSearchTimeMins]);
 
   const radius = 24;
   const circumference = 2 * Math.PI * radius;

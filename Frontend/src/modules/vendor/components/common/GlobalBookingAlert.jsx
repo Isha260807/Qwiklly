@@ -33,7 +33,7 @@ export default function GlobalBookingAlert() {
               const serverJobs = response.data
                 .filter(b => {
                   const status = b.status?.toLowerCase();
-                  const isRelevant = status === 'searching' || status === 'requested';
+                  const isRelevant = status === 'searching' || status === 'requested' || (status === 'confirmed' && !b.vendorId);
                   const isMine = !b.vendorId || String(b.vendorId?._id || b.vendorId) === vId;
                   return isRelevant && isMine;
                 })

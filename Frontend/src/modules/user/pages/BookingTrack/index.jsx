@@ -168,24 +168,6 @@ const BookingTrack = () => {
     }
   };
 
-  const handlePayAtHome = async () => {
-    try {
-      toast.loading('Confirming request...');
-      const response = await paymentService.confirmPayAtHome(booking._id || booking.id);
-      toast.dismiss();
-
-      if (response.success) {
-        toast.success('Booking confirmed!');
-        navigate(`/user/booking/${booking._id || booking.id}`);
-      } else {
-        toast.error(response.message || 'Failed to confirm booking');
-      }
-    } catch (error) {
-      toast.dismiss();
-      toast.error('Failed to process request');
-    }
-  };
-
   // Track if initial location was set from socket
   const locationFromSocketRef = useRef(false);
 
@@ -601,6 +583,9 @@ const BookingTrack = () => {
   // Determine active provider based on priority: Worker -> Assigned -> Vendor
   const provider = booking?.workerId || booking?.assignedTo || booking?.vendorId || {};
 
+  // Booking paid upfront online (100% pre-paid architecture) — no on-site OTP/cash flow applies.
+  const isPrepaidOnline = booking.paymentMethod === 'online' && booking.paymentStatus === 'success';
+
   return (
     <div className="h-screen flex flex-col relative bg-white overflow-hidden">
       {/* Top Floating Header */}
@@ -846,8 +831,8 @@ const BookingTrack = () => {
           </div>
         )}
 
-        {/* Waiting for Vendor to initiate Payment */}
-        {!booking?.customerConfirmationOTP && booking?.status?.toLowerCase() === 'work_done' && !booking?.cashCollected && (
+        {/* Waiting for Vendor to initiate Payment (not applicable to already-prepaid online bookings) */}
+        {!isPrepaidOnline && !booking?.customerConfirmationOTP && booking?.status?.toLowerCase() === 'work_done' && !booking?.cashCollected && (
           <div className="bg-teal-50/50 rounded-xl p-2.5 border border-teal-100 mb-2.5 flex items-center gap-2.5 relative overflow-hidden">
             <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 border border-teal-100 shadow-2xs">
               <FiLoader className="w-4 h-4 text-teal-600 animate-spin" />
@@ -860,7 +845,7 @@ const BookingTrack = () => {
         )}
 
         {/* Final Payment Card - Show when work is done AND bill is finalized (OTP exists) */}
-        {(booking?.customerConfirmationOTP || booking?.paymentStatus === 'success') && booking?.status?.toLowerCase() === 'work_done' && !booking?.cashCollected && (
+        {!isPrepaidOnline && (booking?.customerConfirmationOTP || booking?.paymentStatus === 'success') && booking?.status?.toLowerCase() === 'work_done' && !booking?.cashCollected && (
           <div
             onClick={() => setShowPaymentModal(true)}
             className={`mb-2.5 relative overflow-hidden rounded-xl p-3 shadow-md cursor-pointer active:scale-[0.98] transition-all ${

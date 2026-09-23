@@ -425,35 +425,8 @@ export default function BookingDetails() {
   };
 
   const canCollectCash = (booking) => {
-    // Hide if already collected or paid online
-    if (booking?.cashCollected || booking?.paymentStatus === 'collected_by_vendor') {
-      return false;
-    }
-
-    // Cash can be collected when booking is completed/work_done and payment was cash/at home
-    const isSelfJob = booking?.assignedTo?.name === 'You (Self)';
-    const validStatus = isSelfJob
-      ? (booking?.status === 'work_done' || booking?.status === 'completed')
-      : booking?.status === 'completed';
-
-    if (!validStatus) return false;
-
-    // CRITICAL FIX: Allow bill preparation for Plan Benefit bookings
-    // Even if base is pre-paid (SUCCESS), vendor must generate final bill (for extras etc.)
-    if (booking?.paymentMethod === 'plan_benefit') {
-      return true;
-    }
-
-    if (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid') {
-      return false;
-    }
-
-    // IMPORTANT: Only for Cash/Pay at Home methods OR Online if not paid yet.
-    return (
-      booking?.paymentMethod === 'cash' ||
-      booking?.paymentMethod === 'pay_at_home' ||
-      booking?.paymentMethod === 'online'
-    );
+    // 100% Upfront Pre-Paid Online Architecture - No on-site cash collection or billing
+    return false;
   };
 
 
@@ -513,6 +486,11 @@ export default function BookingDetails() {
   const handleStartJourney = async () => {
     // If self-job, call the start API first
     if (booking.assignedTo?.name === 'You (Self)') {
+      const isPaymentComplete = booking.paymentStatus === 'success' || booking.paymentStatus === 'plan_covered';
+      if (!isPaymentComplete) {
+        toast.error('Waiting for customer payment. You can start the journey once payment is completed.');
+        return;
+      }
       try {
         setLoading(true);
         await startSelfJob(id);
@@ -523,7 +501,7 @@ export default function BookingDetails() {
         setBooking(prev => ({ ...prev, status: apiData.status }));
       } catch (error) {
         console.error('Error starting self journey:', error);
-        toast.error('Failed to start journey');
+        toast.error(error.response?.data?.message || 'Failed to start journey');
         return;
       } finally {
         setLoading(false);
@@ -1194,27 +1172,20 @@ export default function BookingDetails() {
 
         {/* Payment Collection Section */}
         {canCollectCash(booking) && (
-          <div
-            className="bg-white rounded-2xl mb-4 overflow-hidden shadow-lg border-none relative group"
-            style={{
-              boxShadow: booking.paymentMethod === 'plan_benefit'
-                ? '0 10px 30px -5px rgba(16, 185, 129, 0.2)'
-                : '0 10px 30px -5px rgba(249, 115, 22, 0.2)',
-            }}
-          >
+          <div className="bg-white rounded-xl mb-3 overflow-hidden shadow-xs border border-gray-100 relative">
             {/* Top Accent Gradient */}
-            <div className={`h-2 bg-gradient-to-r ${booking.paymentMethod === 'plan_benefit' ? 'from-emerald-400 to-teal-600' : 'from-orange-400 to-orange-600'}`} />
+            <div className={`h-1 bg-gradient-to-r ${booking.paymentMethod === 'plan_benefit' ? 'from-emerald-400 to-teal-600' : 'from-orange-400 to-orange-600'}`} />
 
-            <div className="p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${booking.paymentMethod === 'plan_benefit' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-500'}`}>
-                  <FiCreditCard className="w-6 h-6" />
+            <div className="p-3.5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${booking.paymentMethod === 'plan_benefit' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-500'}`}>
+                  <FiCreditCard className="w-4.5 h-4.5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 leading-tight">
+                  <h3 className="text-sm font-bold text-gray-900 leading-tight">
                     {booking.paymentMethod === 'plan_benefit' ? 'Prepare Final Bill' : 'Collect Payment'}
                   </h3>
-                  <p className="text-xs text-gray-500 font-medium tracking-wide uppercase">
+                  <p className="text-[10px] text-gray-400 font-bold tracking-wider uppercase">
                     {booking.paymentMethod === 'plan_benefit' ? 'Add extra charges if any' : 'Step 1: Finish Settlement'}
                   </p>
                 </div>
@@ -1222,26 +1193,26 @@ export default function BookingDetails() {
 
               {booking.paymentMethod === 'plan_benefit' ? (
                 /* Plan Benefit UI */
-                <div className="bg-emerald-50/50 rounded-2xl p-4 mb-6 border border-emerald-100/50">
-                  <div className="flex items-center gap-3 mb-3">
-                    <FiCheckCircle className="w-5 h-5 text-emerald-600" />
-                    <span className="font-bold text-emerald-800">Base Service Covered by Plan</span>
+                <div className="bg-emerald-50/60 rounded-lg p-2.5 mb-3 border border-emerald-100">
+                  <div className="flex items-center gap-2 mb-1">
+                    <FiCheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="font-bold text-xs text-emerald-800">Base Service Covered by Plan</span>
                   </div>
-                  <p className="text-sm text-gray-600 leading-relaxed">
+                  <p className="text-[11px] text-emerald-700 leading-tight">
                     The base service fee is covered by customer's membership. You can add extra charges for parts or additional work.
                   </p>
                 </div>
               ) : (
                 /* Normal Cash Collection UI */
-                <div className="bg-orange-50/50 rounded-2xl p-4 mb-6 border border-orange-100/50">
+                <div className="bg-orange-50/60 rounded-lg p-2.5 mb-3 border border-orange-100">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Amount to Collect</span>
-                    <span className="text-2xl font-black text-orange-600">
+                    <span className="text-xs text-gray-600 font-medium">Amount to Collect</span>
+                    <span className="text-lg font-black text-orange-600">
                       ₹{(booking.finalAmount || parseFloat(booking.price) || 0).toLocaleString()}
                     </span>
                   </div>
-                  <div className="mt-3 flex items-start gap-2 text-[11px] text-orange-700/80 leading-relaxed">
-                    <FiClock className="w-3 h-3 mt-0.5" />
+                  <div className="mt-1.5 flex items-start gap-1.5 text-[10px] text-orange-700/90 leading-tight">
+                    <FiClock className="w-3 h-3 mt-0.5 shrink-0" />
                     <span>Customer chose {
                       booking.paymentMethod === 'cash collected' ? 'Cash Collected' : 
                       booking.paymentMethod === 'Qr online' ? 'QR Online' : 
@@ -1252,14 +1223,14 @@ export default function BookingDetails() {
                 </div>
               )}
 
-              <div className="flex flex-col gap-3 w-full">
+              <div className="flex flex-col gap-2 w-full">
                 <button
                   onClick={() => navigate(`/vendor/booking/${booking.id || id}/billing`)}
                   disabled={loading}
-                  className="w-full py-4 rounded-xl font-bold bg-blue-600 text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
-                  style={{ background: 'linear-gradient(135deg, #3B82F6, #2563EB)' }}
+                  className="w-full py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
+                  style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
                 >
-                  <FiDollarSign className="w-5 h-5" />
+                  <FiDollarSign className="w-3.5 h-3.5" />
                   {booking.paymentMethod === 'plan_benefit' ? 'Prepare/Edit Final Bill' : 'Prepare Bill & Collect Cash'}
                 </button>
 
@@ -1267,10 +1238,10 @@ export default function BookingDetails() {
                   <button
                     onClick={() => setIsOtpModalOpen(true)}
                     disabled={loading}
-                    className="w-full py-4 rounded-xl font-bold bg-green-600 text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg"
+                    className="w-full py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
                     style={{ background: 'linear-gradient(135deg, #10B981, #059669)' }}
                   >
-                    <FiCheckCircle className="w-5 h-5" />
+                    <FiCheckCircle className="w-3.5 h-3.5" />
                     Enter OTP
                   </button>
                 )}
@@ -1280,23 +1251,25 @@ export default function BookingDetails() {
         )}
 
         {/* Online Payment Done State */}
-        {(booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid') && booking?.status !== 'completed' && (
-          <div className="bg-white rounded-2xl mb-4 overflow-hidden shadow-lg border-none relative group"
-            style={{ boxShadow: '0 10px 30px -5px rgba(16, 185, 129, 0.2)' }}
-          >
-            <div className="h-2 bg-gradient-to-r from-green-400 to-green-600" />
-            <div className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-green-50 flex items-center justify-center text-green-500 shadow-inner">
-                  <FiCheckCircle className="w-6 h-6" />
+        {(booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid' || booking?.paymentMethod === 'online' || booking?.paymentMethod === 'plan_benefit') && booking?.status !== 'completed' && (
+          <div className="bg-white rounded-xl mb-3 overflow-hidden shadow-xs border border-green-100 relative">
+            <div className="h-1 bg-gradient-to-r from-emerald-400 to-emerald-600" />
+            <div className="p-3.5">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center text-green-600 shrink-0">
+                  <FiCheckCircle className="w-4.5 h-4.5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 leading-tight">Paid Online</h3>
-                  <p className="text-xs text-green-600 font-bold uppercase tracking-wider">Payment Verified</p>
+                  <h3 className="text-sm font-bold text-gray-900 leading-tight">Pre-Paid Online Booking</h3>
+                  <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider">Payment Verified (Do NOT collect cash)</p>
                 </div>
               </div>
-              <div className="mt-4 bg-green-50/50 rounded-xl p-3 border border-green-100">
-                <p className="text-xs text-green-800 font-medium">Customer has paid ₹{booking.finalAmount.toLocaleString()} online via Razorpay. No cash collection needed.</p>
+              <div className="mt-2.5 bg-green-50/70 rounded-lg p-2.5 border border-green-100">
+                <p className="text-xs text-green-800 font-medium leading-tight">
+                  {booking.paymentMethod === 'plan_benefit'
+                    ? "Customer is covered under membership plan. Deliver service without collecting payment."
+                    : `Customer has paid ₹${(booking.finalAmount || booking.amount || 0).toLocaleString()} online. Deliver service without collecting payment.`}
+                </p>
               </div>
             </div>
           </div>
@@ -1306,60 +1279,53 @@ export default function BookingDetails() {
         {canPayWorker(booking) && (
           <div
             id="worker-payment-section"
-            className="bg-white rounded-2xl p-5 mb-4 shadow-md border-l-4 border-green-500"
+            className="bg-white rounded-xl p-3.5 mb-3 shadow-xs border border-gray-100 border-l-4 border-l-green-500"
           >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-500">
-                <FiDollarSign className="w-5 h-5" />
+            <div className="flex items-center gap-3 mb-2.5">
+              <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center text-green-500 shrink-0">
+                <FiDollarSign className="w-4 h-4" />
               </div>
-              <h3 className="font-bold text-gray-800">Worker Payout</h3>
+              <h3 className="text-xs font-bold text-gray-800">Worker Payout</h3>
             </div>
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-xs text-gray-500 mb-3 leading-tight">
               Service complete. Pay {booking.assignedTo?.name}'s share to close this booking.
             </p>
             <button
               onClick={handlePayWorkerClick}
               disabled={loading}
-              className="w-full py-3.5 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md hover:brightness-105"
+              className="w-full py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
               style={{
                 background: 'linear-gradient(135deg, #10B981, #059669)',
               }}
             >
-              <FiCheckCircle className="w-5 h-5" />
+              <FiCheckCircle className="w-3.5 h-3.5" />
               Pay Worker
             </button>
           </div>
         )}
 
-        {/* Final Settlement Button (Improved UI) */}
+        {/* Final Settlement Button (Vendor Theme & Compact UI) */}
         {canDoFinalSettlement(booking) && (
-          <div
-            className="bg-white rounded-2xl mb-4 overflow-hidden shadow-lg border-none relative"
-            style={{
-              boxShadow: '0 10px 30px -5px rgba(139, 92, 246, 0.15)',
-            }}
-          >
-            <div className="h-2 bg-gradient-to-r from-violet-400 to-indigo-600" />
+          <div className="bg-white rounded-xl mb-3 overflow-hidden shadow-xs border border-gray-100 relative">
+            <div className="h-1 bg-gradient-to-r from-[#720C3E] to-[#9A2459]" />
 
-            <div className="p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 rounded-2xl bg-violet-50 flex items-center justify-center text-violet-500 shadow-inner">
-                  <FiCheckCircle className="w-6 h-6" />
+            <div className="p-3.5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-[#FCEBF3] flex items-center justify-center text-[#720C3E] shrink-0">
+                  <FiCheckCircle className="w-4.5 h-4.5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Finish Job</h3>
-                  <p className="text-xs text-gray-500 font-medium tracking-wide uppercase">Step 2: Close Booking</p>
+                  <h3 className="text-sm font-bold text-gray-900 leading-tight">Finish Job</h3>
+                  <p className="text-[10px] text-gray-400 font-bold tracking-wider uppercase">Step 2: Close Booking</p>
                 </div>
               </div>
 
-              <div className="bg-violet-50/50 rounded-2xl p-4 mb-6 border border-violet-100/50">
-                <div className="flex items-start gap-3">
-                  <div className="mt-1">
-                    <FiCheck className="w-4 h-4 text-violet-600" />
-                  </div>
+              <div className="bg-emerald-50/60 rounded-lg p-2.5 mb-3 border border-emerald-100">
+                <div className="flex items-start gap-2">
+                  <FiCheck className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
                   <div>
-                    <span className="text-sm text-gray-700 font-medium">Payment Verified</span>
-                    <p className="text-xs text-gray-500 mt-0.5">Payment has been successfully recorded. You can now close this booking.</p>
+                    <span className="text-xs font-bold text-emerald-800">Payment Verified</span>
+                    <p className="text-[11px] text-emerald-700 leading-tight mt-0.5">Payment has been successfully recorded. You can now close this booking.</p>
                   </div>
                 </div>
               </div>
@@ -1367,13 +1333,13 @@ export default function BookingDetails() {
               <button
                 onClick={handleFinalSettlement}
                 disabled={loading}
-                className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 hover:brightness-105"
+                className="w-full py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 shadow-md"
                 style={{
-                  background: 'linear-gradient(135deg, #8B5CF6, #6366F1)',
-                  boxShadow: '0 8px 16px -4px rgba(139, 92, 246, 0.4)',
+                  background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)',
+                  boxShadow: '0 4px 12px rgba(114, 12, 62, 0.25)',
                 }}
               >
-                <FiCheckCircle className="w-5 h-5" />
+                <FiCheckCircle className="w-3.5 h-3.5" />
                 Close Booking & Finalize
               </button>
             </div>
@@ -1395,19 +1361,24 @@ export default function BookingDetails() {
             <FiArrowRight className="w-3.5 h-3.5" />
           </button>
 
-          {(booking.status === 'confirmed' || booking.status === 'assigned') && (
-            <button
-              type="button"
-              onClick={handleStartJourney}
-              className="flex-1 py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
-              style={{
-                background: 'linear-gradient(135deg, #10B981, #059669)',
-              }}
-            >
-              <FiNavigation className="w-3.5 h-3.5" />
-              <span>Start Journey</span>
-            </button>
-          )}
+          {(booking.status === 'confirmed' || booking.status === 'assigned') && (() => {
+            const isSelfJob = booking.assignedTo?.name === 'You (Self)';
+            const isPaymentComplete = booking.paymentStatus === 'success' || booking.paymentStatus === 'plan_covered';
+            const journeyDisabled = isSelfJob && !isPaymentComplete;
+            return (
+              <button
+                type="button"
+                onClick={handleStartJourney}
+                className={`flex-1 py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs ${journeyDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                style={{
+                  background: journeyDisabled ? '#9CA3AF' : 'linear-gradient(135deg, #10B981, #059669)',
+                }}
+              >
+                <FiNavigation className="w-3.5 h-3.5" />
+                <span>{journeyDisabled ? 'Payment Pending' : 'Start Journey'}</span>
+              </button>
+            );
+          })()}
 
           {booking.status === 'journey_started' && (
             <button
@@ -1493,11 +1464,13 @@ export default function BookingDetails() {
         isOpen={isWorkDoneModalOpen}
         onClose={() => setIsWorkDoneModalOpen(false)}
         job={booking}
-        onComplete={async (photos) => {
+        onComplete={async (data) => {
           try {
             setActionLoading(true);
+            const photos = Array.isArray(data) ? data : (data?.photos || []);
+            const notes = data?.notes || '';
             // Use vendor-specific service call (completeSelfJob)
-            await completeSelfJob(id, { workPhotos: photos });
+            await completeSelfJob(id, { workPhotos: photos, workDoneDetails: { notes } });
             toast.success('Work marked done');
             setIsWorkDoneModalOpen(false);
             window.location.reload();

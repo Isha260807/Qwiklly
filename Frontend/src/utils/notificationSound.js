@@ -133,7 +133,11 @@ export const playAlertRing = (loop = false) => {
     if (loop) audio.loop = true;
     currentAudio = audio; // Track the new audio instance
 
-    audio.play().catch(e => console.error('Error playing alert file:', e));
+    audio.play().catch(e => {
+      if (e.name !== 'AbortError' && e.name !== 'NotAllowedError') {
+        console.error('Error playing alert file:', e);
+      }
+    });
 
     // Cleanup when audio finishes (if not looping)
     audio.onended = () => {

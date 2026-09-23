@@ -206,7 +206,7 @@ const LiveBookingCard = ({ hasBottomNav }) => {
           </div>
 
           {/* Action Arrow or Pay Button */}
-          {activeBooking.status?.toUpperCase() === 'WORK_DONE' && !activeBooking.cashCollected ? (
+          {activeBooking.status?.toUpperCase() === 'WORK_DONE' && !activeBooking.cashCollected && activeBooking.paymentStatus !== 'success' ? (
             <button
               onClick={(e) => {
                 e.stopPropagation();

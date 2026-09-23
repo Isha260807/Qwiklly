@@ -24,7 +24,6 @@ import {
   FiUser,
   FiChevronRight,
   FiSearch,
-  FiHome,
   FiAlertCircle
 } from 'react-icons/fi';
 import { bookingService } from '../../../../services/bookingService';
@@ -411,25 +410,6 @@ const BookingDetails = () => {
     }
   };
 
-  const handlePayAtHome = async () => {
-    try {
-      toast.loading('Confirming request...');
-      const response = await paymentService.confirmPayAtHome(booking._id || booking.id);
-      toast.dismiss();
-
-      if (response.success) {
-        toast.success('Booking confirmed!');
-        loadBooking();
-      } else {
-        toast.error(response.message || 'Failed to confirm booking');
-      }
-    } catch (error) {
-      toast.dismiss();
-      toast.error('Failed to process request');
-    }
-  };
-
-
   const handleRateSubmit = async (ratingData) => {
     try {
       const response = await bookingService.addReview(booking._id || booking.id, ratingData);
@@ -513,6 +493,9 @@ const BookingDetails = () => {
       </div>
     );
   }
+
+  // Booking paid upfront online (100% pre-paid architecture) — no on-site OTP/cash flow applies.
+  const isPrepaidOnline = booking.paymentMethod === 'online' && booking.paymentStatus === 'success';
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -881,8 +864,8 @@ const BookingDetails = () => {
             </div>
           )}
 
-          {/* Waiting for Vendor to initiate Payment */}
-          {!booking.customerConfirmationOTP && ['work_done'].includes(booking.status?.toLowerCase()) && !booking.cashCollected && (
+          {/* Waiting for Vendor to initiate Payment (not applicable to already-prepaid online bookings) */}
+          {!isPrepaidOnline && !booking.customerConfirmationOTP && ['work_done'].includes(booking.status?.toLowerCase()) && !booking.cashCollected && (
             <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-teal-100 flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center shrink-0 border border-teal-100">
                 <FiLoader className="w-4 h-4 text-teal-600 animate-spin" />
@@ -917,7 +900,7 @@ const BookingDetails = () => {
             )}
 
           {/* Payment Card */}
-          {(booking.customerConfirmationOTP || booking.paymentStatus === 'success') && ['work_done'].includes(booking.status?.toLowerCase()) && !booking.cashCollected && (
+          {!isPrepaidOnline && (booking.customerConfirmationOTP || booking.paymentStatus === 'success') && ['work_done'].includes(booking.status?.toLowerCase()) && !booking.cashCollected && (
             <div
               onClick={() => setShowPaymentModal(true)}
               className={`rounded-2xl p-4 shadow-md text-white cursor-pointer active:scale-[0.99] transition-all ${
@@ -1349,38 +1332,6 @@ const BookingDetails = () => {
               </span>
             </div>
             </section>
-          )}
-
-          {/* Action Card for Awaiting Payment */}
-          {booking.status === 'awaiting_payment' && (
-            <div className="bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-gray-100 p-6 space-y-4">
-              <div className="text-center mb-4">
-                <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <FiDollarSign className="w-8 h-8 text-orange-600" />
-                </div>
-                <h3 className="text-lg font-bold text-black">Payment Required</h3>
-                <p className="text-sm text-gray-500">The professional has completed the work. Please choose a payment method to verify and close your booking.</p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                <button
-                  onClick={handleOnlinePayment}
-                  className="w-full py-4 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
-                  style={{ background: themeColors.button }}
-                >
-                  <FiDollarSign className="w-5 h-5" />
-                  Pay Online (Razorpay/UPI)
-                </button>
-
-                <button
-                  onClick={handlePayAtHome}
-                  className="w-full py-4 rounded-xl font-bold text-gray-700 bg-gray-100 flex items-center justify-center gap-2 active:scale-95 transition-transform"
-                >
-                  <FiHome className="w-5 h-5" />
-                  Pay at Home (After Service)
-                </button>
-              </div>
-            </div>
           )}
 
           {/* Action Buttons */}

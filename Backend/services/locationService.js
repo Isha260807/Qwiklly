@@ -82,9 +82,14 @@ const _buildVendorQuery = (filters = {}) => {
   }
 
   if (serviceCategory) {
+    const escaped = serviceCategory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const reg = new RegExp(escaped, 'i');
     baseQuery.$or = [
       { categories: { $in: [serviceCategory] } },
-      { service: { $in: [serviceCategory] } }
+      { service: { $in: [serviceCategory] } },
+      { categories: { $regex: reg } },
+      { service: { $regex: reg } },
+      { skills: { $regex: reg } }
     ];
   }
 
@@ -289,7 +294,7 @@ const findVendorsByCity = async (city, filters = {}) => {
       .limit(50);
 
     console.log(`[LocationService] Found ${vendors.length} vendors in city: ${city}`);
-    return vendors.map(v => ({ ...v.toObject(), distance: null }));
+    return vendors.map(v => ({ ...v.toObject(), distance: 0 }));
   } catch (error) {
     console.error('Find vendors by city error:', error);
     return [];

@@ -40,12 +40,6 @@ export const paymentService = {
     return response.data;
   },
 
-  // Confirm Pay at Home option
-  confirmPayAtHome: async (bookingId) => {
-    const response = await api.post('/payments/pay-at-home', { bookingId });
-    return response.data;
-  },
-
   // Create Razorpay order for plan subscription
   createPlanOrder: async (planId) => {
     const response = await api.post('/payments/plan/create-order', { planId });

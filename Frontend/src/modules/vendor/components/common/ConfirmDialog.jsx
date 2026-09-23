@@ -62,7 +62,7 @@ const ConfirmDialog = ({
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="bg-white rounded-[24px] shadow-2xl max-w-sm w-full p-8 relative z-10 overflow-hidden"
+            className="bg-white rounded-2xl shadow-2xl max-w-[320px] sm:max-w-sm w-full p-5 relative z-10 overflow-hidden"
           >
             {/* Top Shine Effect */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-30" />
@@ -70,49 +70,48 @@ const ConfirmDialog = ({
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+              className="absolute top-3 right-3 p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
             >
-              <FiX className="w-5 h-5" />
+              <FiX className="w-4 h-4" />
             </button>
 
             {/* Icon Container */}
             <div
-              className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 rotate-3"
+              className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3"
               style={{
                 background: config.bg,
                 color: config.color,
-                boxShadow: `0 8px 16px ${config.color}20`
+                boxShadow: `0 4px 12px ${config.color}20`
               }}
             >
               {config.icon}
             </div>
 
             {/* Content */}
-            <div className="text-center mb-8">
-              <h3 className="text-2xl font-bold text-gray-900 mb-3">{title}</h3>
-              <p className="text-sm text-gray-500 leading-relaxed font-medium">
+            <div className="text-center mb-5">
+              <h3 className="text-base font-bold text-gray-900 mb-1">{title}</h3>
+              <p className="text-xs text-gray-500 leading-relaxed font-medium px-1">
                 {message}
               </p>
             </div>
 
             {/* Actions */}
-            <div className="flex flex-col gap-3">
+            <div className="flex gap-2.5">
+              <button
+                onClick={onClose}
+                className="flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-gray-500 border border-gray-200 hover:bg-gray-50 transition-all active:scale-[0.98]"
+              >
+                {cancelLabel}
+              </button>
               <button
                 onClick={handleConfirm}
-                className="w-full py-4 rounded-2xl font-bold text-white shadow-lg transition-all active:scale-[0.98]"
+                className="flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white shadow-md transition-all active:scale-[0.98]"
                 style={{
                   background: type === 'danger' ? 'linear-gradient(135deg, #EF4444, #DC2626)' : `linear-gradient(135deg, ${themeColors.button}, ${themeColors.button}dd)`,
-                  boxShadow: `0 10px 20px ${type === 'danger' ? '#EF444430' : themeColors.button + '30'}`
+                  boxShadow: `0 4px 12px ${type === 'danger' ? '#EF444430' : themeColors.button + '30'}`
                 }}
               >
                 {confirmLabel}
-              </button>
-
-              <button
-                onClick={onClose}
-                className="w-full py-4 rounded-2xl font-bold text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all active:scale-[0.98]"
-              >
-                {cancelLabel}
               </button>
             </div>
           </motion.div>

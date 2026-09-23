@@ -9,7 +9,6 @@ const {
   processWalletPayment,
   processRefund,
   getPaymentHistory,
-  confirmPayAtHome,
   createPlanOrder,
   verifyPlanPayment,
   getUpgradeDetails
@@ -40,7 +39,6 @@ router.post('/create-order', authenticate, isUser, createOrderValidation, create
 router.post('/verify', authenticate, isUser, verifyPaymentValidation, verifyPaymentWebhook);
 router.post('/wallet', authenticate, isUser, walletPaymentValidation, processWalletPayment);
 router.post('/refund', authenticate, isUser, refundValidation, processRefund);
-router.post('/pay-at-home', authenticate, isUser, walletPaymentValidation, confirmPayAtHome);
 router.get('/history', authenticate, isUser, getPaymentHistory);
 router.post('/plan/create-order', authenticate, isUser, createPlanOrder);
 router.post('/plan/verify', authenticate, isUser, verifyPlanPayment);

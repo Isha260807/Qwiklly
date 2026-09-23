@@ -84,11 +84,11 @@ const Dashboard = memo(() => {
     // Separate requested/searching bookings from other bookings
     const requestedBookings = (recentBookings || []).filter(booking => {
       const status = booking.status?.toLowerCase();
-      return status === 'requested' || status === 'searching';
+      return status === 'requested' || status === 'searching' || (status === 'confirmed' && !booking.vendorId);
     });
     const otherBookings = (recentBookings || []).filter(booking => {
       const status = booking.status?.toLowerCase();
-      return status !== 'requested' && status !== 'searching';
+      return status !== 'requested' && status !== 'searching' && !(status === 'confirmed' && !booking.vendorId);
     });
 
     // Build pending bookings map

@@ -719,23 +719,20 @@ const startSelfJob = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    // Ensure no worker is assigned (or self-assigned flag?) implementation assumes workerId null means unassigned or self?
-    // User says: "if vendor didn't assignes to worker and do himself"
-    // Usually means workerId is null.
+    // Ensure no worker is assigned (self-job only; workerId null means vendor is doing it themselves)
     if (booking.workerId) {
       return res.status(400).json({ success: false, message: 'Worker is assigned to this booking. You cannot start it yourself unless you unassign worker.' });
     }
 
-    if (booking.status !== BOOKING_STATUS.CONFIRMED && booking.status !== BOOKING_STATUS.ASSIGNED) {
-      // Allow ASSIGNED if we consider "Self Assigned" as a state? 
-      // If workerId is null, status usually CONFIRMED.
-      // But lets allow generic flow.
+    // Status Check
+    const allowed = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ASSIGNED];
+    if (!allowed.includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot start journey from current status: ${booking.status}` });
     }
 
-    // Status Check
-    const allowed = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.AWAITING_PAYMENT];
-    if (!allowed.includes(booking.status) && booking.status !== BOOKING_STATUS.ACCEPTED) { // flexible
-      // check strict
+    // Payment must be completed (or covered by plan) before the journey can start
+    if (booking.paymentStatus !== PAYMENT_STATUS.SUCCESS && booking.paymentStatus !== PAYMENT_STATUS.PLAN_COVERED) {
+      return res.status(400).json({ success: false, message: 'Customer payment is pending. You can start the journey once payment is completed.' });
     }
 
     // Generate Visit OTP
@@ -930,14 +927,30 @@ const completeSelfJob = async (req, res) => {
       return res.status(400).json({ success: false, message: `Cannot complete job from current status: ${booking.status}` });
     }
 
+    // Safely extract photos array and notes
+    let photoList = [];
+    if (Array.isArray(workPhotos)) {
+      photoList = workPhotos
+        .map(p => (typeof p === 'string' ? p : p?.url || p?.uri || ''))
+        .filter(Boolean);
+    } else if (workPhotos && Array.isArray(workPhotos.photos)) {
+      photoList = workPhotos.photos
+        .map(p => (typeof p === 'string' ? p : p?.url || p?.uri || ''))
+        .filter(Boolean);
+    }
+
+    const notes = (typeof workPhotos === 'object' && workPhotos?.notes) || 
+      (typeof workDoneDetails === 'object' && workDoneDetails?.notes) || 
+      (typeof workDoneDetails === 'string' ? workDoneDetails : '');
+
     // Prevent duplicate bills & gracefully handle already generated bills
     const VendorBill = require('../../models/VendorBill');
     const existingBill = await VendorBill.findOne({ bookingId: booking._id });
     if (existingBill) {
       booking.status = BOOKING_STATUS.WORK_DONE;
       booking.finalAmount = existingBill.grandTotal;
+      booking.userPayableAmount = existingBill.grandTotal;
       booking.vendorBillId = existingBill._id;
-      const photoList = Array.isArray(workPhotos) ? workPhotos : (workPhotos?.photos || []);
       if (photoList.length > 0) booking.workPhotos = photoList;
       await booking.save();
 
@@ -1115,11 +1128,14 @@ const completeSelfJob = async (req, res) => {
     const payOtp = booking.paymentOtp || Math.floor(1000 + Math.random() * 9000).toString();
     booking.paymentOtp = payOtp;
 
-    if (workPhotos) booking.workPhotos = workPhotos;
+    if (photoList.length > 0) {
+      booking.workPhotos = photoList;
+    }
 
     // Store bill summary in workDoneDetails for frontend display
     booking.workDoneDetails = {
       ...(typeof workDoneDetails === 'object' ? workDoneDetails : {}),
+      notes: notes || undefined,
       billId: bill._id.toString(),
       items: [
         ...allServices.map(s => ({ title: s.name, qty: s.quantity, price: s.total })),
@@ -1130,49 +1146,57 @@ const completeSelfJob = async (req, res) => {
 
     await booking.save();
 
-    // ── Notify user ──
-    const { createNotification } = require('../notificationControllers/notificationController');
-    
-    // 1. Notify user that work is completed
-    await createNotification({
-      userId: booking.userId,
-      type: 'work_completed',
-      title: 'Work Completed',
-      message: `Work finished! Your bill is being prepared.`,
-      relatedId: booking._id,
-      relatedType: 'booking',
-      priority: 'high',
-      pushData: {
+    // ── Notify user (wrapped in try/catch to avoid failing response on notif error) ──
+    try {
+      const { createNotification } = require('../notificationControllers/notificationController');
+      
+      // 1. Notify user that work is completed
+      await createNotification({
+        userId: booking.userId,
         type: 'work_completed',
-        bookingId: booking._id.toString(),
-        link: `/user/booking/${booking._id}`
-      }
-    });
-
-    // 2. Notify user with Final Bill and OTP (The missing piece)
-    await createNotification({
-      userId: booking.userId,
-      type: 'work_done',
-      title: 'Billing Ready',
-      message: `Bill Generated: ₹${grandTotal}. Your verification OTP is ${payOtp}. Please share this with the professional to complete.`,
-      relatedId: booking._id,
-      relatedType: 'booking',
-      priority: 'high',
-      pushData: {
-        type: 'work_done',
-        bookingId: booking._id.toString(),
-        paymentOtp: payOtp,
-        link: `/user/booking/${booking._id}`
-      }
-    });
-
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`user_${booking.userId}`).emit('booking_updated', {
-        bookingId: booking._id,
-        status: BOOKING_STATUS.WORK_DONE,
-        finalAmount: grandTotal
+        title: 'Work Completed',
+        message: `Work finished! Your bill is being prepared.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        priority: 'high',
+        pushData: {
+          type: 'work_completed',
+          bookingId: booking._id.toString(),
+          link: `/user/booking/${booking._id}`
+        }
       });
+
+      // 2. Notify user with Final Bill and OTP
+      await createNotification({
+        userId: booking.userId,
+        type: 'work_done',
+        title: 'Billing Ready',
+        message: `Bill Generated: ₹${grandTotal}. Your verification OTP is ${payOtp}. Please share this with the professional to complete.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        priority: 'high',
+        pushData: {
+          type: 'work_done',
+          bookingId: booking._id.toString(),
+          paymentOtp: payOtp,
+          link: `/user/booking/${booking._id}`
+        }
+      });
+    } catch (notifErr) {
+      console.error('[completeSelfJob] Notification dispatch failed (non-fatal):', notifErr);
+    }
+
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user_${booking.userId}`).emit('booking_updated', {
+          bookingId: booking._id,
+          status: BOOKING_STATUS.WORK_DONE,
+          finalAmount: grandTotal
+        });
+      }
+    } catch (sockErr) {
+      console.error('[completeSelfJob] Socket emit failed (non-fatal):', sockErr);
     }
 
     // Response: bill totals only, NO vendor earnings exposed
@@ -1192,7 +1216,7 @@ const completeSelfJob = async (req, res) => {
     });
   } catch (error) {
     console.error('Complete self job error:', error);
-    res.status(500).json({ success: false, message: 'Failed to complete job' });
+    res.status(500).json({ success: false, message: error?.message || 'Failed to complete job' });
   }
 };
 

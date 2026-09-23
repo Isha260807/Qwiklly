@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { FiArrowLeft, FiShoppingCart, FiTrash2, FiMinus, FiPlus, FiPhone, FiHome, FiClock, FiEdit2, FiCheckCircle, FiInfo } from 'react-icons/fi';
+import { FiArrowLeft, FiShoppingCart, FiTrash2, FiMinus, FiPlus, FiPhone, FiHome, FiClock, FiEdit2, FiCheckCircle, FiInfo, FiCreditCard, FiShield, FiCheck } from 'react-icons/fi';
 import { MdStar } from 'react-icons/md';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
@@ -438,7 +438,6 @@ const Checkout = () => {
     }
   };
 
-
   // Listen for real-time vendor acceptance
   useEffect(() => {
     if (currentStep !== 'waiting' || !bookingRequest) return;
@@ -515,86 +514,30 @@ const Checkout = () => {
   }, [currentStep, bookingRequest]);
 
   // Search for nearby vendors
-  const handleSearchVendors = async () => {
+  // Unified Upfront Booking & Online Payment Handler
+  const handleBookAndPay = async () => {
+    // 1. Validation
+    if (!addressDetails) {
+      setShowAddressModal(true);
+      return;
+    }
+    if (bookingType === 'scheduled' && (!selectedDate || !selectedTime)) {
+      setShowTimeSlotModal(true);
+      return;
+    }
+    if (cartItems.length === 0) {
+      toast.error('Your cart is empty');
+      return;
+    }
+
     try {
-      // Validate required fields
-      if (bookingType === 'scheduled') {
-        if (!selectedDate || !selectedTime) {
-          toast.error('Please select time slot');
-          return;
-        }
-        if (!addressDetails) {
-          toast.error('Please select address');
-          return;
-        }
-      } else {
-        // Instant
-        if (!addressDetails) {
-          toast.error('Please select address');
-          return;
-        }
-      }
-
-      if (cartItems.length === 0 && !bookingRequest) {
-        toast.error('Cart is empty');
-        return;
-      }
-
-      // Open modal and start searching
-      setShowVendorModal(true);
-      setCurrentStep('searching');
       setSearchingVendors(true);
 
-      // Get first service
       const firstItem = cartItems[0];
-      if (!firstItem.serviceId) {
-        toast.error('Service information missing. Please try again.');
-        setCurrentStep('details');
-        setSearchingVendors(false);
-        setShowVendorModal(false);
-        return;
-      }
-
-      // Prepare address object
-      const addressObj = {
-        type: 'home',
-        addressLine1: address,
-        addressLine2: houseNumber,
-        city: addressDetails?.city || getAddressComponent('locality') || getAddressComponent('administrative_area_level_2') || 'City',
-        state: addressDetails?.state || getAddressComponent('administrative_area_level_1') || 'State',
-        pincode: addressDetails?.pincode || getAddressComponent('postal_code') || '123456',
-
-        landmark: addressDetails?.landmark || '',
-        lat: addressDetails?.lat || null,
-        lng: addressDetails?.lng || null
-      };
-
-      // Prepare time slot
-      let finalDate = selectedDate;
-      let finalTimeDisplay = selectedTime;
-      let timeSlotObj = {
-        start: selectedTime,
-        end: getTimeSlots().find(slot => slot.value === selectedTime)?.end || selectedTime
-      };
-
-      if (bookingType === 'instant') {
-        finalDate = new Date();
-        finalTimeDisplay = "ASAP";
-        timeSlotObj = { start: "Now", end: "45 mins" };
-      } else {
-        finalTimeDisplay = getTimeSlots().find(slot => slot.value === selectedTime)?.display || selectedTime;
-      }
-
-      // Create booking request
-      toast.loading('Searching for nearby vendors...');
-
-      // Ensure serviceId is a string (handle populated cart data)
       const serviceId = typeof firstItem.serviceId === 'object'
         ? firstItem.serviceId._id || firstItem.serviceId.id
         : firstItem.serviceId;
 
-      // Prepare bookedItems array matching Service catalog structure
-      // Prepare bookedItems array matching Service catalog structure
       const bookedItemsData = cartItems.map(item => ({
         brandName: item.sectionTitle || item.brand || '',
         brandIcon: item.sectionIcon || null,
@@ -611,260 +554,92 @@ const Checkout = () => {
         quantity: item.serviceCount || 1
       }));
 
+      // Calculate time slot
+      let finalDate = selectedDate;
+      let finalTimeDisplay = selectedTime;
+      let timeSlotObj = {
+        start: selectedTime,
+        end: getTimeSlots().find(slot => slot.value === selectedTime)?.end || selectedTime
+      };
 
+      if (bookingType === 'instant') {
+        finalDate = new Date();
+        finalTimeDisplay = "ASAP";
+        timeSlotObj = { start: "Now", end: "45 mins" };
+      } else {
+        finalTimeDisplay = getTimeSlots().find(slot => slot.value === selectedTime)?.display || selectedTime;
+      }
 
+      const addressObj = {
+        type: 'home',
+        addressLine1: address,
+        addressLine2: houseNumber,
+        city: addressDetails?.city || getAddressComponent('locality') || getAddressComponent('administrative_area_level_2') || 'City',
+        state: addressDetails?.state || getAddressComponent('administrative_area_level_1') || 'State',
+        pincode: addressDetails?.pincode || getAddressComponent('postal_code') || '123456',
+        landmark: addressDetails?.landmark || '',
+        lat: addressDetails?.lat || null,
+        lng: addressDetails?.lng || null
+      };
+
+      toast.loading('Creating booking...');
       const bookingResponse = await bookingService.create({
-        bookingType, // 'instant' or 'scheduled'
-        serviceId: serviceId,
+        bookingType,
+        serviceId,
         address: addressObj,
-        scheduledDate: finalDate.toISOString(),
+        scheduledDate: (finalDate instanceof Date) ? finalDate.toISOString() : new Date(finalDate).toISOString(),
         scheduledTime: finalTimeDisplay,
         timeSlot: timeSlotObj,
-        // userNotes: null, // Removed per request
-        paymentMethod: amountToPay === 0 ? 'plan_benefit' : 'pay_at_home',
+        paymentMethod: amountToPay === 0 ? 'plan_benefit' : 'online',
         amount: amountToPay,
-
-        // Pass Full Breakdown to Backend
         basePrice: totalOriginalPrice,
         discount: savings,
         tax: taxesAndFee,
         visitationFee: finalVisitedFee,
-
-        // Metadata for better data capture
+        couponCode: appliedCoupon?.code || null,
         serviceCategory: firstItem.categoryTitle || firstItem.category || 'General',
         categoryIcon: firstItem.categoryIcon || firstItem.icon || null,
         brandName: firstItem.sectionTitle || firstItem.brand || '',
         brandIcon: firstItem.sectionIcon || null,
-
+        contactDetails: {
+          name: contactDetails.name,
+          phone: contactDetails.phone.length === 10 && !contactDetails.phone.includes('+') ? `+91${contactDetails.phone}` : contactDetails.phone
+        },
         bookedItems: bookedItemsData
       });
 
+      toast.dismiss();
+
       if (!bookingResponse.success) {
-        toast.dismiss();
-        toast.error(bookingResponse.message || 'Failed to search for vendors');
-        setCurrentStep('details');
+        toast.error(bookingResponse.message || 'Failed to create booking');
         setSearchingVendors(false);
-        setShowVendorModal(false);
         return;
       }
 
       const booking = bookingResponse.data;
       setBookingRequest(booking);
-      toast.dismiss();
 
-      // Clear cart immediately as search starts (consumes items) - ONLY if vendors found
-      if (!bookingResponse.noVendorsFound) {
-        try {
-          if (category) {
-            await removeCategoryGlobal(category);
-          } else {
-            await clearCartGlobal();
-          }
-          setCartItems([]);
-        } catch (err) {
-          console.error('Failed to clear cart after search start', err);
-        }
-      }
-
-      // If no vendors found, redirect or refresh immediately
-      if (bookingResponse.noVendorsFound) {
-        toast.dismiss();
-        const bookingId = booking?._id || booking?.id;
-
-        // Ensure we stop searching and close the modal
-        setSearchingVendors(false);
-        setShowVendorModal(false);
-
-        if (bookingId) {
-          toast.error('No vendors currently available for this service.');
-
-          // Auto-cancel and refresh
-          const cancelAndRefresh = async () => {
-            try {
-              await bookingService.cancel(bookingId, 'Initial search found no available vendors');
-              setTimeout(() => {
-                window.location.reload();
-              }, 2000);
-            } catch (err) {
-              console.error('Auto-cancel failed:', err);
-              window.location.reload();
-            }
-          };
-          cancelAndRefresh();
-        } else {
-          // Fallback if ID is missing for some reason
-          setCurrentStep('details');
-          toast.error('Search failed. Please try again.');
-          setTimeout(() => window.location.reload(), 2000);
-        }
+      if (amountToPay === 0) {
+        toast.success('Booking confirmed under membership plan!');
       } else {
-        // Move to waiting state - alerts sent to nearby vendors
-        setCurrentStep('waiting');
-        toast.success('Finding nearby vendors... Alerts sent to vendors within 10km!');
+        toast.success('Booking request sent! You can pay once a professional accepts.');
       }
 
-      // REMOVED local setCartItems([]) - The summary should remain visible while searching
-      // The cart is already cleared in server database by the backend and previous API call.
-
-    } catch (error) {
-      toast.dismiss();
-      console.error('Search vendors error:', error);
-      toast.error('Failed to search for vendors. Please try again.');
-      setCurrentStep('details');
-      setSearchingVendors(false);
-      setShowVendorModal(false);
-    }
-  };
-
-  // Proceed to payment after vendor acceptance
-  const handleOnlinePayment = async () => {
-    try {
-      if (!acceptedVendor || !bookingRequest) {
-        toast.error('No vendor selected or booking not created');
-        return;
-      }
-
-      // Create Razorpay order
-      toast.loading('Creating payment order...');
-      const orderResponse = await paymentService.createOrder(bookingRequest._id);
-
-      if (!orderResponse.success) {
-        toast.dismiss();
-        toast.error(orderResponse.message || 'Failed to create payment order');
-        return;
-      }
-
-      toast.dismiss();
-
-      // Get Razorpay key
-      const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
-      if (!razorpayKey) {
-        toast.error('Razorpay key not configured');
-        return;
-      }
-
-      if (!window.Razorpay) {
-        toast.error('Razorpay SDK not loaded');
-        return;
-      }
-
-      const options = {
-        key: razorpayKey,
-        amount: orderResponse.data.amount * 100,
-        currency: orderResponse.data.currency || 'INR',
-        order_id: orderResponse.data.orderId,
-        name: 'Homestr',
-        description: `Payment for ${bookingRequest.serviceName || 'service'}`,
-        handler: async function (response) {
-          try {
-            toast.loading('Verifying payment...');
-            const verifyResponse = await paymentService.verifyPayment({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature
-            });
-
-            toast.dismiss();
-
-            if (verifyResponse.success) {
-              toast.success('Payment successful!');
-
-              // Clear cart (or just category items)
-              try {
-                if (category) {
-                  await removeCategoryGlobal(category);
-                } else {
-                  await clearCartGlobal();
-                }
-                setCartItems([]);
-              } catch (error) {
-              }
-
-              // Navigate to booking confirmation
-              navigate(`/user/booking-confirmation/${bookingRequest._id}`, {
-                replace: true
-              });
-            } else {
-              toast.error(verifyResponse.message || 'Payment verification failed');
-            }
-          } catch (error) {
-            toast.dismiss();
-            toast.error('Failed to verify payment');
-          }
-        },
-        prefill: {
-          name: contactDetails.name || JSON.parse(localStorage.getItem('userData'))?.name || 'User',
-          email: JSON.parse(localStorage.getItem('userData'))?.email || '',
-          contact: contactDetails.phone || userPhone
-        },
-        theme: {
-          color: themeColors.button
-        }
-      };
-
-      const razorpay = new window.Razorpay(options);
-      razorpay.on('payment.failed', function (response) {
-        toast.dismiss();
-        toast.error(`Payment failed: ${response.error.description || 'Unknown error'}`);
-      });
-      razorpay.open();
-
-    } catch (error) {
-      toast.dismiss();
-      toast.error('Failed to process payment');
-    }
-  };
-
-  const handlePayAtHome = async () => {
-    try {
-      if (!bookingRequest) return;
-      toast.loading('Confirming booking...');
-      const response = await paymentService.confirmPayAtHome(bookingRequest._id);
-      toast.dismiss();
-
-      if (response.success) {
-        toast.success('Booking confirmed!');
-        // Clear cart (or just category items)
-        try {
-          if (category) {
-            await removeCategoryGlobal(category);
-          } else {
-            await clearCartGlobal();
-          }
-          setCartItems([]);
-        } catch (error) {
-        }
-        // Navigate to booking confirmation
-        navigate(`/user/booking-confirmation/${bookingRequest._id}`, {
-          replace: true
-        });
-      } else {
-        toast.error(response.message || 'Failed to confirm booking');
-      }
-    } catch (error) {
-      toast.dismiss();
-      toast.error('Failed to process request');
-    }
-  };
-
-  const handlePayment = async () => {
-    if (totalAmount === 0) {
-      // Free booking covered by plan
-      toast.success('Booking confirmed!');
-      // Clear cart
       try {
-        await clearCartGlobal();
+        if (category) await removeCategoryGlobal(category);
+        else await clearCartGlobal();
         setCartItems([]);
-      } catch (error) { }
+      } catch (e) { }
 
-      // Navigate
-      if (bookingRequest) {
-        navigate(`/user/booking-confirmation/${bookingRequest._id}`, { replace: true });
-      }
-    } else if (paymentMethod === 'online') {
-      await handleOnlinePayment();
-    } else {
-      await handlePayAtHome();
+      // Payment (for paid bookings) now happens after a vendor accepts, not at creation time.
+      setShowVendorModal(true);
+      setCurrentStep('waiting');
+
+    } catch (error) {
+      toast.dismiss();
+      console.error('Booking flow error:', error);
+      toast.error('Something went wrong. Please try again.');
+      setSearchingVendors(false);
     }
   };
 
@@ -1392,6 +1167,66 @@ const Checkout = () => {
           />
         )}
 
+        {/* Payment Method Selection Card */}
+        <div className="bg-white border-2 border-slate-100 rounded-2xl p-4 mb-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <FiCreditCard className="w-4 h-4 text-emerald-600" />
+              Payment Method
+            </h3>
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 flex items-center gap-1">
+              <FiShield className="w-3 h-3" /> 100% Secure
+            </span>
+          </div>
+
+          {totalAmount === 0 ? (
+            <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-500 rounded-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                  ★
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Membership Plan Benefit</p>
+                  <p className="text-xs text-green-700 font-medium">Free service under {planBenefits.name || 'active plan'}</p>
+                </div>
+              </div>
+              <div className="w-5 h-5 rounded-full bg-green-600 text-white flex items-center justify-center">
+                <FiCheck className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between p-3.5 bg-emerald-50/40 border-2 border-emerald-500 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white border border-emerald-200 flex items-center justify-center shadow-xs">
+                    <FiCreditCard className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-slate-900">Online Payment</p>
+                      <span className="text-[9px] font-extrabold bg-emerald-600 text-white px-1.5 py-0.5 rounded">UPI / CARDS</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Google Pay, PhonePe, Paytm, Cards, NetBanking, Wallets</p>
+                  </div>
+                </div>
+                <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <FiCheck className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
+              {/* Payment Partners Badges */}
+              <div className="flex items-center justify-between px-2 pt-1 text-[10px] text-slate-400 font-medium">
+                <span>Powered by Razorpay</span>
+                <span className="flex items-center gap-1.5 font-mono text-[9px] text-slate-500">
+                  <span className="px-1.5 py-0.5 bg-slate-100 rounded">UPI</span>
+                  <span className="px-1.5 py-0.5 bg-slate-100 rounded">Cards</span>
+                  <span className="px-1.5 py-0.5 bg-slate-100 rounded">NetBanking</span>
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Payment Summary */}
         <div className="bg-white border-2 border-slate-100 rounded-2xl p-5 mb-6 shadow-sm overflow-hidden relative">
           {/* Decorative Background for Header */}
@@ -1489,15 +1324,15 @@ const Checkout = () => {
           </div>
         </div>
 
-        {/* Important Note regarding Base Price */}
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 flex items-start gap-4 shadow-sm">
-          <div className="bg-blue-100 p-2 rounded-full shrink-0 mt-0.5">
-            <FiInfo className="w-5 h-5 text-blue-600" />
+        {/* 100% Pre-Paid Online Note */}
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 mb-6 flex items-start gap-4 shadow-sm">
+          <div className="bg-emerald-100 p-2 rounded-full shrink-0 mt-0.5">
+            <FiCheckCircle className="w-5 h-5 text-emerald-600" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-blue-900 mb-1">Note</h4>
-            <p className="text-sm text-blue-800 leading-relaxed font-medium">
-              This is a base booking cost. Additional service cost is decided by the vendor after service bill preparation.
+            <h4 className="text-sm font-bold text-emerald-900 mb-1">100% Pre-Paid Guarantee</h4>
+            <p className="text-sm text-emerald-800 leading-relaxed font-medium">
+              Secure online payment upfront. No cash or extra payment required during the service visit.
             </p>
           </div>
         </div>
@@ -1637,21 +1472,17 @@ const Checkout = () => {
 
         <div className="p-4">
           <button
-            onClick={plan ? handlePlanPayment :
-              (houseNumber || addressDetails) ?
-                (currentStep === 'payment' ? handlePayment : handleSearchVendors) :
-                handleProceed}
+            onClick={plan ? handlePlanPayment : handleBookAndPay}
             disabled={searchingVendors}
-            className="w-full text-white py-3 rounded-lg text-base font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-teal-500/30"
+            className="w-full text-white py-3.5 rounded-xl text-base font-bold transition-all active:scale-[0.99] disabled:opacity-50 shadow-lg cursor-pointer flex items-center justify-center gap-2"
             style={{ backgroundColor: themeColors.button }}
           >
-            {searchingVendors ? 'Searching for vendors...' :
-              currentStep === 'payment' ? (totalAmount === 0 ? 'Confirm Booking (Free)' : (paymentMethod === 'online' ? 'Proceed to Pay' : 'Confirm Booking')) :
-                plan ? 'Proceed to Payment' :
-                  bookingType === 'instant' ? 'Find nearby vendors now' :
-                    (selectedDate && selectedTime && houseNumber ?
-                      'Find nearby vendors' :
-                      (houseNumber || addressDetails) ? 'Select Time Slot' : 'Add address to proceed')}
+            {searchingVendors ? 'Processing...' :
+              plan ? 'Proceed to Payment' :
+                !addressDetails ? 'Add Address to Proceed' :
+                  (bookingType === 'scheduled' && (!selectedDate || !selectedTime)) ? 'Select Time Slot' :
+                    totalAmount === 0 ? 'Confirm Booking (Free)' :
+                      'Book Now'}
           </button>
         </div>
       </div>
@@ -1665,7 +1496,7 @@ const Checkout = () => {
         onClose={() => {
           setShowVendorModal(false);
           if (currentStep === 'accepted') {
-            setCurrentStep('payment');
+            navigate(`/user/booking-confirmation/${bookingRequest?._id}`, { replace: true });
           } else if (currentStep === 'failed') {
             setCurrentStep('details');
           }
@@ -1673,7 +1504,7 @@ const Checkout = () => {
         currentStep={currentStep}
         acceptedVendor={acceptedVendor}
         onRetry={() => {
-          handleSearchVendors();
+          handleBookAndPay();
         }}
       />
 

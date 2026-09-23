@@ -194,15 +194,22 @@ const BookingTimeline = () => {
 
 
 
+  // Journey can only start once the customer's payment has gone through (or the plan covers it)
+  const isPaymentComplete = booking?.paymentStatus === 'success' || booking?.paymentStatus === 'plan_covered';
+
   /* Handlers for Vendor Self-Job */
   const handleStartSelfJob = async () => {
+    if (!isPaymentComplete) {
+      toast.error('Waiting for customer payment. You can start the journey once payment is completed.');
+      return;
+    }
     try {
       setActionLoading(true);
       await startSelfJob(id);
       toast.success('Journey Started');
       navigate(`/vendor/booking/${id}/map`);
     } catch (error) {
-      toast.error('Failed to start journey');
+      toast.error(error.response?.data?.message || 'Failed to start journey');
     } finally {
       setActionLoading(false);
     }
@@ -274,7 +281,9 @@ const BookingTimeline = () => {
       title: 'Journey Started',
       icon: FiMapPin,
       action: (currentStage === 3 && booking?.isSelfJob) ? handleStartSelfJob : null,
-      description: booking?.isSelfJob ? 'You started journey' : (booking?.assignedTo ? 'Worker started journey' : 'Waiting for journey start'),
+      description: (currentStage === 3 && booking?.isSelfJob && !isPaymentComplete)
+        ? 'Waiting for customer payment before journey can start'
+        : booking?.isSelfJob ? 'You started journey' : (booking?.assignedTo ? 'Worker started journey' : 'Waiting for journey start'),
     },
     {
       id: 5,
@@ -292,10 +301,10 @@ const BookingTimeline = () => {
     },
     {
       id: 7,
-      title: booking?.isSelfJob ? 'Collect Payment' : 'Approve Worker Work',
+      title: booking?.isSelfJob ? 'Complete Booking' : 'Approve Worker Work',
       icon: FiCheckCircle,
       action: (() => {
-        if (booking?.status === 'completed' || booking?.status === 'COMPLETED' || booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid') return null;
+        if (booking?.status === 'completed' || booking?.status === 'COMPLETED') return null;
 
         if (booking?.isSelfJob && currentStage === 7) {
           return () => navigate(`/vendor/booking/${id}/billing`);
@@ -306,7 +315,7 @@ const BookingTimeline = () => {
         }
         return null;
       })(),
-      description: booking?.isSelfJob ? 'Collect cash and complete booking' : 'Review and approve worker work',
+      description: booking?.isSelfJob ? 'Confirm service completion' : 'Review and approve worker work',
     },
     {
       id: 8,
@@ -455,27 +464,30 @@ const BookingTimeline = () => {
                       <p className="text-[11px] text-gray-500 mb-1 leading-snug">{stage.description}</p>
 
                       {/* Action Button */}
-                      {stage.action && !isSkipped && (
-                        <button
-                          onClick={stage.action}
-                          className="px-3 py-1.5 rounded-lg font-bold text-white text-xs transition-all active:scale-95 shadow-xs cursor-pointer my-1"
-                          style={{
-                            background: themeColors.button,
-                          }}
-                        >
-                          {stage.id === 3 ? 'Assign Worker' :
-                            stage.id === 4 ? 'Start Journey' :
-                              stage.id === 5 ? 'Mark Arrived' :
-                                stage.id === 6 ? 'Mark Work Done' :
-                                  stage.id === 7 ? (
-                                    (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid')
-                                      ? 'Online Payment Done'
-                                      : (booking?.isSelfJob ? 'Collect Cash' : 'Approve Work')
-                                  ) :
-                                    stage.id === 8 ? 'Pay Worker' :
-                                      stage.id === 9 ? 'Final Settlement' : 'Continue'}
-                        </button>
-                      )}
+                      {stage.action && !isSkipped && (() => {
+                        const isJourneyPaymentBlocked = stage.id === 4 && booking?.isSelfJob && !isPaymentComplete;
+                        return (
+                          <button
+                            onClick={isJourneyPaymentBlocked ? undefined : stage.action}
+                            disabled={isJourneyPaymentBlocked}
+                            className={`px-3 py-1.5 rounded-lg font-bold text-white text-xs transition-all shadow-xs my-1 ${isJourneyPaymentBlocked ? 'opacity-50 cursor-not-allowed' : 'active:scale-95 cursor-pointer'
+                              }`}
+                            style={{
+                              background: isJourneyPaymentBlocked ? '#9CA3AF' : themeColors.button,
+                            }}
+                          >
+                            {stage.id === 3 ? 'Assign Worker' :
+                              stage.id === 4 ? (isJourneyPaymentBlocked ? 'Payment Pending' : 'Start Journey') :
+                                stage.id === 5 ? 'Mark Arrived' :
+                                  stage.id === 6 ? 'Mark Work Done' :
+                                    stage.id === 7 ? (
+                                      booking?.isSelfJob ? 'Complete Booking' : 'Approve Work'
+                                    ) :
+                                      stage.id === 8 ? 'Pay Worker' :
+                                        stage.id === 9 ? 'Final Settlement' : 'Continue'}
+                          </button>
+                        );
+                      })()}
 
                       {/* Online Payment Status Badge for Stage 7 */}
                       {stage.id === 7 && (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid') && !isCompleted && (

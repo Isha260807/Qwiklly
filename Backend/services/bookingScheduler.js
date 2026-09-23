@@ -113,7 +113,7 @@ class BookingScheduler {
           waveStartedAt: { $ne: null },
           potentialVendors: { $exists: true, $not: { $size: 0 } }
         },
-        '_id currentWave waveStartedAt potentialVendors notifiedVendors bookingNumber createdAt userId expiresAt' // Added createdAt, userId, expiresAt
+        '_id currentWave waveStartedAt potentialVendors notifiedVendors bookingNumber createdAt userId expiresAt paymentStatus paymentMethod'
       ).lean();
 
       if (activeBookings.length === 0) {
@@ -128,7 +128,7 @@ class BookingScheduler {
           try {
             const currentWave = booking.currentWave || 1;
             const waveConfig = WAVE_CONFIG[currentWave] || WAVE_CONFIG[4];
-            const startTime = new Date(booking.createdAt || booking.waveStartedAt).getTime();
+            const startTime = new Date(booking.waveStartedAt || booking.createdAt).getTime();
             const totalElapsed = now - startTime;
 
             // --- PERSISTENCE: Save expiresAt to DB if missing ---
@@ -271,7 +271,8 @@ class BookingScheduler {
               brandIcon: populatedBooking.brandIcon,
               categoryIcon: populatedBooking.categoryIcon,
               createdAt: populatedBooking.createdAt,
-              expiresAt: new Date(new Date(populatedBooking.createdAt).getTime() + MAX_SEARCH_TIME_MS).toISOString(),
+              waveStartedAt: populatedBooking.waveStartedAt,
+              expiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
               playSound: true,
               message: `New booking request within ${v.distance?.toFixed(1) || '?'}km!`
             });

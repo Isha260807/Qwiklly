@@ -254,10 +254,14 @@ exports.confirmCashCollection = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    // OTP Verification
+    // Booking already paid upfront online (100% pre-paid architecture) — no cash/OTP exchange needed,
+    // this call is just "finish the job & generate the invoice".
+    const isPrepaid = booking.paymentMethod === 'online' && booking.paymentStatus === PAYMENT_STATUS.SUCCESS;
+
+    // OTP Verification (only relevant for legacy on-site cash/QR collection)
     const isPlanBenefitNoExtras = booking.paymentMethod === 'plan_benefit' && otp === '0000';
 
-    if (!isPlanBenefitNoExtras && booking.customerConfirmationOTP && otp && booking.customerConfirmationOTP !== otp) {
+    if (!isPrepaid && !isPlanBenefitNoExtras && booking.customerConfirmationOTP && otp && booking.customerConfirmationOTP !== otp) {
       if (process.env.NODE_ENV !== 'development' || otp !== '0000') {
         console.warn(`[ConfirmCash] Invalid OTP attempt for booking ${id}. Expected: ${booking.customerConfirmationOTP}, Received: ${otp}`);
         return res.status(400).json({ success: false, message: 'Invalid OTP. Please enter the correct code shared by the customer.' });
@@ -331,16 +335,23 @@ exports.confirmCashCollection = async (req, res) => {
     // Update Booking
     booking.finalAmount = collectionAmount;
     booking.userPayableAmount = collectionAmount;
+    // Kept true here (in sync with the atomic race-lock above) even for prepaid bookings, where it
+    // just means "settlement processed" rather than literally "cash was collected".
     booking.cashCollected = true;
-    booking.cashCollectedAt = new Date();
-    booking.cashCollectedBy = userRole === 'vendor' ? 'vendor' : 'worker';
-    booking.cashCollectorId = userId;
 
-    if (booking.paymentMethod === 'plan_benefit') {
-      booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
+    if (isPrepaid) {
+      // Already paid via Razorpay upfront — nothing to collect, paymentStatus/paymentMethod stay as-is.
     } else {
-      booking.paymentStatus = PAYMENT_STATUS.COLLECTED_BY_VENDOR;
-      booking.paymentMethod = 'cash collected'; // Standardized label
+      booking.cashCollectedAt = new Date();
+      booking.cashCollectedBy = userRole === 'vendor' ? 'vendor' : 'worker';
+      booking.cashCollectorId = userId;
+
+      if (booking.paymentMethod === 'plan_benefit') {
+        booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
+      } else {
+        booking.paymentStatus = PAYMENT_STATUS.COLLECTED_BY_VENDOR;
+        booking.paymentMethod = 'cash collected'; // Standardized label
+      }
     }
 
     if (booking.status === 'work_done' || booking.status === 'visited' || booking.status === 'in_progress') {
@@ -359,7 +370,35 @@ exports.confirmCashCollection = async (req, res) => {
     const vendor = await Vendor.findById(vendorId).lean();
     let newDues = 0;
 
-    if (vendor) {
+    if (vendor && isPrepaid) {
+      // Platform already holds the money via Razorpay — only credit the vendor's earnings share, no dues.
+      newDues = vendor.wallet?.dues || 0;
+      await Vendor.findByIdAndUpdate(vendorId, {
+        $inc: { 'wallet.earnings': vendorEarning }
+      }, { runValidators: false });
+
+      if (vendorEarning > 0) {
+        try {
+          await Transaction.create({
+            vendorId,
+            bookingId: booking._id,
+            amount: vendorEarning,
+            type: 'earnings_credit',
+            paymentMethod: 'system',
+            description: `Earnings ₹${vendorEarning} credited for booking ${booking.bookingNumber} (online payment)`,
+            status: 'completed',
+            metadata: {
+              type: 'earnings_increase',
+              billId: bill?._id?.toString(),
+              serviceEarning: bill?.vendorServiceEarning,
+              partsEarning: bill?.vendorPartsEarning
+            }
+          });
+        } catch (txnErr) {
+          console.error('[ConfirmCash] Earnings credit transaction failed:', txnErr);
+        }
+      }
+    } else if (vendor) {
       newDues = (vendor.wallet?.dues || 0) + grandTotal;
       const newEarnings = (vendor.wallet?.earnings || 0) + vendorEarning;
       const cashLimit = vendor.wallet?.cashLimit || 10000;
@@ -458,9 +497,11 @@ exports.confirmCashCollection = async (req, res) => {
     const { createNotification } = require('../notificationControllers/notificationController');
     await createNotification({
       userId: booking.userId,
-      type: 'payment_received',
-      title: 'Payment Received (Cash)',
-      message: `Payment of ₹${grandTotal} received in cash. Job Completed. Thanks!`,
+      type: isPrepaid ? 'booking_completed' : 'payment_received',
+      title: isPrepaid ? 'Booking Completed' : 'Payment Received (Cash)',
+      message: isPrepaid
+        ? `Your booking ${booking.bookingNumber} is complete. Invoice is ready. Thanks for choosing us!`
+        : `Payment of ₹${grandTotal} received in cash. Job Completed. Thanks!`,
       relatedId: booking._id,
       relatedType: 'booking',
       priority: 'high'

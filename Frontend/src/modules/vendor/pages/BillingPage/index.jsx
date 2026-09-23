@@ -570,6 +570,42 @@ const BillingPage = () => {
     }
   };
 
+  const handleCompleteBooking = async () => {
+    try {
+      setOtpLoading(true);
+      await vendorBillService.createOrUpdateBill(id, {
+        services: selectedServices,
+        parts: selectedParts,
+        customItems,
+        transportCharges,
+        applyPartsGST
+      });
+
+      const res = await vendorWalletService.confirmCashCollection(
+        id,
+        calculations.finalBillAmount,
+        null,
+        [...selectedParts, ...customItems]
+      );
+
+      if (res.success) {
+        toast.success('Booking completed! Invoice generated.');
+        localStorage.removeItem(`billing_step_${id}`);
+        localStorage.removeItem(`billing_max_step_${id}`);
+        localStorage.removeItem(`billing_data_${id}`);
+        fetchData();
+        navigate(`/vendor/booking/${id}`);
+      } else {
+        toast.error(res.message || 'Failed to complete booking');
+      }
+    } catch (error) {
+      console.error('Complete booking error:', error);
+      toast.error('Failed to complete booking');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const checkPaymentStatus = async () => {
     try {
       setQrLoading(true);
@@ -596,6 +632,9 @@ const BillingPage = () => {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   if (!booking) return null;
+
+  // Booking already paid upfront online — no on-site cash/QR collection needed, just finish & invoice.
+  const isPrepaid = booking.paymentMethod === 'online' && booking.paymentStatus === 'success';
 
   // --- RENDER LOGIC ---
 
@@ -676,15 +715,16 @@ const BillingPage = () => {
             );
           })}
         </div>
-        <div className="fixed bottom-[72px] left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-50 flex gap-3">
-          <button onClick={() => setViewMode('timeline')} className="flex-1 py-3.5 bg-white text-gray-700 font-bold rounded-xl border border-gray-200">
+        <div className="fixed bottom-[72px] left-0 right-0 p-2.5 bg-white/90 backdrop-blur-md border-t border-gray-100 shadow-[0_-4px_16px_rgba(0,0,0,0.04)] z-50 flex gap-2">
+          <button onClick={() => setViewMode('timeline')} className="flex-1 py-2.5 bg-white text-gray-700 font-bold rounded-xl border border-gray-200 text-xs active:scale-95 transition-all">
             Save & Exit
           </button>
           <button onClick={() => {
             setViewMode('select-parts');
             setCurrentStep(2);
-          }} className="flex-[2] py-3.5 bg-gray-900 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg">
-            Next: Parts <FiArrowRight className="w-5 h-5" />
+          }} className="flex-[2] py-2.5 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs"
+          style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}>
+            Next: Parts <FiArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -727,22 +767,23 @@ const BillingPage = () => {
                   </div>
                 </div>
                 <button
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${selected ? 'bg-red-100 text-red-600' : 'bg-orange-600 text-white shadow-lg shadow-orange-200'}`}>
-                  {selected ? <FiTrash2 className="w-5 h-5" /> : <FiPlus className="w-6 h-6" />}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${selected ? 'bg-red-100 text-red-600' : 'bg-orange-600 text-white shadow-md shadow-orange-200'}`}>
+                  {selected ? <FiTrash2 className="w-4 h-4" /> : <FiPlus className="w-5 h-5" />}
                 </button>
               </div>
             );
           })}
         </div>
-        <div className="fixed bottom-[72px] left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-50 flex gap-3">
-          <button onClick={() => setViewMode('timeline')} className="flex-1 py-3.5 bg-white text-gray-700 font-bold rounded-xl border border-gray-200">
+        <div className="fixed bottom-[72px] left-0 right-0 p-2.5 bg-white/90 backdrop-blur-md border-t border-gray-100 shadow-[0_-4px_16px_rgba(0,0,0,0.04)] z-50 flex gap-2">
+          <button onClick={() => setViewMode('timeline')} className="flex-1 py-2.5 bg-white text-gray-700 font-bold rounded-xl border border-gray-200 text-xs active:scale-95 transition-all">
             Save & Exit
           </button>
           <button onClick={() => {
             setViewMode('timeline');
             setCurrentStep(3); // Go to Extras
-          }} className="flex-[2] py-3.5 bg-gray-900 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg">
-            Next: Extras <FiArrowRight className="w-5 h-5" />
+          }} className="flex-[2] py-2.5 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs"
+          style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}>
+            Next: Extras <FiArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -765,7 +806,7 @@ const BillingPage = () => {
         </div>
 
         {/* Step Indicator */}
-        <div className="px-4 py-4 border-b border-gray-50 flex justify-between relative overflow-hidden shadow-sm">
+        <div className="px-4 py-3 border-b border-gray-50 flex justify-between relative overflow-hidden shadow-xs">
           {[
             { id: 1, label: 'Services', icon: FiTool },
             { id: 2, label: 'Parts', icon: FiPackage },
@@ -780,40 +821,49 @@ const BillingPage = () => {
             return (
               <button key={step.id} onClick={() => isReached && setCurrentStep(step.id)}
                 className={`flex flex-col items-center gap-1 z-10 relative transition-all ${isActive ? 'opacity-100 scale-105' : isReached ? 'opacity-80' : 'opacity-40'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${(isActive || isCompleted) ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-gray-100 text-gray-400'} ${isActive ? 'ring-4 ring-blue-50' : ''}`}>
-                  {isCompleted ? <FiCheck className="w-4 h-4" /> : <step.icon />}
+                <div 
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${(isActive || isCompleted) ? 'text-white shadow-xs' : 'bg-gray-100 text-gray-400'} ${isActive ? 'ring-2 ring-[#720C3E]/20' : ''}`}
+                  style={(isActive || isCompleted) ? { background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' } : {}}
+                >
+                  {isCompleted ? <FiCheck className="w-3.5 h-3.5" /> : <step.icon className="w-3.5 h-3.5" />}
                 </div>
-                <span className={`text-[10px] font-bold ${isReached ? 'text-gray-800' : 'text-gray-400'}`}>{step.label}</span>
+                <span className={`text-[9px] font-bold ${isReached ? 'text-gray-800' : 'text-gray-400'}`}>{step.label}</span>
               </button>
             );
           })}
-          <div className="absolute top-8 left-0 right-0 h-0.5 bg-gray-200 -z-0 mx-8">
-            <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${((maxStep - 1) / 4) * 100}%` }}></div>
+          <div className="absolute top-6.5 left-0 right-0 h-0.5 bg-gray-200 -z-0 mx-8">
+            <div className="h-full transition-all duration-300" style={{ width: `${((maxStep - 1) / 4) * 100}%`, background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}></div>
           </div>
         </div>
       </div>
 
-      <div className="p-4 space-y-6 pb-48">
+      <div className="p-3.5 space-y-4 pb-48">
         {currentStep === 1 && (
           <div className="animate-in fade-in slide-in-from-right-4">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-gray-800">Added Services</h3>
-                <button onClick={() => setViewMode('select-services')} className="text-blue-600 font-bold text-xs bg-blue-50 px-3 py-1.5 rounded-lg">+ Add Services</button>
+            <div className="bg-white p-4 rounded-xl shadow-xs border border-gray-100 mb-3">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-sm text-gray-800">Added Services</h3>
+                <button 
+                  onClick={() => setViewMode('select-services')} 
+                  className="font-bold text-xs px-2.5 py-1 rounded-lg transition-all active:scale-95"
+                  style={{ color: '#720C3E', backgroundColor: '#FCEBF3' }}
+                >
+                  + Add Services
+                </button>
               </div>
-              {selectedServices.length === 0 ? <div className="text-center py-8 bg-gray-50 rounded-xl text-gray-400 text-sm">No extra services added</div> : (
-                <div className="space-y-3">
+              {selectedServices.length === 0 ? <div className="text-center py-6 bg-gray-50 rounded-lg text-gray-400 text-xs">No extra services added</div> : (
+                <div className="space-y-2.5">
                   {selectedServices.map((s, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-3 bg-blue-50/30 rounded-xl border border-blue-100">
+                    <div key={idx} className="flex justify-between items-center p-2.5 bg-gray-50/70 rounded-lg border border-gray-100">
                       <div>
-                        <p className="font-bold text-sm text-gray-800">{s.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <button onClick={() => updateServiceQty(idx, -1)} className="w-6 h-6 flex items-center justify-center bg-white border border-blue-200 rounded text-blue-600 font-bold">-</button>
+                        <p className="font-bold text-xs text-gray-800">{s.name}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <button onClick={() => updateServiceQty(idx, -1)} className="w-5 h-5 flex items-center justify-center bg-white border border-gray-200 rounded text-gray-700 font-bold text-xs">-</button>
                           <span className="text-xs font-bold w-4 text-center">{s.quantity}</span>
-                          <button onClick={() => updateServiceQty(idx, 1)} className="w-6 h-6 flex items-center justify-center bg-white border border-blue-200 rounded text-blue-600 font-bold">+</button>
+                          <button onClick={() => updateServiceQty(idx, 1)} className="w-5 h-5 flex items-center justify-center bg-white border border-gray-200 rounded text-gray-700 font-bold text-xs">+</button>
                         </div>
                       </div>
-                      <p className="font-bold text-gray-800">₹{s.total.toFixed(2)}</p>
+                      <p className="font-bold text-xs text-gray-800">₹{s.total.toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
@@ -824,26 +874,31 @@ const BillingPage = () => {
 
         {currentStep === 2 && (
           <div className="animate-in fade-in slide-in-from-right-4">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-gray-800">Added Parts</h3>
-                <button onClick={() => setViewMode('select-parts')} className="text-orange-600 font-bold text-xs bg-orange-50 px-3 py-1.5 rounded-lg">+ Add Parts</button>
+            <div className="bg-white p-4 rounded-xl shadow-xs border border-gray-100 mb-3">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-sm text-gray-800">Added Parts</h3>
+                <button 
+                  onClick={() => setViewMode('select-parts')} 
+                  className="font-bold text-xs px-2.5 py-1 rounded-lg transition-all active:scale-95 text-orange-600 bg-orange-50"
+                >
+                  + Add Parts
+                </button>
               </div>
-              {selectedParts.length === 0 ? <div className="text-center py-8 bg-gray-50 rounded-xl text-gray-400 text-sm">No parts added</div> : (
-                <div className="space-y-3">
+              {selectedParts.length === 0 ? <div className="text-center py-6 bg-gray-50 rounded-lg text-gray-400 text-xs">No parts added</div> : (
+                <div className="space-y-2.5">
                   {selectedParts.map((p, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-3 bg-orange-50/30 rounded-xl border border-orange-100">
+                    <div key={idx} className="flex justify-between items-center p-2.5 bg-orange-50/30 rounded-lg border border-orange-100">
                       <div>
-                        <p className="font-bold text-sm text-gray-800">{p.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <button onClick={() => updatePartQty(idx, -1)} className="w-6 h-6 flex items-center justify-center bg-white border border-orange-200 rounded text-orange-600 font-bold">-</button>
+                        <p className="font-bold text-xs text-gray-800">{p.name}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <button onClick={() => updatePartQty(idx, -1)} className="w-5 h-5 flex items-center justify-center bg-white border border-orange-200 rounded text-orange-600 font-bold text-xs">-</button>
                           <span className="text-xs font-bold w-4 text-center">{p.quantity}</span>
-                          <button onClick={() => updatePartQty(idx, 1)} className="w-6 h-6 flex items-center justify-center bg-white border border-orange-200 rounded text-orange-600 font-bold">+</button>
+                          <button onClick={() => updatePartQty(idx, 1)} className="w-5 h-5 flex items-center justify-center bg-white border border-orange-200 rounded text-orange-600 font-bold text-xs">+</button>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-gray-800">₹{p.total.toFixed(2)}</p>
-                        <p className="text-[10px] text-gray-400">+ GST</p>
+                        <p className="font-bold text-xs text-gray-800">₹{p.total.toFixed(2)}</p>
+                        <p className="text-[9px] text-gray-400">+ GST</p>
                       </div>
                     </div>
                   ))}
@@ -855,13 +910,17 @@ const BillingPage = () => {
 
         {currentStep === 3 && (
           <div className="animate-in fade-in slide-in-from-right-4">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-4">
               <div>
-                <h3 className="font-bold text-lg text-gray-800">Add Extra Items</h3>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Parts & Materials</p>
+                <h3 className="font-bold text-sm text-gray-800">Add Extra Items</h3>
+                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Parts & Materials</p>
               </div>
-              <button onClick={addCustomItem} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-sm flex items-center gap-1.5 hover:bg-blue-700 active:scale-95 transition-all">
-                <FiPlus className="w-4 h-4" /> Add Row
+              <button 
+                onClick={addCustomItem} 
+                className="text-white px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-xs flex items-center gap-1 active:scale-95 transition-all"
+                style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+              >
+                <FiPlus className="w-3.5 h-3.5" /> Add Row
               </button>
             </div>
 
@@ -1160,33 +1219,49 @@ const BillingPage = () => {
       </div>
 
       {/* Fixed Bottom Navigation for Timeline View */}
-      <div className="fixed bottom-[72px] left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-50 flex gap-3">
+      <div className="fixed bottom-[72px] left-0 right-0 p-2.5 bg-white/90 backdrop-blur-md border-t border-gray-100 shadow-[0_-4px_16px_rgba(0,0,0,0.04)] z-50 flex gap-2">
         {currentStep === 1 && (
-          <button onClick={() => setCurrentStep(2)} className="w-full py-3.5 bg-gray-900 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg">
-            Next: Parts <FiArrowRight />
+          <button 
+            onClick={() => setCurrentStep(2)} 
+            className="w-full py-2.5 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs"
+            style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+          >
+            Next: Parts <FiArrowRight className="w-4 h-4" />
           </button>
         )}
         {currentStep === 2 && (
           <>
-            <button onClick={() => setCurrentStep(1)} className="flex-1 py-3 text-gray-600 font-bold bg-white border border-gray-200 rounded-xl">Back</button>
-            <button onClick={() => setCurrentStep(3)} className="flex-[2] py-3.5 bg-gray-900 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg">
-              Next: Extras <FiArrowRight />
+            <button onClick={() => setCurrentStep(1)} className="flex-1 py-2.5 text-gray-700 font-bold bg-white border border-gray-200 rounded-xl text-xs active:scale-95 transition-all">Back</button>
+            <button 
+              onClick={() => setCurrentStep(3)} 
+              className="flex-[2] py-2.5 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs"
+              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+            >
+              Next: Extras <FiArrowRight className="w-4 h-4" />
             </button>
           </>
         )}
         {currentStep === 3 && (
           <>
-            <button onClick={() => setCurrentStep(2)} className="flex-1 py-3 text-gray-600 font-bold bg-white border border-gray-200 rounded-xl">Back</button>
-            <button onClick={() => setCurrentStep(4)} className="flex-[2] py-3.5 bg-gray-900 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg">
-              Next: Transport <FiArrowRight />
+            <button onClick={() => setCurrentStep(2)} className="flex-1 py-2.5 text-gray-700 font-bold bg-white border border-gray-200 rounded-xl text-xs active:scale-95 transition-all">Back</button>
+            <button 
+              onClick={() => setCurrentStep(4)} 
+              className="flex-[2] py-2.5 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs"
+              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+            >
+              Next: Transport <FiArrowRight className="w-4 h-4" />
             </button>
           </>
         )}
         {currentStep === 4 && (
           <>
-            <button onClick={() => setCurrentStep(3)} className="flex-1 py-3 text-gray-600 font-bold bg-white border border-gray-200 rounded-xl">Back</button>
-            <button onClick={() => setCurrentStep(5)} className="flex-[2] py-3.5 bg-gray-900 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg">
-              Next: Final Review <FiArrowRight />
+            <button onClick={() => setCurrentStep(3)} className="flex-1 py-2.5 text-gray-700 font-bold bg-white border border-gray-200 rounded-xl text-xs active:scale-95 transition-all">Back</button>
+            <button 
+              onClick={() => setCurrentStep(5)} 
+              className="flex-[2] py-2.5 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all text-xs"
+              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+            >
+              Next: Final Review <FiArrowRight className="w-4 h-4" />
             </button>
           </>
         )}
@@ -1195,44 +1270,56 @@ const BillingPage = () => {
             <button
               onClick={() => setCurrentStep(4)}
               disabled={submitting || otpLoading}
-              className="flex-1 py-3 text-gray-600 font-bold bg-white border border-gray-200 rounded-xl disabled:opacity-50"
+              className="flex-1 py-2.5 text-gray-700 font-bold bg-white border border-gray-200 rounded-xl text-xs disabled:opacity-50 active:scale-95 transition-all"
             >
               Back
             </button>
 
             {/* Payment Options Grid for Step 5 */}
-            <div className="flex-[2] grid grid-cols-2 gap-2">
-              {/* Cash/OTP Option - Show if either cash mode or QR generated OTP */}
-              {(isOtpSent && paymentMode === 'cash') ? (
-                <button
-                  onClick={() => setShowOtpModal(true)}
-                  disabled={otpLoading || qrLoading}
-                  className="py-3 bg-gray-900 text-white font-bold rounded-xl shadow-lg flex flex-col items-center justify-center gap-1 active:scale-95 transition-all text-[10px]"
-                >
-                  <FiKey className="w-4 h-4" />
-                  <span>Enter OTP</span>
-                </button>
-              ) : (
-                <button
-                  onClick={handleSendOTP}
-                  disabled={otpLoading || qrLoading}
-                  className="py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg flex flex-col items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-50 text-[10px]"
-                >
-                  <FiDollarSign className="w-4 h-4" />
-                  <span>Pay in Cash</span>
-                </button>
-              )}
-
-              {/* Online Option */}
+            {isPrepaid ? (
               <button
-                onClick={handleOnlinePayment}
-                disabled={otpLoading || qrLoading}
-                className="py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg flex flex-col items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-50 text-[10px]"
+                onClick={handleCompleteBooking}
+                disabled={otpLoading}
+                className="flex-[2] py-2.5 bg-emerald-600 text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 active:scale-95 transition-all text-xs"
               >
-                <MdQrCode className="w-4 h-4" />
-                <span>{qrLoading ? '...' : 'Online (QR)'}</span>
+                <FiCheckCircle className="w-3.5 h-3.5" />
+                <span>{otpLoading ? 'Completing...' : 'Complete Booking'}</span>
               </button>
-            </div>
+            ) : (
+              <div className="flex-[2] grid grid-cols-2 gap-1.5">
+                {/* Cash/OTP Option */}
+                {(isOtpSent && paymentMode === 'cash') ? (
+                  <button
+                    onClick={() => setShowOtpModal(true)}
+                    disabled={otpLoading || qrLoading}
+                    className="py-2 text-white font-bold rounded-xl shadow-xs flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all text-[10px]"
+                    style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+                  >
+                    <FiKey className="w-3.5 h-3.5" />
+                    <span>Enter OTP</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSendOTP}
+                    disabled={otpLoading || qrLoading}
+                    className="py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-xs flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all disabled:opacity-50 text-[10px]"
+                  >
+                    <FiDollarSign className="w-3.5 h-3.5" />
+                    <span>Pay in Cash</span>
+                  </button>
+                )}
+
+                {/* Online Option */}
+                <button
+                  onClick={handleOnlinePayment}
+                  disabled={otpLoading || qrLoading}
+                  className="py-2 bg-blue-600 text-white font-bold rounded-xl shadow-xs flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all disabled:opacity-50 text-[10px]"
+                >
+                  <MdQrCode className="w-3.5 h-3.5" />
+                  <span>{qrLoading ? '...' : 'Online (QR)'}</span>
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

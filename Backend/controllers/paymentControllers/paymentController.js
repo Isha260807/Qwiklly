@@ -43,6 +43,14 @@ const createPaymentOrder = async (req, res) => {
       });
     }
 
+    // Payment is only collected after a vendor has accepted the booking
+    if (!booking.vendorId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please wait for a vendor to accept your booking before paying.'
+      });
+    }
+
     // Create Razorpay order
     console.log('Creating Razorpay order with amount:', booking.finalAmount);
     const orderResult = await createOrder(
@@ -131,7 +139,10 @@ const verifyPaymentWebhook = async (req, res) => {
 
     // Update booking status based on current state
     if ([BOOKING_STATUS.PENDING, BOOKING_STATUS.SEARCHING, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
-      booking.status = BOOKING_STATUS.CONFIRMED;
+      booking.status = !booking.vendorId ? BOOKING_STATUS.SEARCHING : BOOKING_STATUS.CONFIRMED;
+      if (!booking.vendorId) {
+        booking.waveStartedAt = new Date();
+      }
     } else if (booking.status === BOOKING_STATUS.WORK_DONE) {
       booking.status = BOOKING_STATUS.COMPLETED;
       booking.completedAt = new Date();
@@ -174,6 +185,17 @@ const verifyPaymentWebhook = async (req, res) => {
       description: `Online payment for booking ${booking.bookingNumber}`,
       referenceId: razorpay_payment_id
     });
+
+    // If booking does not have a vendor assigned yet (Upfront pre-paid booking), dispatch to nearby vendors now!
+    if (!booking.vendorId) {
+      const { dispatchBookingToVendors } = require('../bookingControllers/userBookingController');
+      if (typeof dispatchBookingToVendors === 'function') {
+        setImmediate(() => {
+          console.log(`[verifyPaymentWebhook] Payment successful for booking ${booking.bookingNumber}. Alerting nearby vendors now!`);
+          dispatchBookingToVendors(booking._id);
+        });
+      }
+    }
 
     // Fetch VendorBill for earnings (only if bill exists = post-completion payment)
     const bill = await VendorBill.findOne({ bookingId: booking._id });
@@ -614,61 +636,6 @@ const getPaymentHistory = async (req, res) => {
   }
 };
 
-/**
- * Confirm Pay at Home option
- */
-const confirmPayAtHome = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { bookingId } = req.body;
-
-    const booking = await Booking.findOne({ _id: bookingId, userId });
-
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found'
-      });
-    }
-
-    if (booking.paymentStatus === PAYMENT_STATUS.SUCCESS) {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment already completed for this booking'
-      });
-    }
-
-    // Update booking status — NO earnings set (VendorBill handles that later)
-    booking.paymentMethod = 'pay_at_home';
-    booking.paymentStatus = PAYMENT_STATUS.PENDING;
-    booking.status = BOOKING_STATUS.CONFIRMED;
-
-    await booking.save();
-
-    // Notify Vendor that booking is confirmed
-    await createNotification({
-      vendorId: booking.vendorId,
-      type: 'booking_confirmed',
-      title: 'Booking Confirmed (Pay at Home)',
-      message: `Booking ${booking.bookingNumber} has been confirmed. Payment method: Pay at Home.`,
-      relatedId: booking._id,
-      relatedType: 'booking'
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Booking confirmed with Pay at Home option',
-      data: booking
-    });
-  } catch (error) {
-    console.error('Confirm Pay at Home error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to confirm booking. Please try again.'
-    });
-  }
-};
-
 const calculateUpgradeAmount = (currentPlan, newPlanPrice) => {
   if (!currentPlan || !currentPlan.isActive) return { amount: newPlanPrice, credit: 0 };
 
@@ -795,7 +762,6 @@ module.exports = {
   processWalletPayment,
   processRefund,
   getPaymentHistory,
-  confirmPayAtHome,
   createPlanOrder,
   verifyPlanPayment,
   getUpgradeDetails
