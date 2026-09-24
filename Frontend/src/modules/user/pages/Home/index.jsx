@@ -802,12 +802,12 @@ const Home = () => {
                           }
                         }
                       }}
-                      className="cursor-pointer overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all mb-4 aspect-[16/6] bg-gray-100"
+                      className="cursor-pointer overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all mb-4 h-[130px] sm:h-[160px] md:h-[190px] lg:h-[220px] w-full bg-gray-100"
                     >
                       <img
                         src={toAssetUrl(fb.imageUrl)}
                         alt={fb.title || 'Special Promotion'}
-                        className="w-full h-full object-cover rounded-2xl"
+                        className="w-full h-full object-cover object-center rounded-2xl"
                         loading="lazy"
                       />
                     </div>

@@ -95,16 +95,16 @@ const TopHeroBanner = memo(({
   return (
     <div
       ref={containerRef}
-      className="relative px-2.5 sm:px-4 mb-4 select-none group w-full"
+      className="relative px-2.5 sm:px-4 md:px-6 mb-3 sm:mb-4 select-none group w-full"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Banner Carousel Card */}
       <div
         onClick={() => handleClick(currentBanner)}
-        className="relative overflow-hidden rounded-2xl md:rounded-3xl cursor-pointer shadow-md hover:shadow-xl transition-all duration-300 bg-slate-100 aspect-[16/8] sm:aspect-[16/7] md:aspect-[21/8] border border-black/5"
+        className="relative overflow-hidden rounded-2xl md:rounded-3xl cursor-pointer shadow-md hover:shadow-xl transition-all duration-300 bg-slate-100 h-[150px] sm:h-[190px] md:h-[230px] lg:h-[260px] xl:h-[280px] w-full border border-black/5"
         style={{
-          boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.06)'
+          boxShadow: '0 6px 20px -4px rgba(0, 0, 0, 0.1), 0 3px 6px -2px rgba(0, 0, 0, 0.05)'
         }}
       >
         <AnimatePresence mode="wait">
@@ -120,7 +120,7 @@ const TopHeroBanner = memo(({
             <img
               src={optimizeCloudinaryUrl(toAssetUrl(currentBanner.imageUrl), { quality: 'auto:best', dpr: '2.0' })}
               alt={currentBanner.title || 'Special Offer'}
-              className="w-full h-full object-cover rounded-2xl md:rounded-3xl"
+              className="w-full h-full object-cover object-center rounded-2xl md:rounded-3xl"
               style={{
                 imageRendering: '-webkit-optimize-contrast',
                 transform: 'translateZ(0)',
@@ -136,7 +136,7 @@ const TopHeroBanner = memo(({
             {/* Optional Badge Overlay */}
             {currentBanner.badgeText && (
               <div
-                className="absolute top-2.5 sm:top-3 left-2.5 sm:left-3 text-white text-[10px] sm:text-xs font-black px-3 py-1 rounded-full shadow-lg uppercase tracking-wider border border-white/30 backdrop-blur-md"
+                className="absolute top-2.5 sm:top-3 md:top-4 left-2.5 sm:left-3 md:left-4 text-white text-[10px] sm:text-xs font-black px-2.5 sm:px-3 py-1 rounded-full shadow-lg uppercase tracking-wider border border-white/30 backdrop-blur-md"
                 style={{
                   background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)',
                   boxShadow: '0 4px 14px rgba(114, 12, 62, 0.4)'
@@ -147,7 +147,7 @@ const TopHeroBanner = memo(({
             )}
 
             {/* Subtle Gradient & Hover Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent opacity-0 group-hover:opacity-40 transition-opacity duration-300" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent opacity-0 group-hover:opacity-30 transition-opacity duration-300" />
           </motion.div>
         </AnimatePresence>
 
@@ -156,17 +156,17 @@ const TopHeroBanner = memo(({
           <>
             <button
               onClick={handlePrev}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 md:w-9 md:h-9 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-200 z-10 cursor-pointer"
               aria-label="Previous banner"
             >
-              <FiChevronLeft className="text-base" />
+              <FiChevronLeft className="text-base md:text-lg" />
             </button>
             <button
               onClick={handleNext}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 md:w-9 md:h-9 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-200 z-10 cursor-pointer"
               aria-label="Next banner"
             >
-              <FiChevronRight className="text-base" />
+              <FiChevronRight className="text-base md:text-lg" />
             </button>
           </>
         )}
@@ -174,7 +174,7 @@ const TopHeroBanner = memo(({
 
       {/* Pagination Indicator Dots */}
       {displayBanners.length > 1 && (
-        <div className="flex justify-center items-center gap-1.5 mt-2.5">
+        <div className="flex justify-center items-center gap-1.5 mt-2">
           {displayBanners.map((_, dotIdx) => (
             <button
               key={dotIdx}
