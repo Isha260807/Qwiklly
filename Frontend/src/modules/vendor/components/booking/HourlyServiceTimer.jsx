@@ -17,7 +17,7 @@ const formatMinutes = (mins) => {
  * this component only re-derives elapsed = now - serviceStartedAt for display,
  * and periodically resyncs with the backend via getHourlyServiceStatus.
  */
-export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded, onStarted }) {
+export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded, onStarted, displayOnly = false, actionOnly = false }) {
   const [tracking, setTracking] = useState(hourlyTracking);
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [starting, setStarting] = useState(false);
@@ -99,14 +99,96 @@ export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded,
 
   if (!tracking?.isHourly) return null;
 
-  // Not started yet
+  // DISPLAY-ONLY MODE (Timer Banner)
+  if (displayOnly) {
+    if (tracking.phase === 'EXTRA_TIME') {
+      return (
+        <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-2.5">
+          <div className="flex items-center gap-1.5 text-amber-700 font-bold text-xs mb-0.5">
+            <FiAlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span>Extra Time Detected</span>
+          </div>
+          <div className="text-[10px] text-amber-800 space-y-0.5">
+            <div>Booked: {formatMinutes(tracking.bookedMinutes)} · Actual: {formatMinutes(tracking.actualDurationMinutes)}</div>
+            <div>Extra: {formatMinutes(tracking.extraDurationMinutes)} · Amount: ₹{tracking.extraAmount}</div>
+            <div className="italic text-[9px]">Waiting for customer payment before Work Done unlocks.</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (tracking.phase === 'SERVICE_STARTED' || tracking.phase === 'BOOKED_TIME_COMPLETED') {
+      return (
+        <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[11px] font-bold text-slate-700 truncate">Active Service Timer</span>
+          </div>
+          <div className="flex items-center gap-1 text-xs font-bold text-slate-900 shrink-0">
+            <FiClock className={`w-3.5 h-3.5 ${tracking.phase === 'BOOKED_TIME_COMPLETED' ? 'text-amber-600' : 'text-slate-500'}`} />
+            <span>{formatMinutes(elapsedMinutes)}</span>
+            <span className="text-slate-400 font-normal text-[11px]">/ {formatMinutes(tracking.bookedMinutes)}</span>
+            {tracking.phase === 'BOOKED_TIME_COMPLETED' && (
+              <span className="text-[10px] text-amber-700 bg-amber-100 px-1 py-0.5 rounded font-bold ml-0.5">Extra</span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  }
+
+  // ACTION-ONLY MODE (Single action button alongside Timeline)
+  if (actionOnly) {
+    if (tracking.phase === 'NOT_STARTED') {
+      return (
+        <button
+          type="button"
+          onClick={handleStart}
+          disabled={starting}
+          className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs disabled:opacity-60 whitespace-nowrap"
+          style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)' }}
+        >
+          <FiPlay className="w-3.5 h-3.5 shrink-0" />
+          <span>{starting ? 'Starting...' : 'Start Service'}</span>
+        </button>
+      );
+    }
+
+    if (tracking.phase === 'EXTRA_TIME') {
+      return (
+        <div className="flex-1 py-2 px-2.5 rounded-xl font-bold text-[11px] text-amber-700 bg-amber-50 border border-amber-200 flex items-center justify-center text-center">
+          <span>Extra Time Pending</span>
+        </div>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={handleEnd}
+        disabled={ending}
+        className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs disabled:opacity-60 whitespace-nowrap"
+        style={{ background: 'linear-gradient(135deg, #EF4444, #DC2626)' }}
+      >
+        <FiSquare className="w-3.5 h-3.5 shrink-0" />
+        <span>{ending ? 'Ending...' : 'End Service'}</span>
+      </button>
+    );
+  }
+
+  // DEFAULT INTEGRATED MODE (Timer Banner + Action Button stacked)
   if (tracking.phase === 'NOT_STARTED') {
     return (
       <button
         type="button"
         onClick={handleStart}
         disabled={starting}
-        className="flex-1 py-2 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs disabled:opacity-60 whitespace-nowrap"
+        className="w-full py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs disabled:opacity-60"
         style={{ background: 'linear-gradient(135deg, #F59E0B, #D97706)' }}
       >
         <FiPlay className="w-3.5 h-3.5 shrink-0" />
@@ -115,10 +197,9 @@ export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded,
     );
   }
 
-  // Extra time detected after END — waiting for customer payment
   if (tracking.phase === 'EXTRA_TIME') {
     return (
-      <div className="flex-1 rounded-xl border border-amber-200 bg-amber-50 p-2.5">
+      <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-2.5">
         <div className="flex items-center gap-1.5 text-amber-700 font-bold text-xs mb-0.5">
           <FiAlertTriangle className="w-3.5 h-3.5 shrink-0" />
           <span>Extra Time Detected</span>
@@ -132,16 +213,22 @@ export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded,
     );
   }
 
-  // Running (SERVICE_STARTED or BOOKED_TIME_COMPLETED)
   return (
-    <div className="flex-1 min-w-0 flex items-center gap-1.5">
-      <div className="flex-1 min-w-0 rounded-xl bg-gray-50 border border-gray-200 px-2 py-1.5 flex items-center justify-center gap-1">
-        <FiClock className={`w-3 h-3 shrink-0 ${tracking.phase === 'BOOKED_TIME_COMPLETED' ? 'text-amber-600' : 'text-gray-500'}`} />
-        <div className="text-[11px] leading-tight text-slate-700 whitespace-nowrap">
-          <span className="font-bold text-slate-900">{formatMinutes(elapsedMinutes)}</span>
-          <span className="text-gray-400">/{formatMinutes(tracking.bookedMinutes)}</span>
+    <div className="w-full space-y-2">
+      <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-between shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="text-[11px] font-bold text-slate-700">Active Service Timer</span>
+        </div>
+        <div className="flex items-center gap-1 text-xs font-bold text-slate-900">
+          <FiClock className={`w-3.5 h-3.5 ${tracking.phase === 'BOOKED_TIME_COMPLETED' ? 'text-amber-600' : 'text-slate-500'}`} />
+          <span>{formatMinutes(elapsedMinutes)}</span>
+          <span className="text-slate-400 font-normal text-[11px]">/ {formatMinutes(tracking.bookedMinutes)}</span>
           {tracking.phase === 'BOOKED_TIME_COMPLETED' && (
-            <span className="ml-1 text-amber-600 font-semibold text-[10px]">(+extra)</span>
+            <span className="text-[10px] text-amber-700 bg-amber-100 px-1 py-0.5 rounded font-bold ml-0.5">Extra</span>
           )}
         </div>
       </div>
@@ -149,10 +236,10 @@ export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded,
         type="button"
         onClick={handleEnd}
         disabled={ending}
-        className="py-1.5 px-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs disabled:opacity-60 shrink-0 whitespace-nowrap"
+        className="w-full py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs disabled:opacity-60"
         style={{ background: 'linear-gradient(135deg, #EF4444, #DC2626)' }}
       >
-        <FiSquare className="w-3 h-3 shrink-0" />
+        <FiSquare className="w-3.5 h-3.5 shrink-0" />
         <span>{ending ? 'Ending...' : 'End Service'}</span>
       </button>
     </div>

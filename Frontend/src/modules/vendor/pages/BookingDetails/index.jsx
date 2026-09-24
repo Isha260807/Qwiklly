@@ -1356,83 +1356,98 @@ export default function BookingDetails() {
           </div>
         )}
 
-        {/* Compact Action Buttons */}
-        <div className="flex items-center gap-2 mt-3">
-          <button
-            type="button"
-            onClick={handleViewTimeline}
-            className="shrink-0 px-3 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs border border-[#720C3E]/20 whitespace-nowrap"
-            style={{
-              background: '#FCEBF3',
-              color: '#720C3E',
-            }}
-          >
-            <span>Timeline</span>
-            <FiArrowRight className="w-3.5 h-3.5" />
-          </button>
-
-          {(booking.status === 'confirmed' || booking.status === 'assigned') && (() => {
-            const isSelfJob = booking.assignedTo?.name === 'You (Self)';
-            const isPaymentComplete = booking.paymentStatus === 'success' || booking.paymentStatus === 'plan_covered';
-            const journeyDisabled = isSelfJob && !isPaymentComplete;
-            return (
-              <button
-                type="button"
-                onClick={handleStartJourney}
-                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs whitespace-nowrap ${journeyDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                style={{
-                  background: journeyDisabled ? '#9CA3AF' : 'linear-gradient(135deg, #10B981, #059669)',
-                }}
-              >
-                <FiNavigation className="w-3.5 h-3.5 shrink-0" />
-                <span>{journeyDisabled ? 'Payment Pending' : 'Start Journey'}</span>
-              </button>
-            );
-          })()}
-
-          {booking.status === 'journey_started' && (
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  setIsVisitModalOpen(true);
-                  await vendorReached(id);
-                } catch (err) {
-                  console.error('Failed to notify reached:', err);
-                }
-              }}
-              className="flex-1 py-2 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs whitespace-nowrap"
-              style={{
-                background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
-              }}
-            >
-              <FiMapPin className="w-3.5 h-3.5 shrink-0" />
-              <span>Arrived</span>
-            </button>
-          )}
-
-          {(booking.status === 'visited' || booking.status === 'in_progress') && (
-            booking.hourlyTracking?.isHourly && !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed) ? (
+        {/* Action Buttons Area */}
+        <div className="space-y-2.5 mt-3">
+          {/* Running Timer Bar for Hourly Services */}
+          {(booking.status === 'visited' || booking.status === 'in_progress') &&
+            booking.hourlyTracking?.isHourly && (
               <HourlyServiceTimer
                 bookingId={id}
                 hourlyTracking={booking.hourlyTracking}
                 onStarted={loadBooking}
                 onEnded={loadBooking}
+                displayOnly
               />
-            ) : (
+            )}
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleViewTimeline}
+              className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs border border-[#720C3E]/20"
+              style={{
+                background: '#FCEBF3',
+                color: '#720C3E',
+              }}
+            >
+              <span>Timeline</span>
+              <FiArrowRight className="w-3.5 h-3.5" />
+            </button>
+
+            {(booking.status === 'confirmed' || booking.status === 'assigned') && (() => {
+              const isSelfJob = booking.assignedTo?.name === 'You (Self)';
+              const isPaymentComplete = booking.paymentStatus === 'success' || booking.paymentStatus === 'plan_covered';
+              const journeyDisabled = isSelfJob && !isPaymentComplete;
+              return (
+                <button
+                  type="button"
+                  onClick={handleStartJourney}
+                  className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs ${journeyDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  style={{
+                    background: journeyDisabled ? '#9CA3AF' : 'linear-gradient(135deg, #10B981, #059669)',
+                  }}
+                >
+                  <FiNavigation className="w-3.5 h-3.5 shrink-0" />
+                  <span>{journeyDisabled ? 'Payment Pending' : 'Start Journey'}</span>
+                </button>
+              );
+            })()}
+
+            {booking.status === 'journey_started' && (
               <button
                 type="button"
-                onClick={() => setIsWorkDoneModalOpen(true)}
-                className="flex-1 py-2 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs whitespace-nowrap"
+                onClick={async () => {
+                  try {
+                    setIsVisitModalOpen(true);
+                    await vendorReached(id);
+                  } catch (err) {
+                    console.error('Failed to notify reached:', err);
+                  }
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
                 style={{
-                  background: 'linear-gradient(135deg, #10B981, #059669)',
+                  background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
                 }}
               >
-                <FiCheckCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>Work Done</span>
+                <FiMapPin className="w-3.5 h-3.5 shrink-0" />
+                <span>Arrived</span>
               </button>
-            )
-          )}
+            )}
+
+            {(booking.status === 'visited' || booking.status === 'in_progress') && (
+              booking.hourlyTracking?.isHourly && !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed) ? (
+                <HourlyServiceTimer
+                  bookingId={id}
+                  hourlyTracking={booking.hourlyTracking}
+                  onStarted={loadBooking}
+                  onEnded={loadBooking}
+                  actionOnly
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsWorkDoneModalOpen(true)}
+                  className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
+                  style={{
+                    background: 'linear-gradient(135deg, #10B981, #059669)',
+                  }}
+                >
+                  <FiCheckCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Work Done</span>
+                </button>
+              )
+            )}
+          </div>
         </div>
       </main>
 
