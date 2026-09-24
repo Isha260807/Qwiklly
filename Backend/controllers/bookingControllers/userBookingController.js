@@ -171,6 +171,14 @@ const createBooking = async (req, res) => {
       });
     }
 
+    if (pricing.hourlyValidationError) {
+      return res.status(400).json({
+        success: false,
+        code: pricing.hourlyValidationError.code || 'INVALID_HOURS',
+        message: pricing.hourlyValidationError.error || 'Invalid hours selected'
+      });
+    }
+
     let basePrice = pricing.basePrice;
     let discount = pricing.planDiscount;
     let couponDiscount = pricing.couponDiscount;

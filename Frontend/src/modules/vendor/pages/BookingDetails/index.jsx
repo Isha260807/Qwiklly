@@ -763,7 +763,7 @@ export default function BookingDetails() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#FCEBF3] text-[#720C3E]">
-                        ×{item.quantity}
+                        {item.card?.hours ? `${item.card.hours} ${item.card.hours === 1 ? 'Hour' : 'Hours'}` : `×${item.quantity}`}
                       </span>
                       <span className="text-xs font-semibold text-gray-900 truncate">{item.card?.title || 'Service Item'}</span>
                     </div>

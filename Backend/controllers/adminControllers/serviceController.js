@@ -100,6 +100,13 @@ const createService = async (req, res) => {
       basePrice,
       originalPrice,
       discountPrice,
+      pricingType,
+      hourlyRate,
+      minHours,
+      maxHours,
+      allowCustomHours,
+      allowExtraHours,
+      allowExtraParts,
       gstPercentage,
       rating,
       ratingCount,
@@ -128,6 +135,23 @@ const createService = async (req, res) => {
       if (brand) validBrandId = brand._id;
     }
 
+    // Validate hourly pricing configuration
+    const resolvedPricingType = pricingType === 'HOURLY' ? 'HOURLY' : 'FIXED';
+    if (resolvedPricingType === 'HOURLY') {
+      if (!hourlyRate || Number(hourlyRate) <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Hourly rate is required for hourly services'
+        });
+      }
+      if (minHours !== undefined && maxHours !== undefined && Number(minHours) > Number(maxHours)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Minimum hours cannot be greater than maximum hours'
+        });
+      }
+    }
+
     const service = await Service.create({
       brandId: validBrandId,
       categoryId: categoryId || null,
@@ -135,6 +159,13 @@ const createService = async (req, res) => {
       basePrice: Number(basePrice),
       originalPrice: originalPrice ? Number(originalPrice) : 0,
       discountPrice: discountPrice ? Number(discountPrice) : null,
+      pricingType: resolvedPricingType,
+      hourlyRate: resolvedPricingType === 'HOURLY' ? Number(hourlyRate) : null,
+      minHours: minHours !== undefined ? Number(minHours) : 1,
+      maxHours: maxHours !== undefined ? Number(maxHours) : 8,
+      allowCustomHours: !!allowCustomHours,
+      allowExtraHours: allowExtraHours !== undefined ? !!allowExtraHours : true,
+      allowExtraParts: allowExtraParts !== undefined ? !!allowExtraParts : true,
       gstPercentage: gstPercentage !== undefined ? Number(gstPercentage) : 18,
       rating: rating !== undefined ? Number(rating) : 4.9,
       ratingCount: ratingCount || '4.9 (237.6k)',
@@ -191,6 +222,37 @@ const updateService = async (req, res) => {
     if (updates.basePrice !== undefined) service.basePrice = Number(updates.basePrice);
     if (updates.originalPrice !== undefined) service.originalPrice = Number(updates.originalPrice);
     if (updates.discountPrice !== undefined) service.discountPrice = updates.discountPrice ? Number(updates.discountPrice) : null;
+
+    // Hourly pricing configuration
+    if (updates.pricingType !== undefined) {
+      const resolvedPricingType = updates.pricingType === 'HOURLY' ? 'HOURLY' : 'FIXED';
+      const effectiveHourlyRate = updates.hourlyRate !== undefined ? updates.hourlyRate : service.hourlyRate;
+      const effectiveMinHours = updates.minHours !== undefined ? updates.minHours : service.minHours;
+      const effectiveMaxHours = updates.maxHours !== undefined ? updates.maxHours : service.maxHours;
+
+      if (resolvedPricingType === 'HOURLY') {
+        if (!effectiveHourlyRate || Number(effectiveHourlyRate) <= 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Hourly rate is required for hourly services'
+          });
+        }
+        if (Number(effectiveMinHours) > Number(effectiveMaxHours)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Minimum hours cannot be greater than maximum hours'
+          });
+        }
+      }
+      service.pricingType = resolvedPricingType;
+    }
+    if (updates.hourlyRate !== undefined) service.hourlyRate = updates.hourlyRate ? Number(updates.hourlyRate) : null;
+    if (updates.minHours !== undefined) service.minHours = Number(updates.minHours);
+    if (updates.maxHours !== undefined) service.maxHours = Number(updates.maxHours);
+    if (updates.allowCustomHours !== undefined) service.allowCustomHours = !!updates.allowCustomHours;
+    if (updates.allowExtraHours !== undefined) service.allowExtraHours = !!updates.allowExtraHours;
+    if (updates.allowExtraParts !== undefined) service.allowExtraParts = !!updates.allowExtraParts;
+
     if (updates.gstPercentage !== undefined) service.gstPercentage = Number(updates.gstPercentage);
     if (updates.rating !== undefined) service.rating = Number(updates.rating);
     if (updates.ratingCount !== undefined) service.ratingCount = updates.ratingCount;

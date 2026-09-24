@@ -540,7 +540,7 @@ const BookingConfirmation = () => {
                         <div className="flex items-center gap-1.5">
                           <span className="text-[11px] font-bold px-1.5 py-0.2 rounded border"
                             style={{ color: themeColors.button, backgroundColor: 'rgba(0,166,166,0.08)', borderColor: 'rgba(0,166,166,0.2)' }}>
-                            ×{item.quantity}
+                            {item.card?.hours ? `${item.card.hours} ${item.card.hours === 1 ? 'Hour' : 'Hours'}` : `×${item.quantity}`}
                           </span>
                           <span className="text-xs font-semibold text-gray-900 truncate">{item.card?.title || 'Service'}</span>
                         </div>

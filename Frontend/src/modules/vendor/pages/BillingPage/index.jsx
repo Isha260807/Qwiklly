@@ -1052,7 +1052,10 @@ const BillingPage = () => {
                   </h4>
                   <div className="space-y-2 text-sm pl-2">
                     <div className="flex justify-between text-gray-600">
-                      <span>Original Booking : {booking.serviceName || 'Service'}</span>
+                      <span>
+                        Original Booking : {booking.serviceName || 'Service'}
+                        {booking.bookedItems?.[0]?.card?.hours ? ` (${booking.bookedItems[0].card.hours} ${booking.bookedItems[0].card.hours === 1 ? 'hr' : 'hrs'})` : ''}
+                      </span>
                       {booking.paymentMethod === 'plan_benefit' ? (
                         <span className="text-green-600 font-bold">FREE (PLAN)</span>
                       ) : (

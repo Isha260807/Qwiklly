@@ -1,46 +1,52 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HiX, HiLocationMarker, HiCheck } from 'react-icons/hi';
-import { themeColors } from '../../../../theme';
 import { useCity } from '../../../../context/CityContext';
 
 const CitySelectorModal = ({ isOpen, onClose, onCitySelected }) => {
-  const { cities, currentCity, selectCity } = useCity();
-  const [searchQuery, setSearchQuery] = React.useState('');
+  const { cities = [], currentCity, selectCity } = useCity() || {};
+  const [searchQuery, setSearchQuery] = useState('');
   const modalRef = useRef(null);
 
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleClickOutside = (event) => {
       if (modalRef.current && !modalRef.current.contains(event.target)) {
         onClose();
       }
     };
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.body.style.overflow = 'hidden';
-      setSearchQuery('');
-    }
+    document.addEventListener('mousedown', handleClickOutside);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = originalOverflow;
     };
   }, [isOpen, onClose]);
+
+  const handleClose = () => {
+    setSearchQuery('');
+    onClose();
+  };
 
   const handleCitySelect = (city) => {
     if (onCitySelected) {
       onCitySelected(city);
-    } else {
+    } else if (selectCity) {
       selectCity(city);
     }
+    setSearchQuery('');
     onClose();
   };
 
-  const filteredCities = cities.filter(
+  const safeCities = Array.isArray(cities) ? cities : [];
+  const filteredCities = safeCities.filter(
     (c) =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.state && c.state.toLowerCase().includes(searchQuery.toLowerCase()))
+      (c?.name && c.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (c?.state && c.state.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -52,6 +58,7 @@ const CitySelectorModal = ({ isOpen, onClose, onCitySelected }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            onClick={handleClose}
             className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[60]"
           />
 
@@ -74,7 +81,8 @@ const CitySelectorModal = ({ isOpen, onClose, onCitySelected }) => {
                   <p className="text-xs font-medium text-[#6F5A64] mt-0.5">Where would you like to find services?</p>
                 </div>
                 <button
-                  onClick={onClose}
+                  type="button"
+                  onClick={handleClose}
                   className="w-9 h-9 rounded-full hover:bg-white border border-[#E8D9DF] flex items-center justify-center transition-colors text-[#24151D] cursor-pointer"
                 >
                   <HiX className="w-5 h-5" />
@@ -96,11 +104,16 @@ const CitySelectorModal = ({ isOpen, onClose, onCitySelected }) => {
               <div className="overflow-y-auto p-3" style={{ maxHeight: 'calc(85vh - 160px)' }}>
                 <div className="grid gap-2">
                   {filteredCities.map((city) => {
-                    const isSelected = currentCity && (currentCity._id === city._id || currentCity.id === city.id);
+                    const isSelected =
+                      currentCity &&
+                      ((currentCity._id && currentCity._id === city._id) ||
+                        (currentCity.id && currentCity.id === city.id) ||
+                        (currentCity.name && currentCity.name === city.name));
 
                     return (
                       <button
-                        key={city._id || city.id}
+                        key={city._id || city.id || city.name}
+                        type="button"
                         onClick={() => handleCitySelect(city)}
                         className={`
                         w-full text-left p-3.5 rounded-2xl flex items-center justify-between group transition-all duration-200 cursor-pointer

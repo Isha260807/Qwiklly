@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { FiArrowLeft, FiShoppingCart, FiTrash2, FiMinus, FiPlus, FiPhone, FiHome, FiClock, FiEdit2, FiCheckCircle, FiInfo, FiCreditCard, FiShield, FiCheck } from 'react-icons/fi';
@@ -251,57 +251,70 @@ const Checkout = () => {
   };
 
   const cartCount = cartItems.length;
+  const updateTimerRef = useRef({});
 
   const handleBack = () => {
     navigate(-1);
   };
 
-  const handleQuantityChange = async (itemId, change) => {
-    try {
-      const item = cartItems.find(i => (i._id || i.id) === itemId);
-      if (!item) return;
+  // Instant 0ms Optimistic Quantity Update with debounced server sync
+  const handleQuantityChange = (itemId, change) => {
+    const item = cartItems.find(i => (i._id || i.id) === itemId);
+    if (!item) return;
 
-      const newCount = Math.max(1, (item.serviceCount || 1) + change);
-      const response = await cartService.updateItem(itemId, newCount);
+    const currentCount = item.serviceCount || 1;
+    const newCount = Math.max(1, currentCount + change);
+    if (newCount === currentCount) return;
 
-      if (response.success) {
-        // Refresh global cart badge
-        fetchCartGlobal();
+    const unitPrice = item.unitPrice || (item.price / currentCount);
+    const newPrice = unitPrice * newCount;
 
-        // Reload cart and filter by category
-        const cartResponse = await cartService.getCart();
-        if (cartResponse.success) {
-          let items = cartResponse.data || [];
-          if (category) {
-            const normalizedCategory = category.toLowerCase().trim();
-            items = items.filter(item => {
-              const itemCat = (item.category || 'Other').toLowerCase().trim();
-              return itemCat === normalizedCategory;
-            });
-          }
-          setCartItems(items);
-        }
-      } else {
-        toast.error(response.message || 'Failed to update quantity');
+    // 1. Instant Optimistic State Update (0ms)
+    setCartItems(prev => prev.map(it => {
+      if ((it._id || it.id) === itemId) {
+        return {
+          ...it,
+          serviceCount: newCount,
+          price: newPrice,
+          ...(it.hours ? { hours: newCount } : {}),
+          ...(it.card ? { ...it.card, hours: newCount, price: newPrice } : {})
+        };
       }
-    } catch (error) {
-      toast.error('Failed to update quantity');
+      return it;
+    }));
+
+    // 2. Debounced background sync to server
+    if (updateTimerRef.current[itemId]) {
+      clearTimeout(updateTimerRef.current[itemId]);
     }
+
+    updateTimerRef.current[itemId] = setTimeout(async () => {
+      try {
+        await cartService.updateItem(itemId, newCount);
+        fetchCartGlobal();
+      } catch (error) {
+        console.error('Failed to sync quantity update:', error);
+        toast.error('Failed to sync quantity');
+      }
+    }, 200);
   };
 
   const handleRemoveItem = async (itemId) => {
+    // 1. Instant Optimistic Removal (0ms)
+    setCartItems(prev => prev.filter(item => (item._id || item.id) !== itemId));
+
     try {
       const response = await cartService.removeItem(itemId);
       if (response.success) {
         toast.success('Item removed');
-        // Refresh global cart badge
         fetchCartGlobal();
-        loadCart();
       } else {
         toast.error(response.message || 'Failed to remove item');
+        loadCart(); // Revert on failure
       }
     } catch (error) {
       toast.error('Failed to remove item');
+      loadCart(); // Revert on error
     }
   };
 
@@ -342,6 +355,8 @@ const Checkout = () => {
       const bookedItemsData = cartItems.map(item => ({
         brandName: item.sectionTitle || item.brand || '',
         brandIcon: item.sectionIcon || null,
+        serviceId: (typeof item.serviceId === 'object' ? (item.serviceId?._id || item.serviceId?.id) : item.serviceId) || undefined,
+        hours: item.hours || item.card?.hours || undefined,
         card: {
           title: item.card?.title || item.title,
           subtitle: item.card?.subtitle || item.description || '',
@@ -350,7 +365,8 @@ const Checkout = () => {
           duration: item.card?.duration || item.duration || '',
           description: item.card?.description || item.description || '',
           imageUrl: item.card?.imageUrl || item.icon || '',
-          features: item.card?.features || []
+          features: item.card?.features || [],
+          hours: item.hours || item.card?.hours || undefined
         },
         quantity: item.serviceCount || 1
       }));
@@ -541,6 +557,8 @@ const Checkout = () => {
       const bookedItemsData = cartItems.map(item => ({
         brandName: item.sectionTitle || item.brand || '',
         brandIcon: item.sectionIcon || null,
+        serviceId: (typeof item.serviceId === 'object' ? (item.serviceId?._id || item.serviceId?.id) : item.serviceId) || undefined,
+        hours: item.hours || item.card?.hours || undefined,
         card: {
           title: item.card?.title || item.title || 'Unknown Service',
           subtitle: item.card?.subtitle || item.description || '',
@@ -549,7 +567,8 @@ const Checkout = () => {
           duration: item.card?.duration || item.duration || '',
           description: item.card?.description || item.description || '',
           imageUrl: item.card?.imageUrl || item.icon || '',
-          features: item.card?.features || []
+          features: item.card?.features || [],
+          hours: item.hours || item.card?.hours || undefined
         },
         quantity: item.serviceCount || 1
       }));
@@ -1598,7 +1617,11 @@ const Checkout = () => {
         formatDate={formatDate}
         isDateSelected={isDateSelected}
         isTimeSelected={isTimeSelected}
-        approxDuration={slotConfig.slotServiceDurationMins || 45}
+        approxDuration={
+          cartItems.some((i) => i.hours)
+            ? Math.max(...cartItems.map((i) => (i.hours || 0) * 60))
+            : (slotConfig.slotServiceDurationMins || 45)
+        }
       />
     </div>
   );

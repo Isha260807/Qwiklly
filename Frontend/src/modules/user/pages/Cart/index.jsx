@@ -306,10 +306,12 @@ const Cart = () => {
                                 {item.title}
                               </p>
                               <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 bg-white px-1.5 py-0.2 rounded border border-gray-200/80 shrink-0">
-                                × {item.serviceCount || 1}
+                                {item.hours ? `${item.hours} ${item.hours === 1 ? 'Hour' : 'Hours'}` : `× ${item.serviceCount || 1}`}
                               </span>
                             </div>
-                            {item.description && (
+                            {item.hours ? (
+                              <p className="text-[10px] sm:text-[11px] text-gray-400 mt-0.5 truncate">₹{(item.unitPrice || 0).toLocaleString('en-IN')}/hr × {item.hours} {item.hours === 1 ? 'hr' : 'hrs'}</p>
+                            ) : item.description && (
                               <p className="text-[10px] sm:text-[11px] text-gray-400 mt-0.5 truncate">{item.description}</p>
                             )}
                           </div>

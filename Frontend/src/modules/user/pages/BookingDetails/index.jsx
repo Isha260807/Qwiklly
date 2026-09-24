@@ -1069,7 +1069,9 @@ const BookingDetails = () => {
                     <div key={idx} className="flex justify-between items-start bg-gray-50 rounded-xl p-2.5">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">×{item.quantity}</span>
+                          <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100">
+                            {item.card?.hours ? `${item.card.hours} ${item.card.hours === 1 ? 'Hour' : 'Hours'}` : `×${item.quantity}`}
+                          </span>
                           <span className="text-xs font-semibold text-gray-900 truncate">{item.card?.title || 'Service'}</span>
                         </div>
                         {item.card?.duration && <p className="text-[10px] text-gray-400 mt-0.5 ml-6">⏱ {item.card.duration}</p>}

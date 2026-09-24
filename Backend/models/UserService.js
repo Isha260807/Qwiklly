@@ -47,6 +47,42 @@ const userServiceSchema = new mongoose.Schema({
     type: Number,
     default: null
   },
+  // ==========================================
+  // Hourly Booking Configuration
+  // ==========================================
+  pricingType: {
+    type: String,
+    enum: ['FIXED', 'HOURLY'],
+    default: 'FIXED',
+    index: true
+  },
+  hourlyRate: {
+    type: Number,
+    default: null,
+    min: [0, 'Hourly rate cannot be negative']
+  },
+  minHours: {
+    type: Number,
+    default: 1,
+    min: 1
+  },
+  maxHours: {
+    type: Number,
+    default: 8,
+    min: 1
+  },
+  allowCustomHours: {
+    type: Boolean,
+    default: false
+  },
+  allowExtraHours: {
+    type: Boolean,
+    default: true
+  },
+  allowExtraParts: {
+    type: Boolean,
+    default: true
+  },
   gstPercentage: {
     type: Number,
     default: 18,

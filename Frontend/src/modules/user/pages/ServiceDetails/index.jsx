@@ -114,6 +114,8 @@ const ServiceDetails = () => {
   const [loading, setLoading] = useState(!location.state?.service);
   const [addingToCart, setAddingToCart] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
+  const [selectedHours, setSelectedHours] = useState(location.state?.service?.minHours || 1);
+  const [customHoursMode, setCustomHoursMode] = useState(false);
 
   const howItWorksRef = useRef(null);
 
@@ -144,6 +146,9 @@ const ServiceDetails = () => {
 
         if (found) {
           setService(found);
+          if (found.pricingType === 'HOURLY') {
+            setSelectedHours(found.minHours || 1);
+          }
         } else if (!service) {
           toast.error('Service details not found');
         }
@@ -176,9 +181,22 @@ const ServiceDetails = () => {
     );
   }
 
-  const displayPrice = service.price || service.basePrice || service.discountPrice || 0;
-  const originalPrice = service.originalPrice || (service.discountPrice && service.basePrice ? service.basePrice : null);
+  const isHourly = service.pricingType === 'HOURLY';
+  const minHours = service.minHours || 1;
+  const maxHours = service.maxHours || 8;
+  const hourlyRate = Number(service.hourlyRate || 0);
+  const hourOptions = isHourly
+    ? Array.from({ length: Math.max(0, maxHours - minHours + 1) }, (_, i) => minHours + i)
+    : [];
+
+  const displayPrice = isHourly ? hourlyRate * selectedHours : (service.price || service.basePrice || service.discountPrice || 0);
+  const originalPrice = isHourly ? null : (service.originalPrice || (service.discountPrice && service.basePrice ? service.basePrice : null));
   const hasDiscount = originalPrice && Number(originalPrice) > Number(displayPrice);
+
+  const handleHoursSelect = (h) => {
+    const clamped = Math.min(maxHours, Math.max(minHours, Number(h) || minHours));
+    setSelectedHours(clamped);
+  };
 
   const inclusions = service.inclusions && service.inclusions.length > 0 ? service.inclusions : defaultInclusions;
   const whyLove = service.whyLove && service.whyLove.length > 0 ? service.whyLove : defaultWhyLove;
@@ -201,11 +219,12 @@ const ServiceDetails = () => {
         icon: service.image || service.icon || service.imageUrl || service.iconUrl || '',
         price: Number(displayPrice),
         originalPrice: originalPrice ? Number(originalPrice) : null,
-        unitPrice: Number(displayPrice),
+        unitPrice: isHourly ? hourlyRate : Number(displayPrice),
         serviceCount: 1,
         rating: service.rating || '4.9',
         reviews: service.ratingCount || '237.6k',
-        inclusions: inclusions
+        inclusions: inclusions,
+        ...(isHourly ? { hours: selectedHours } : {})
       };
 
       const response = await addToCart(cartItemData);
@@ -313,21 +332,39 @@ const ServiceDetails = () => {
       <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-4 space-y-6">
         {/* Service Title & Pricing Header */}
         <div className="space-y-1.5 pb-3 border-b border-slate-100">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight leading-snug truncate capitalize" title={service.title}>
-                {service.title}
-              </h1>
+          {service.title && (
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight leading-snug truncate capitalize" title={service.title}>
+              {service.title}
+            </h1>
+          )}
 
-              <div className="flex items-baseline gap-2 mt-0.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <div className="flex items-baseline gap-1.5">
                 <span className="text-lg sm:text-xl font-extrabold text-slate-900 leading-none">
                   ₹{displayPrice}
                 </span>
+                {isHourly && (
+                  <span className="text-xs sm:text-sm text-slate-400 font-medium leading-none">
+                    ({hourlyRate}/hr × {selectedHours} {selectedHours === 1 ? 'hr' : 'hrs'})
+                  </span>
+                )}
                 {hasDiscount && (
                   <span className="text-xs sm:text-sm text-slate-400 line-through font-medium leading-none">
                     ₹{originalPrice}
                   </span>
                 )}
+              </div>
+
+              {/* Rating in same line */}
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-[#F59E0B]">★</span>
+                <span className="font-bold text-slate-800">
+                  {service.rating || '4.9'}
+                </span>
+                <span className="text-[11px] text-slate-500 font-normal">
+                  ({service.ratingCount ? String(service.ratingCount).replace(/ratings?|\(|\)/gi, '').trim() : '237.6k'} ratings)
+                </span>
               </div>
             </div>
 
@@ -340,18 +377,61 @@ const ServiceDetails = () => {
               {addingToCart ? 'Booking...' : 'BOOK'}
             </button>
           </div>
-
-          {/* Rating */}
-          <div className="flex items-center gap-1.5 pt-0.5">
-            <span className="text-[#F59E0B] text-xs">★</span>
-            <span className="text-xs font-bold text-slate-800">
-              {service.rating || '4.9'}
-            </span>
-            <span className="text-[11px] text-slate-500 font-normal">
-              ({service.ratingCount ? String(service.ratingCount).replace(/ratings?|\(|\)/gi, '').trim() : '237.6k'} ratings)
-            </span>
-          </div>
         </div>
+
+        {/* Select Hours (HOURLY-priced services only) */}
+        {isHourly && (
+          <div className="space-y-2.5 pb-2">
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">
+              Select Hours
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {hourOptions.map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => {
+                    setCustomHoursMode(false);
+                    handleHoursSelect(h);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold border-2 transition-all cursor-pointer ${
+                    !customHoursMode && selectedHours === h
+                      ? 'bg-[#720C3E] border-[#720C3E] text-white'
+                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  {h} {h === 1 ? 'Hour' : 'Hours'}
+                </button>
+              ))}
+
+              {service.allowCustomHours && (
+                <button
+                  type="button"
+                  onClick={() => setCustomHoursMode(true)}
+                  className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold border-2 transition-all cursor-pointer ${
+                    customHoursMode
+                      ? 'bg-[#720C3E] border-[#720C3E] text-white'
+                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  Custom
+                </button>
+              )}
+            </div>
+
+            {customHoursMode && (
+              <input
+                type="number"
+                min={minHours}
+                max={maxHours}
+                value={selectedHours}
+                onChange={(e) => handleHoursSelect(e.target.value)}
+                placeholder={`Enter hours (${minHours}-${maxHours})`}
+                className="w-full sm:w-48 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+              />
+            )}
+          </div>
+        )}
 
         {/* Tagline & Description */}
         <div className="space-y-1.5 pb-2">

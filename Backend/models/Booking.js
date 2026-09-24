@@ -103,7 +103,8 @@ const bookingSchema = new mongoose.Schema({
       duration: { type: String },
       description: { type: String },
       imageUrl: { type: String },
-      features: [{ type: String }]
+      features: [{ type: String }],
+      hours: { type: Number, default: null } // Selected hours for HOURLY-priced services
     },
     quantity: { type: Number, default: 1 }
   }],

@@ -28,6 +28,13 @@ const initialServiceForm = {
   basePrice: "",
   originalPrice: "",
   discountPrice: "",
+  pricingType: "FIXED",
+  hourlyRate: "",
+  minHours: 1,
+  maxHours: 8,
+  allowCustomHours: false,
+  allowExtraHours: true,
+  allowExtraParts: true,
   gstPercentage: 18,
   rating: 4.9,
   ratingCount: "237.6k",
@@ -112,6 +119,13 @@ const ServicesPage = ({ selectedCity }) => {
       basePrice: service.basePrice ?? "",
       originalPrice: service.originalPrice ?? "",
       discountPrice: service.discountPrice ?? "",
+      pricingType: service.pricingType === "HOURLY" ? "HOURLY" : "FIXED",
+      hourlyRate: service.hourlyRate ?? "",
+      minHours: service.minHours ?? 1,
+      maxHours: service.maxHours ?? 8,
+      allowCustomHours: service.allowCustomHours ?? false,
+      allowExtraHours: service.allowExtraHours ?? true,
+      allowExtraParts: service.allowExtraParts ?? true,
       gstPercentage: service.gstPercentage ?? 18,
       rating: service.rating ?? 4.9,
       ratingCount: service.ratingCount || "237.6k",
@@ -156,6 +170,17 @@ const ServicesPage = ({ selectedCity }) => {
       return;
     }
 
+    if (formData.pricingType === "HOURLY") {
+      if (formData.hourlyRate === "" || isNaN(formData.hourlyRate) || Number(formData.hourlyRate) <= 0) {
+        toast.error("Valid hourly rate is required for hourly services");
+        return;
+      }
+      if (Number(formData.minHours) > Number(formData.maxHours)) {
+        toast.error("Minimum hours cannot be greater than maximum hours");
+        return;
+      }
+    }
+
     try {
       setSaving(true);
       const payload = {
@@ -167,6 +192,13 @@ const ServicesPage = ({ selectedCity }) => {
         basePrice: Number(formData.basePrice),
         originalPrice: formData.originalPrice ? Number(formData.originalPrice) : 0,
         discountPrice: formData.discountPrice ? Number(formData.discountPrice) : null,
+        pricingType: formData.pricingType === "HOURLY" ? "HOURLY" : "FIXED",
+        hourlyRate: formData.pricingType === "HOURLY" ? Number(formData.hourlyRate) : null,
+        minHours: Number(formData.minHours) || 1,
+        maxHours: Number(formData.maxHours) || 8,
+        allowCustomHours: !!formData.allowCustomHours,
+        allowExtraHours: !!formData.allowExtraHours,
+        allowExtraParts: !!formData.allowExtraParts,
         gstPercentage: Number(formData.gstPercentage) || 18,
         rating: Number(formData.rating) || 4.9,
         ratingCount: formData.ratingCount || "237.6k",
@@ -347,6 +379,13 @@ const ServicesPage = ({ selectedCity }) => {
                     </span>
                   )}
 
+                  {/* Hourly Badge */}
+                  {service.pricingType === "HOURLY" && (
+                    <span className="absolute bottom-2.5 left-2.5 px-2.5 py-0.5 bg-[#720C3E] text-white text-[10px] font-black uppercase tracking-wider rounded-md shadow-sm">
+                      Hourly
+                    </span>
+                  )}
+
                   {/* Rating Tag */}
                   <div className="absolute top-2.5 right-2.5 px-2 py-0.5 bg-white/95 backdrop-blur-sm rounded-lg shadow-sm flex items-center gap-1 text-[11px] font-bold text-slate-800">
                     <FiStar className="text-amber-500 fill-amber-500 text-xs" />
@@ -375,17 +414,30 @@ const ServicesPage = ({ selectedCity }) => {
                   {/* Pricing & Status Row */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                     <div>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-lg font-black text-slate-900">
-                          ₹{service.basePrice}
-                        </span>
-                        {hasDiscount && (
-                          <span className="text-xs text-slate-400 line-through font-medium">
-                            ₹{service.originalPrice}
+                      {service.pricingType === "HOURLY" ? (
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-lg font-black text-slate-900">
+                            ₹{service.hourlyRate}
                           </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-slate-400">GST: {service.gstPercentage ?? 18}%</span>
+                          <span className="text-xs text-slate-400 font-medium">/hr</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-lg font-black text-slate-900">
+                            ₹{service.basePrice}
+                          </span>
+                          {hasDiscount && (
+                            <span className="text-xs text-slate-400 line-through font-medium">
+                              ₹{service.originalPrice}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <span className="text-[10px] text-slate-400">
+                        {service.pricingType === "HOURLY"
+                          ? `${service.minHours ?? 1}–${service.maxHours ?? 8} hrs`
+                          : `GST: ${service.gstPercentage ?? 18}%`}
+                      </span>
                     </div>
 
                     {/* Status Toggle */}
@@ -514,6 +566,122 @@ const ServicesPage = ({ selectedCity }) => {
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
               />
             </div>
+          </div>
+
+          {/* Booking Type & Pricing Mode */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-2">
+                Booking Type
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, pricingType: "FIXED" })}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    formData.pricingType === "FIXED"
+                      ? "bg-[#720C3E] text-white shadow-sm"
+                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  Fixed Price
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, pricingType: "HOURLY" })}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    formData.pricingType === "HOURLY"
+                      ? "bg-[#720C3E] text-white shadow-sm"
+                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  Hourly Rate
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                {formData.pricingType === "HOURLY"
+                  ? "Users will select a number of hours; price scales with the hourly rate below."
+                  : "Uses the Base Price above as a single flat price for this service."}
+              </p>
+            </div>
+
+            {formData.pricingType === "HOURLY" && (
+              <div className="space-y-4 pt-3 border-t border-slate-200">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Hourly Rate (₹/hr) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 300"
+                      value={formData.hourlyRate}
+                      onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                      required={formData.pricingType === "HOURLY"}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Minimum Hours
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={formData.minHours}
+                      onChange={(e) => setFormData({ ...formData, minHours: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Maximum Hours
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={formData.maxHours}
+                      onChange={(e) => setFormData({ ...formData, maxHours: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.allowCustomHours}
+                      onChange={(e) => setFormData({ ...formData, allowCustomHours: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-300 text-[#720C3E] focus:ring-[#720C3E]"
+                    />
+                    Allow user to enter custom hours
+                  </label>
+
+                  <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.allowExtraHours}
+                      onChange={(e) => setFormData({ ...formData, allowExtraHours: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-300 text-[#720C3E] focus:ring-[#720C3E]"
+                    />
+                    Allow vendor to request extra hours during the job
+                  </label>
+
+                  <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.allowExtraParts}
+                      onChange={(e) => setFormData({ ...formData, allowExtraParts: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-300 text-[#720C3E] focus:ring-[#720C3E]"
+                    />
+                    Allow vendor to add extra parts to the final bill
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

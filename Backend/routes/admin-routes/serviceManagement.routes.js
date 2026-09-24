@@ -14,7 +14,14 @@ const {
 const serviceValidation = [
   body('title').notEmpty().withMessage('Title is required'),
   body('basePrice').isNumeric().withMessage('Base Price must be a number'),
-  body('gstPercentage').optional().isNumeric().withMessage('GST Percentage must be a number')
+  body('gstPercentage').optional().isNumeric().withMessage('GST Percentage must be a number'),
+  body('pricingType').optional().isIn(['FIXED', 'HOURLY']).withMessage('Pricing type must be FIXED or HOURLY'),
+  body('hourlyRate')
+    .if(body('pricingType').equals('HOURLY'))
+    .isFloat({ min: 1 })
+    .withMessage('Hourly rate is required for hourly services'),
+  body('minHours').optional().isInt({ min: 1 }).withMessage('Minimum hours must be at least 1'),
+  body('maxHours').optional().isInt({ min: 1 }).withMessage('Maximum hours must be at least 1')
 ];
 
 router.get('/services', authenticate, isAdmin, getAllServices);

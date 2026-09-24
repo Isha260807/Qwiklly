@@ -61,6 +61,12 @@ const cartItemSchema = new mongoose.Schema({
     default: 1,
     min: 1
   },
+  // Selected hours for HOURLY-priced services (null for FIXED items)
+  hours: {
+    type: Number,
+    default: null,
+    min: 1
+  },
   rating: {
     type: String,
     default: '4.8'

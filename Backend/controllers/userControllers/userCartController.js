@@ -60,7 +60,8 @@ const addToCart = async (req, res) => {
       vendorId,
       sectionTitle, // Brand name
       sectionIcon,  // Brand logo URL
-      card          // Card details snapshot
+      card,         // Card details snapshot
+      hours         // Selected hours for HOURLY-priced services
     } = req.body;
 
     console.log(`[AddToCart] Request details - Title: ${title}, Section: ${sectionTitle}`);
@@ -75,11 +76,26 @@ const addToCart = async (req, res) => {
       }
     }
 
+    // Hourly pricing: validate hours and recompute price server-side — never trust client price
+    const isHourly = service?.pricingType === 'HOURLY';
+    let itemHours = null;
+    if (isHourly) {
+      itemHours = Number(hours);
+      const minHours = service.minHours || 1;
+      const maxHours = service.maxHours || 8;
+      if (!itemHours || itemHours < minHours || itemHours > maxHours) {
+        return res.status(400).json({
+          success: false,
+          message: `Hours must be between ${minHours} and ${maxHours}`
+        });
+      }
+    }
+
     const itemTitle = title || service?.title || 'Service Item';
     const itemCategory = category || service?.categoryId?.title || service?.brandId?.title || sectionTitle || 'General';
-    const itemUnitPrice = Number(unitPrice ?? price ?? service?.basePrice ?? 0);
-    const itemCount = Number(serviceCount || 1);
-    const itemTotalPrice = Number(price ?? (itemUnitPrice * itemCount));
+    const itemUnitPrice = isHourly ? Number(service.hourlyRate || 0) : Number(unitPrice ?? price ?? service?.basePrice ?? 0);
+    const itemCount = isHourly ? 1 : Number(serviceCount || 1);
+    const itemTotalPrice = isHourly ? (itemUnitPrice * itemHours) : Number(price ?? (itemUnitPrice * itemCount));
     const itemIcon = icon || service?.iconUrl || service?.image || '';
     const itemDescription = description || service?.description || service?.tagline || '';
 
@@ -98,7 +114,13 @@ const addToCart = async (req, res) => {
       item => item.title === itemTitle && (!serviceId || item.serviceId?.toString() === serviceId.toString())
     );
 
-    if (existingItemIndex !== -1) {
+    if (existingItemIndex !== -1 && isHourly) {
+      // Hourly items: replace the hour count/price rather than stacking a "quantity"
+      cart.items[existingItemIndex].hours = itemHours;
+      cart.items[existingItemIndex].unitPrice = itemUnitPrice;
+      cart.items[existingItemIndex].price = itemTotalPrice;
+      cart.items[existingItemIndex].serviceCount = 1;
+    } else if (existingItemIndex !== -1) {
       // Update quantity if item exists
       const existingItem = cart.items[existingItemIndex];
       const newCount = (existingItem.serviceCount || 1) + itemCount;
@@ -117,6 +139,7 @@ const addToCart = async (req, res) => {
         originalPrice: originalPrice ? Number(originalPrice) : (service?.originalPrice || null),
         unitPrice: itemUnitPrice,
         serviceCount: itemCount,
+        hours: itemHours,
         rating: rating || service?.rating?.toString() || '4.8',
         reviews: reviews || service?.ratingCount || '10k+',
         vendorId: vendorId || null,

@@ -263,16 +263,44 @@ const calculateBookingPrice = async ({
   }
 
   // 3. Compute Item Total / Base Price
+  // Hourly items are recomputed server-side from the referenced service's hourlyRate —
+  // the client-sent price/card.price is never trusted for them.
   let basePrice = 0;
+  let hourlyValidationError = null;
   if (Array.isArray(bookedItems) && bookedItems.length > 0) {
-    basePrice = bookedItems.reduce((sum, item) => {
-      const price = item.card?.price ?? item.price ?? 0;
-      const count = item.quantity ?? item.serviceCount ?? 1;
-      return sum + (Number(price) * Number(count));
-    }, 0);
+    const itemServiceIds = [...new Set(bookedItems.map(i => i.serviceId).filter(Boolean).map(String))];
+    let hourlyServiceMap = new Map();
+    if (itemServiceIds.length > 0) {
+      const hourlyServices = await Service.find({ _id: { $in: itemServiceIds }, pricingType: 'HOURLY' })
+        .select('hourlyRate minHours maxHours')
+        .lean();
+      hourlyServiceMap = new Map(hourlyServices.map(s => [String(s._id), s]));
+    }
+
+    for (const item of bookedItems) {
+      const hourlySvc = item.serviceId ? hourlyServiceMap.get(String(item.serviceId)) : null;
+
+      if (hourlySvc) {
+        const hours = Number(item.hours ?? item.card?.hours);
+        const minHours = hourlySvc.minHours || 1;
+        const maxHours = hourlySvc.maxHours || 8;
+        if (!hours || hours < minHours || hours > maxHours) {
+          hourlyValidationError = {
+            code: 'INVALID_HOURS',
+            error: `Hours must be between ${minHours} and ${maxHours}`
+          };
+          break;
+        }
+        basePrice += (hourlySvc.hourlyRate || 0) * hours;
+      } else {
+        const price = item.card?.price ?? item.price ?? 0;
+        const count = item.quantity ?? item.serviceCount ?? 1;
+        basePrice += Number(price) * Number(count);
+      }
+    }
   }
 
-  if (basePrice === 0 && service) {
+  if (!hourlyValidationError && basePrice === 0 && service) {
     basePrice = service.basePrice || 500;
   }
 
@@ -386,7 +414,8 @@ const calculateBookingPrice = async ({
     finalAmount,
     isFreeUnderPlan,
     couponInfo,
-    couponValidationError
+    couponValidationError,
+    hourlyValidationError
   };
 };
 
