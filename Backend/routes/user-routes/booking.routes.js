@@ -12,6 +12,11 @@ const {
   addReview,
   getUserRatings
 } = require('../../controllers/bookingControllers/userBookingController');
+const {
+  createExtraPaymentOrder,
+  verifyExtraPayment,
+  getHourlyBookingStatus
+} = require('../../controllers/bookingControllers/hourlyPaymentController');
 
 // Validation rules
 const createBookingValidation = [
@@ -57,6 +62,11 @@ router.get('/:id', authenticate, isUser, getBookingById);
 router.post('/:id/cancel', authenticate, isUser, cancelBookingValidation, cancelBooking);
 router.put('/:id/reschedule', authenticate, isUser, rescheduleBookingValidation, rescheduleBooking);
 router.post('/:id/review', authenticate, isUser, addReviewValidation, addReview);
+
+// Hourly Service — extra-time payment (isolated to HOURLY bookings)
+router.get('/:id/hourly/status', authenticate, isUser, getHourlyBookingStatus);
+router.post('/:id/hourly/extra-payment/order', authenticate, isUser, createExtraPaymentOrder);
+router.post('/:id/hourly/extra-payment/verify', authenticate, isUser, verifyExtraPayment);
 
 module.exports = router;
 

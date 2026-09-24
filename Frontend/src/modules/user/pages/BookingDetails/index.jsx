@@ -31,6 +31,7 @@ import { paymentService } from '../../../../services/paymentService';
 import { cartService } from '../../../../services/cartService';
 import RatingModal from '../../components/booking/RatingModal';
 import PaymentVerificationModal from '../../components/booking/PaymentVerificationModal';
+import HourlyExtraPaymentCard from '../../components/booking/HourlyExtraPaymentCard';
 import { ConfirmDialog } from '../../../../components/common';
 import ReviewCard from '../../components/booking/ReviewCard';
 import NotificationBell from '../../components/common/NotificationBell';
@@ -200,12 +201,35 @@ const BookingDetails = () => {
         }
       };
 
+      const handleHourlyServiceEnded = (data) => {
+        if (data.bookingId === id) {
+          if (data.extraPaymentRequired) {
+            toast('Service ended. An additional payment is required.', { icon: '⚠️' });
+          } else {
+            toast.success('Service ended.');
+          }
+          loadBooking();
+        }
+      };
+
+      const handleHourlyBookedTimeCompleted = (data) => {
+        if (data.bookingId === id) {
+          toast('Your booked service duration has been completed.', { icon: '⏱️' });
+        }
+      };
+
       socket.on('booking_updated', handleUpdate);
       socket.on('notification', handleUpdate);
+      socket.on('hourly_service_ended', handleHourlyServiceEnded);
+      socket.on('hourly_booked_time_completed', handleHourlyBookedTimeCompleted);
+      socket.on('hourly_extra_payment_paid', () => loadBooking());
 
       return () => {
         socket.off('booking_updated', handleUpdate);
         socket.off('notification', handleUpdate);
+        socket.off('hourly_service_ended', handleHourlyServiceEnded);
+        socket.off('hourly_booked_time_completed', handleHourlyBookedTimeCompleted);
+        socket.off('hourly_extra_payment_paid');
       };
     }
   }, [socket, id]);
@@ -949,6 +973,9 @@ const BookingDetails = () => {
               )}
             </div>
           )}
+
+          {/* Hourly Service — Extra Time Payment */}
+          <HourlyExtraPaymentCard booking={booking} onPaid={loadBooking} />
 
           {/* Location & Time Section */}
           <section className="space-y-3">

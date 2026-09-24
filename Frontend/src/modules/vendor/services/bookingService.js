@@ -129,6 +129,30 @@ export const verifySelfVisit = async (bookingId, otp, location) => {
 };
 
 /**
+ * Start hourly service timer (Vendor)
+ */
+export const startHourlyService = async (bookingId) => {
+  const response = await api.post(`/vendors/bookings/${bookingId}/self/hourly/start`);
+  return response.data;
+};
+
+/**
+ * Poll hourly service timer status (Vendor)
+ */
+export const getHourlyServiceStatus = async (bookingId) => {
+  const response = await api.get(`/vendors/bookings/${bookingId}/self/hourly/status`);
+  return response.data;
+};
+
+/**
+ * End hourly service (Vendor) — backend computes actual/extra duration
+ */
+export const endHourlyService = async (bookingId) => {
+  const response = await api.post(`/vendors/bookings/${bookingId}/self/hourly/end`);
+  return response.data;
+};
+
+/**
  * Complete Self Job (Vendor)
  */
 export const completeSelfJob = async (bookingId, data) => {

@@ -79,7 +79,7 @@ const createBooking = async (req, res) => {
 
     // 1. Parallel Fetching: Service and User
     const [service, user] = await Promise.all([
-      Service.findById(serviceId).select('title basePrice discountPrice description images iconUrl categoryId category categoryIds').lean(),
+      Service.findById(serviceId).select('title basePrice discountPrice description images iconUrl categoryId category categoryIds hourlyRate pricingType').lean(),
       User.findById(userId).select('name phone wallet plans')
     ]);
 
@@ -220,6 +220,27 @@ const createBooking = async (req, res) => {
 
     console.log('[CreateBooking] About to save with formatted items:', JSON.stringify(formattedBookedItems, null, 2));
 
+    // Detect HOURLY-priced bookings (isolated from fixed-price flow) and snapshot
+    // the rate/duration needed for the in-service timer + extra-time billing.
+    const totalBookedHours = formattedBookedItems.reduce((sum, item) => {
+      const hrs = item.card && item.card.hours ? Number(item.card.hours) : 0;
+      return sum + hrs * (item.quantity || 1);
+    }, 0);
+    let hourlyTracking = { isHourly: false };
+    if (totalBookedHours > 0) {
+      const hourlyRate = service.hourlyRate || 0;
+      hourlyTracking = {
+        isHourly: true,
+        bookedHours: totalBookedHours,
+        bookedMinutes: totalBookedHours * 60,
+        hourlyRate,
+        extraHourlyRate: hourlyRate,
+        phase: 'NOT_STARTED',
+        extraPaymentStatus: 'NOT_REQUIRED',
+        workDoneAllowed: true
+      };
+    }
+
     // Extract Visual Identity Details
     const categoryIcon = finalCategory?.icon || finalCategory?.image || service.iconUrl || 'https://cdn-icons-png.flaticon.com/512/3500/3500833.png';
     let brandName = null;
@@ -281,7 +302,8 @@ const createBooking = async (req, res) => {
       })),
       paymentMethod: paymentMethod || null,
       status: bookingStatus,
-      paymentStatus: bookingPaymentStatus
+      paymentStatus: bookingPaymentStatus,
+      hourlyTracking
     });
 
     // Create Audit / Coupon Usage Record if a coupon was used

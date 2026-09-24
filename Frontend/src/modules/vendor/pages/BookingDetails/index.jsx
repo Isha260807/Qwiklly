@@ -16,6 +16,7 @@ import {
 } from '../../services/bookingService';
 import { CashCollectionModal, ConfirmDialog, WorkerPaymentModal, OtpVerificationModal, WorkCompletionModal } from '../../components/common';
 import VisitVerificationModal from '../../components/common/VisitVerificationModal';
+import HourlyServiceTimer from '../../components/booking/HourlyServiceTimer';
 import vendorWalletService from '../../../../services/vendorWalletService';
 import vendorBillService from '../../../../services/vendorBillService';
 import { toast } from 'react-hot-toast';
@@ -195,12 +196,21 @@ export default function BookingDetails() {
         }
       };
 
+      const handleHourlyExtraPaid = (data) => {
+        if (data.bookingId === id) {
+          toast.success('Customer paid the extra time charge. Work Done unlocked.');
+          loadBooking();
+        }
+      };
+
       socket.on('booking_updated', handleBookingUpdate);
       socket.on('payment_success', handleBookingUpdate);
+      socket.on('hourly_extra_payment_paid', handleHourlyExtraPaid);
 
       return () => {
         socket.off('booking_updated', handleBookingUpdate);
         socket.off('payment_success', handleBookingUpdate);
+        socket.off('hourly_extra_payment_paid', handleHourlyExtraPaid);
       };
     }
   }, [socket, id]);
@@ -1351,7 +1361,7 @@ export default function BookingDetails() {
           <button
             type="button"
             onClick={handleViewTimeline}
-            className="flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs border border-[#720C3E]/20"
+            className="shrink-0 px-3 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs border border-[#720C3E]/20 whitespace-nowrap"
             style={{
               background: '#FCEBF3',
               color: '#720C3E',
@@ -1369,12 +1379,12 @@ export default function BookingDetails() {
               <button
                 type="button"
                 onClick={handleStartJourney}
-                className={`flex-1 py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs ${journeyDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs whitespace-nowrap ${journeyDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 style={{
                   background: journeyDisabled ? '#9CA3AF' : 'linear-gradient(135deg, #10B981, #059669)',
                 }}
               >
-                <FiNavigation className="w-3.5 h-3.5" />
+                <FiNavigation className="w-3.5 h-3.5 shrink-0" />
                 <span>{journeyDisabled ? 'Payment Pending' : 'Start Journey'}</span>
               </button>
             );
@@ -1391,28 +1401,37 @@ export default function BookingDetails() {
                   console.error('Failed to notify reached:', err);
                 }
               }}
-              className="flex-1 py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
+              className="flex-1 py-2 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs whitespace-nowrap"
               style={{
                 background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
               }}
             >
-              <FiMapPin className="w-3.5 h-3.5" />
+              <FiMapPin className="w-3.5 h-3.5 shrink-0" />
               <span>Arrived</span>
             </button>
           )}
 
           {(booking.status === 'visited' || booking.status === 'in_progress') && (
-            <button
-              type="button"
-              onClick={() => setIsWorkDoneModalOpen(true)}
-              className="flex-1 py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
-              style={{
-                background: 'linear-gradient(135deg, #10B981, #059669)',
-              }}
-            >
-              <FiCheckCircle className="w-3.5 h-3.5" />
-              <span>Work Done</span>
-            </button>
+            booking.hourlyTracking?.isHourly && !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed) ? (
+              <HourlyServiceTimer
+                bookingId={id}
+                hourlyTracking={booking.hourlyTracking}
+                onStarted={loadBooking}
+                onEnded={loadBooking}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsWorkDoneModalOpen(true)}
+                className="flex-1 py-2 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs whitespace-nowrap"
+                style={{
+                  background: 'linear-gradient(135deg, #10B981, #059669)',
+                }}
+              >
+                <FiCheckCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>Work Done</span>
+              </button>
+            )
           )}
         </div>
       </main>

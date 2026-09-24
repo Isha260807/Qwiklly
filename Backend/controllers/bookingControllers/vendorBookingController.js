@@ -923,6 +923,228 @@ const verifySelfVisit = async (req, res) => {
 };
 
 /**
+ * HOURLY SERVICE TIMER
+ * ────────────────────
+ * Isolated to bookings where `hourlyTracking.isHourly` is true. Server-side
+ * timestamps (serviceStartedAt / serviceEndedAt) are the source of truth for
+ * elapsed duration — the frontend timer is display-only.
+ */
+
+/**
+ * Start the hourly service timer.
+ */
+const startHourlyService = async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+    const { id } = req.params;
+
+    const booking = await Booking.findOne({ _id: id, vendorId });
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    if (!booking.hourlyTracking?.isHourly) {
+      return res.status(400).json({ success: false, message: 'This is not an hourly service booking' });
+    }
+
+    const allowedStartStatuses = [BOOKING_STATUS.VISITED, BOOKING_STATUS.IN_PROGRESS];
+    if (!allowedStartStatuses.includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot start service from current status: ${booking.status}` });
+    }
+
+    if (booking.paymentStatus !== PAYMENT_STATUS.SUCCESS && booking.paymentStatus !== PAYMENT_STATUS.PLAN_COVERED) {
+      return res.status(400).json({ success: false, message: 'Customer payment is pending. You can start the service once payment is completed.' });
+    }
+
+    // Idempotent: if already started, just return current state
+    if (booking.hourlyTracking.phase !== 'NOT_STARTED') {
+      return res.status(200).json({ success: true, message: 'Service already started', data: booking });
+    }
+
+    booking.hourlyTracking.serviceStartedAt = new Date();
+    booking.hourlyTracking.phase = 'SERVICE_STARTED';
+    booking.status = BOOKING_STATUS.IN_PROGRESS;
+    await booking.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user_${booking.userId}`).emit('hourly_service_started', {
+        bookingId: booking._id,
+        serviceStartedAt: booking.hourlyTracking.serviceStartedAt,
+        bookedMinutes: booking.hourlyTracking.bookedMinutes
+      });
+    }
+
+    res.status(200).json({ success: true, message: 'Service started', data: booking });
+  } catch (error) {
+    console.error('Start hourly service error:', error);
+    res.status(500).json({ success: false, message: 'Failed to start service' });
+  }
+};
+
+/**
+ * Poll timer status. Also flips phase to BOOKED_TIME_COMPLETED (once, idempotently)
+ * the first time elapsed time crosses the booked duration, and notifies the vendor.
+ */
+const getHourlyServiceStatus = async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+    const { id } = req.params;
+
+    const booking = await Booking.findOne({ _id: id, vendorId });
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const tracking = booking.hourlyTracking;
+    if (!tracking?.isHourly) {
+      return res.status(400).json({ success: false, message: 'This is not an hourly service booking' });
+    }
+
+    let elapsedMinutes = 0;
+    if (tracking.serviceStartedAt) {
+      const endRef = tracking.serviceEndedAt || new Date();
+      elapsedMinutes = Math.floor((endRef.getTime() - tracking.serviceStartedAt.getTime()) / 60000);
+    }
+
+    if (
+      tracking.phase === 'SERVICE_STARTED' &&
+      elapsedMinutes >= tracking.bookedMinutes
+    ) {
+      tracking.phase = 'BOOKED_TIME_COMPLETED';
+      tracking.bookedTimeCompletedNotifiedAt = new Date();
+      await booking.save();
+
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`vendor_${vendorId}`).emit('hourly_booked_time_completed', { bookingId: booking._id });
+        io.to(`user_${booking.userId}`).emit('hourly_booked_time_completed', { bookingId: booking._id });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        phase: tracking.phase,
+        serviceStartedAt: tracking.serviceStartedAt,
+        bookedMinutes: tracking.bookedMinutes,
+        elapsedMinutes,
+        extraPaymentStatus: tracking.extraPaymentStatus,
+        extraAmount: tracking.extraAmount,
+        workDoneAllowed: tracking.workDoneAllowed
+      }
+    });
+  } catch (error) {
+    console.error('Get hourly service status error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch service status' });
+  }
+};
+
+/**
+ * End the hourly service. Backend calculates actual duration and any extra
+ * amount from serviceStartedAt/serviceEndedAt — never trusts client-supplied
+ * durations. Idempotent: a second END call returns the already-computed result.
+ */
+const endHourlyService = async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+    const { id } = req.params;
+
+    const booking = await Booking.findOne({ _id: id, vendorId });
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const tracking = booking.hourlyTracking;
+    if (!tracking?.isHourly) {
+      return res.status(400).json({ success: false, message: 'This is not an hourly service booking' });
+    }
+    if (!tracking.serviceStartedAt) {
+      return res.status(400).json({ success: false, message: 'Service has not been started yet' });
+    }
+
+    // Idempotency: already ended, return the existing computed result
+    if (tracking.phase === 'EXTRA_TIME' || tracking.phase === 'ENDED') {
+      return res.status(200).json({
+        success: true,
+        message: 'Service already ended',
+        data: {
+          phase: tracking.phase,
+          actualDurationMinutes: tracking.actualDurationMinutes,
+          extraDurationMinutes: tracking.extraDurationMinutes,
+          extraAmount: tracking.extraAmount,
+          extraPaymentStatus: tracking.extraPaymentStatus,
+          workDoneAllowed: tracking.workDoneAllowed
+        }
+      });
+    }
+
+    const serviceEndedAt = new Date();
+    const actualDurationMinutes = Math.max(0, Math.ceil((serviceEndedAt.getTime() - tracking.serviceStartedAt.getTime()) / 60000));
+    const extraDurationMinutes = Math.max(0, actualDurationMinutes - tracking.bookedMinutes);
+
+    tracking.serviceEndedAt = serviceEndedAt;
+    tracking.actualDurationMinutes = actualDurationMinutes;
+    tracking.extraDurationMinutes = extraDurationMinutes;
+
+    if (extraDurationMinutes > 0) {
+      const rate = tracking.extraHourlyRate || tracking.hourlyRate || 0;
+      tracking.extraAmount = parseFloat(((rate / 60) * extraDurationMinutes).toFixed(2));
+      tracking.extraPaymentStatus = 'PENDING';
+      tracking.phase = 'EXTRA_TIME';
+      tracking.workDoneAllowed = false;
+    } else {
+      tracking.extraAmount = 0;
+      tracking.extraPaymentStatus = 'NOT_REQUIRED';
+      tracking.phase = 'ENDED';
+      tracking.workDoneAllowed = true;
+    }
+
+    await booking.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user_${booking.userId}`).emit('hourly_service_ended', {
+        bookingId: booking._id,
+        actualDurationMinutes,
+        extraDurationMinutes,
+        extraAmount: tracking.extraAmount,
+        extraPaymentRequired: extraDurationMinutes > 0
+      });
+    }
+
+    if (extraDurationMinutes > 0) {
+      const { createNotification } = require('../notificationControllers/notificationController');
+      await createNotification({
+        userId: booking.userId,
+        type: 'hourly_extra_payment_required',
+        title: 'Additional Service Payment Required',
+        message: `The service ran ${extraDurationMinutes} minutes beyond the booked time. Please pay ₹${tracking.extraAmount} extra.`,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        priority: 'high',
+        pushData: {
+          type: 'hourly_extra_payment_required',
+          bookingId: booking._id.toString(),
+          extraAmount: tracking.extraAmount,
+          link: `/user/booking/${booking._id}`
+        }
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: extraDurationMinutes > 0 ? 'Service ended. Extra time payment required.' : 'Service ended',
+      data: {
+        phase: tracking.phase,
+        actualDurationMinutes,
+        extraDurationMinutes,
+        extraAmount: tracking.extraAmount,
+        extraPaymentStatus: tracking.extraPaymentStatus,
+        workDoneAllowed: tracking.workDoneAllowed
+      }
+    });
+  } catch (error) {
+    console.error('End hourly service error:', error);
+    res.status(500).json({ success: false, message: 'Failed to end service' });
+  }
+};
+
+/**
  * Complete Self Job & Generate Bill
  * ──────────────────────────────────
  * Revenue Model:
@@ -954,6 +1176,15 @@ const completeSelfJob = async (req, res) => {
     ];
     if (!allowedStatuses.includes(booking.status)) {
       return res.status(400).json({ success: false, message: `Cannot complete job from current status: ${booking.status}` });
+    }
+
+    // HOURLY services: block Work Done while extra time is unbilled/unpaid
+    if (booking.hourlyTracking?.isHourly && !booking.hourlyTracking.workDoneAllowed) {
+      return res.status(400).json({
+        success: false,
+        code: 'EXTRA_PAYMENT_PENDING',
+        message: 'Customer must pay the extra time charge before this job can be marked done.'
+      });
     }
 
     // Safely extract photos array and notes
@@ -1610,6 +1841,9 @@ module.exports = {
   startSelfJob,
   vendorReachedLocation,
   verifySelfVisit,
+  startHourlyService,
+  getHourlyServiceStatus,
+  endHourlyService,
   completeSelfJob,
   collectSelfCash,
   payWorker,

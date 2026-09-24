@@ -363,7 +363,14 @@ const handleRazorpayWebhook = async (req, res) => {
       if (booking) {
         await finalizePaymentSuccess(booking, paymentEntity.id);
       } else {
-        console.warn(`[RazorpayWebhook] No booking found for order ${paymentEntity.order_id}`);
+        // Not the primary booking payment — check if this is an hourly-service extra-time order
+        const extraBooking = await Booking.findOne({ 'hourlyTracking.extraRazorpayOrderId': paymentEntity.order_id });
+        if (extraBooking) {
+          const { finalizeExtraPaymentSuccess } = require('../bookingControllers/hourlyPaymentController');
+          await finalizeExtraPaymentSuccess(extraBooking, paymentEntity.id);
+        } else {
+          console.warn(`[RazorpayWebhook] No booking found for order ${paymentEntity.order_id}`);
+        }
       }
     }
 

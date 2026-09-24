@@ -54,6 +54,22 @@ export const bookingService = {
   getRatings: async (params = {}) => {
     const response = await api.get('/users/bookings/ratings', { params });
     return response.data;
+  },
+
+  // ── Hourly Service Timer / Extra-Time Payment ──
+  getHourlyStatus: async (id) => {
+    const response = await api.get(`/users/bookings/${id}/hourly/status`);
+    return response.data;
+  },
+
+  createHourlyExtraPaymentOrder: async (id) => {
+    const response = await api.post(`/users/bookings/${id}/hourly/extra-payment/order`);
+    return response.data;
+  },
+
+  verifyHourlyExtraPayment: async (id, paymentData) => {
+    const response = await api.post(`/users/bookings/${id}/hourly/extra-payment/verify`, paymentData);
+    return response.data;
   }
 };
 

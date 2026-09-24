@@ -372,7 +372,41 @@ const bookingSchema = new mongoose.Schema({
   // 13. NOTES
   // ==========================================
   vendorNotes: { type: String, default: null },
-  workerNotes: { type: String, default: null }
+  workerNotes: { type: String, default: null },
+
+  // ==========================================
+  // 14. HOURLY SERVICE TIMER & EXTRA-TIME BILLING
+  // (isolated to bookings where a HOURLY-priced item was booked;
+  // does not affect instant/scheduled fixed-price flows)
+  // ==========================================
+  hourlyTracking: {
+    isHourly: { type: Boolean, default: false },
+    bookedHours: { type: Number, default: null },
+    bookedMinutes: { type: Number, default: null },
+    hourlyRate: { type: Number, default: null },
+    extraHourlyRate: { type: Number, default: null },
+    serviceStartedAt: { type: Date, default: null },
+    serviceEndedAt: { type: Date, default: null },
+    actualDurationMinutes: { type: Number, default: null },
+    extraDurationMinutes: { type: Number, default: 0 },
+    extraAmount: { type: Number, default: 0 },
+    extraPaymentStatus: {
+      type: String,
+      enum: ['NOT_REQUIRED', 'PENDING', 'PROCESSING', 'PAID', 'FAILED'],
+      default: 'NOT_REQUIRED'
+    },
+    extraRazorpayOrderId: { type: String, default: null },
+    extraRazorpayPaymentId: { type: String, default: null },
+    // Internal sub-phase, independent of the main `status` state machine
+    phase: {
+      type: String,
+      enum: ['NOT_STARTED', 'SERVICE_STARTED', 'BOOKED_TIME_COMPLETED', 'EXTRA_TIME', 'ENDED'],
+      default: 'NOT_STARTED'
+    },
+    bookedTimeCompletedNotifiedAt: { type: Date, default: null },
+    // Vendor may only mark WORK_DONE when this is true
+    workDoneAllowed: { type: Boolean, default: true }
+  }
 
 }, {
   timestamps: true

@@ -15,6 +15,9 @@ const {
   startSelfJob,
   vendorReachedLocation,
   verifySelfVisit,
+  startHourlyService,
+  getHourlyServiceStatus,
+  endHourlyService,
   completeSelfJob,
   collectSelfCash,
   payWorker,
@@ -59,6 +62,12 @@ router.post('/:id/notes', authenticate, isVendor, addNotesValidation, addVendorN
 router.post('/:id/self/start', authenticate, isVendor, startSelfJob);
 router.post('/:id/self/reached', authenticate, isVendor, vendorReachedLocation);
 router.post('/:id/self/visit/verify', authenticate, isVendor, verifySelfVisit);
+
+// Hourly Service Timer Routes (isolated to HOURLY bookings)
+router.post('/:id/self/hourly/start', authenticate, isVendor, startHourlyService);
+router.get('/:id/self/hourly/status', authenticate, isVendor, getHourlyServiceStatus);
+router.post('/:id/self/hourly/end', authenticate, isVendor, endHourlyService);
+
 router.post('/:id/self/complete', authenticate, isVendor, completeSelfJob);
 router.post('/:id/self/payment/collect', authenticate, isVendor, collectSelfCash);
 

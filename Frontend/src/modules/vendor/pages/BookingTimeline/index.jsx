@@ -7,6 +7,7 @@ import BottomNav from '../../components/layout/BottomNav';
 import { getBookingById, updateBookingStatus, startSelfJob, verifySelfVisit, completeSelfJob, collectSelfCash, payWorker } from '../../services/bookingService';
 import { CashCollectionModal, ConfirmDialog, WorkCompletionModal } from '../../components/common';
 import vendorWalletService from '../../../../services/vendorWalletService';
+import HourlyServiceTimer from '../../components/booking/HourlyServiceTimer';
 import { toast } from 'react-hot-toast';
 
 const BookingTimeline = () => {
@@ -45,8 +46,7 @@ const BookingTimeline = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const loadBooking = async () => {
+  const loadBooking = async () => {
       try {
         const response = await getBookingById(id);
         const apiData = response.data || response;
@@ -103,8 +103,9 @@ const BookingTimeline = () => {
       } catch (error) {
         console.error('Error loading booking:', error);
       }
-    };
+  };
 
+  useEffect(() => {
     loadBooking();
 
     const handleUpdate = () => {
@@ -463,8 +464,23 @@ const BookingTimeline = () => {
                       </div>
                       <p className="text-[11px] text-gray-500 mb-1 leading-snug">{stage.description}</p>
 
+                      {/* Hourly Service Timer / End Service — replaces "Mark Work Done" for hourly bookings */}
+                      {stage.id === 6 && booking?.hourlyTracking?.isHourly && (currentStage === 5 || currentStage === 6) &&
+                        !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed) && (
+                          <div className="my-1">
+                            <HourlyServiceTimer
+                              bookingId={id}
+                              hourlyTracking={booking.hourlyTracking}
+                              onStarted={loadBooking}
+                              onEnded={loadBooking}
+                            />
+                          </div>
+                        )}
+
                       {/* Action Button */}
-                      {stage.action && !isSkipped && (() => {
+                      {stage.action && !isSkipped &&
+                        !(stage.id === 6 && booking?.hourlyTracking?.isHourly && !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed)) &&
+                        (() => {
                         const isJourneyPaymentBlocked = stage.id === 4 && booking?.isSelfJob && !isPaymentComplete;
                         return (
                           <button
