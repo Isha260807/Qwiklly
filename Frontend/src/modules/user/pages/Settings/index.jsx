@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiBell, FiMail, FiPhone, FiMessageCircle, FiShield, FiChevronRight, FiLogOut, FiTrash2 } from 'react-icons/fi';
+import { FiArrowLeft, FiBell, FiMail, FiPhone, FiMessageCircle, FiShield, FiChevronRight, FiLogOut, FiTrash2, FiSend } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
 import { userAuthService } from '../../../../services/authService';
-import { registerFCMToken, removeFCMToken } from '../../../../services/pushNotificationService';
+import { registerFCMToken, removeFCMToken, testPushNotification } from '../../../../services/pushNotificationService';
 import BottomNav from '../../components/layout/BottomNav';
 
 const Settings = () => {
@@ -16,10 +16,17 @@ const Settings = () => {
     push: true,
     email: true,
   });
+  const [isTestingNotification, setIsTestingNotification] = useState(false);
+  const [permissionStatus, setPermissionStatus] = useState(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
+  );
 
   // Load user settings on mount
   useEffect(() => {
     loadSettings();
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPermissionStatus(Notification.permission);
+    }
   }, []);
 
   const loadSettings = async () => {
@@ -76,6 +83,38 @@ const Settings = () => {
         // Revert
         setNotifications(prev => ({ ...prev, push: !newState }));
       }
+    }
+  };
+
+  const handleTestNotification = async () => {
+    setIsTestingNotification(true);
+    const toastId = toast.loading('Sending test push notification...');
+
+    try {
+      const result = await testPushNotification('user');
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        setPermissionStatus(Notification.permission);
+      }
+
+      if (result.success) {
+        toast.success('Test notification sent! Check your notification tray.', {
+          id: toastId,
+          duration: 4000
+        });
+        setNotifications(prev => ({ ...prev, push: true }));
+      } else {
+        toast.error(result.error || 'Failed to send test notification', {
+          id: toastId,
+          duration: 5000
+        });
+      }
+    } catch (error) {
+      toast.error(error.message || 'Error triggering test notification', {
+        id: toastId,
+        duration: 4000
+      });
+    } finally {
+      setIsTestingNotification(false);
     }
   };
 
@@ -159,6 +198,52 @@ const Settings = () => {
                     notifications.email ? 'translate-x-4' : 'translate-x-0'
                   }`}
                 />
+              </button>
+            </div>
+
+            {/* Test Push Notification */}
+            <div className="p-3 bg-gradient-to-r from-pink-50/40 via-white to-pink-50/20 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-gray-800">Push Notification Test</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                      permissionStatus === 'granted'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : permissionStatus === 'denied'
+                        ? 'bg-red-50 text-red-600 border border-red-200'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        permissionStatus === 'granted' ? 'bg-emerald-500' : permissionStatus === 'denied' ? 'bg-red-500' : 'bg-amber-500'
+                      }`} />
+                      {permissionStatus === 'granted' ? 'Allowed' : permissionStatus === 'denied' ? 'Blocked' : 'Default'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Send a test notification to verify delivery on this device.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleTestNotification}
+                disabled={isTestingNotification}
+                className="w-full py-2.5 px-3 rounded-xl text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs active:scale-[0.99] transition-all disabled:opacity-60 cursor-pointer"
+                style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+              >
+                {isTestingNotification ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Sending Test Notification...</span>
+                  </>
+                ) : (
+                  <>
+                    <FiSend className="w-3.5 h-3.5 text-white" />
+                    <span>Send Test Push Notification</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

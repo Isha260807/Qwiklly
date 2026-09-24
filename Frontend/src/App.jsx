@@ -23,19 +23,21 @@ function App() {
       window.dispatchEvent(new Event('vendorStatsUpdated'));
       window.dispatchEvent(new Event('workerJobsUpdated'));
       window.dispatchEvent(new Event('userBookingsUpdated'));
+      window.dispatchEvent(new Event('userNotificationsUpdated'));
 
       // Also dispatch generic one if needed
       window.dispatchEvent(new Event('appNotificationReceived'));
 
-      // REDUNDANT: We now have a rich SwipeableNotification in SocketContext.jsx 
-      // which handles all internal socket notifications (emitted by Backend along with Push).
-      // Showing a toast here results in "double alerts" for the user.
-      /*
-      toast(payload.notification?.body || 'New notification', {
-        icon: '🔔',
-        duration: 2000,
-      });
-      */
+      // If this is a test notification, show toast in foreground so user sees instant confirmation
+      const isTest = payload.data?.type === 'test' || 
+                     payload.notification?.title?.includes('Test') ||
+                     payload.data?.title?.includes('Test');
+      if (isTest) {
+        toast.success(payload.notification?.body || payload.data?.body || 'Test push notification received successfully! 🚀', {
+          icon: '🔔',
+          duration: 4000,
+        });
+      }
     });
   }, []);
 

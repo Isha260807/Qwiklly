@@ -8,43 +8,44 @@ const path = require('path');
 
 // Initialize Firebase Admin SDK
 // Initialize Firebase Admin SDK
-let serviceAccount;
+// Initialize Firebase Admin SDK
+function initFirebase() {
+  if (admin.apps.length) return true;
+  try {
+    let serviceAccount;
+    if (process.env.FIREBASE_CONFIG) {
+      serviceAccount = typeof process.env.FIREBASE_CONFIG === 'string'
+        ? JSON.parse(process.env.FIREBASE_CONFIG)
+        : process.env.FIREBASE_CONFIG;
+    } else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+      serviceAccount = typeof process.env.FIREBASE_SERVICE_ACCOUNT_JSON === 'string'
+        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
+        : process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    } else {
+      const fs = require('fs');
+      const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './config/firebase-service-account.json';
+      const resolved = path.resolve(__dirname, '..', serviceAccountPath);
+      if (fs.existsSync(resolved)) {
+        serviceAccount = require(resolved);
+      }
+    }
 
-try {
-  if (process.env.FIREBASE_CONFIG) {
-    // Production: Use environment variable JSON content
-    serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-  } else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    // Alternative Env Var
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-  } else {
-    // Local: Use file path
-    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './config/firebase-service-account.json';
-    serviceAccount = require(path.resolve(__dirname, '..', serviceAccountPath));
+    if (serviceAccount && !admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+      console.log('✅ Firebase Admin SDK initialized');
+      return true;
+    }
+  } catch (error) {
+    console.error('❌ Failed to load Firebase credentials:', error.message);
   }
-} catch (error) {
-  console.error('❌ Failed to load Firebase credentials:', error.message);
+  return false;
 }
 
-// Initialize only if not already initialized
-if (!admin.apps.length && serviceAccount) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
-  console.log('✅ Firebase Admin SDK initialized');
-}
+// Initial attempt
+initFirebase();
 
-/**
- * Send push notification to multiple tokens
- * @param {string[]} tokens - Array of FCM tokens
- * @param {Object} payload - Notification payload
- * @param {string} payload.title - Notification title
- * @param {string} payload.body - Notification body
- * @param {Object} payload.data - Additional data (optional)
- * @param {string} payload.icon - Notification icon (optional)
- * @param {boolean} payload.highPriority - Send as high priority (default: true)
- * @returns {Promise<Object>} - Response with success/failure counts
- */
 /**
  * Send push notification to multiple tokens
  * @param {string[]} tokens - Array of FCM tokens
@@ -58,6 +59,10 @@ if (!admin.apps.length && serviceAccount) {
  */
 async function sendPushNotification(tokens, payload) {
   try {
+    if (!admin.apps.length && !initFirebase()) {
+      console.error('❌ Firebase Admin SDK is not initialized');
+      throw new Error('Firebase Admin SDK is not initialized. Please configure FIREBASE_CONFIG in Backend/.env');
+    }
     if (!tokens || tokens.length === 0) {
       console.log('No FCM tokens provided');
       return { successCount: 0, failureCount: 0 };

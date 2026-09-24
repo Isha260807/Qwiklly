@@ -167,27 +167,61 @@ router.post('/test', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    const tokens = [...(user.fcmTokens || []), ...(user.fcmTokenMobile || [])];
-    const uniqueTokens = [...new Set(tokens)];
-
-    if (uniqueTokens.length === 0) {
-      return res.json({ success: false, error: 'No FCM tokens found for user' });
+    // Support token passed in request body
+    const { token } = req.body;
+    let tokens = [...(user.fcmTokens || []), ...(user.fcmTokenMobile || [])];
+    if (token && typeof token === 'string' && token.trim()) {
+      const cleanToken = token.trim();
+      tokens.push(cleanToken);
+      // Auto-save to user.fcmTokens if not already saved
+      if (!user.fcmTokens || !user.fcmTokens.includes(cleanToken)) {
+        await User.findByIdAndUpdate(userId, {
+          $addToSet: { fcmTokens: cleanToken }
+        });
+      }
     }
 
+    const uniqueTokens = [...new Set(tokens.filter(t => t && typeof t === 'string' && t.trim().length > 0))];
+
+    if (uniqueTokens.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No FCM tokens found. Please enable push notifications and grant browser permission first.'
+      });
+    }
+
+    const title = '🔔 Test Notification';
+    const body = 'This is a test notification from Quiklly! Push notifications are working properly.';
+
     const response = await sendPushNotification(uniqueTokens, {
-      title: '🔔 Test Notification',
-      body: 'This is a test notification from Appzeto!',
+      title,
+      body,
       data: {
         type: 'test',
-        link: '/'
+        link: '/user/notifications',
+        timestamp: Date.now().toString()
       }
     });
 
+    // Also store notification in user's Notification collection
+    try {
+      const Notification = require('../../models/Notification');
+      await Notification.create({
+        userId,
+        type: 'general',
+        title,
+        message: body,
+        data: { type: 'test' }
+      });
+    } catch (dbErr) {
+      console.warn('Could not record notification in DB:', dbErr.message);
+    }
+
     res.json({
       success: true,
-      message: 'Test notification sent',
-      successCount: response.successCount,
-      failureCount: response.failureCount
+      message: 'Test notification sent successfully',
+      successCount: response?.successCount || 0,
+      failureCount: response?.failureCount || 0
     });
   } catch (error) {
     console.error('Error sending test notification:', error);

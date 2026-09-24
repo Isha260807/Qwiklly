@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiBell, FiCheck, FiArrowLeft, FiTrash2, FiX } from 'react-icons/fi';
+import { FiBell, FiCheck, FiArrowLeft, FiTrash2, FiX, FiSend } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
 import BottomNav from '../../components/layout/BottomNav';
@@ -11,6 +11,7 @@ import {
   deleteNotification,
   deleteAllNotifications
 } from '../../services/notificationService';
+import { testPushNotification } from '../../../../services/pushNotificationService';
 
 const Notifications = () => {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ const Notifications = () => {
   const [loading, setLoading] = useState(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [filter, setFilter] = useState('all'); // all, alerts, jobs, payments
+  const [isTesting, setIsTesting] = useState(false);
 
   useLayoutEffect(() => {
     // Optional: Set background color if needed, similar to Vendor
@@ -117,6 +119,32 @@ const Notifications = () => {
     }
   };
 
+  const handleSendTestNotification = async () => {
+    setIsTesting(true);
+    const toastId = toast.loading('Sending test push notification...');
+    try {
+      const res = await testPushNotification('user');
+      if (res.success) {
+        toast.success('Test notification sent! Check your notification tray.', {
+          id: toastId,
+          duration: 4000
+        });
+        setTimeout(() => {
+          fetchNotifications();
+        }, 800);
+      } else {
+        toast.error(res.error || 'Failed to send test notification', {
+          id: toastId,
+          duration: 5000
+        });
+      }
+    } catch (err) {
+      toast.error(err.message || 'Error sending test notification', { id: toastId });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   const filteredNotifications = notifications.filter(notif => {
     if (filter === 'all') return true;
 
@@ -182,6 +210,37 @@ const Notifications = () => {
       </header>
 
       <main className="px-3 py-3 sm:px-4 sm:py-3.5 max-w-lg mx-auto">
+        {/* Quick Test Push Notification Card */}
+        <div className="mb-3 p-2.5 bg-gradient-to-r from-pink-50/70 via-white to-pink-50/30 rounded-xl border border-pink-100 flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-pink-100/70 flex items-center justify-center text-[#720C3E] shrink-0">
+              <FiBell className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-800">Test Push Notification</p>
+              <p className="text-[10px] text-gray-500">Send an instant test alert to this device</p>
+            </div>
+          </div>
+          <button
+            onClick={handleSendTestNotification}
+            disabled={isTesting}
+            className="px-3 py-1.5 rounded-lg text-white text-xs font-semibold flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all disabled:opacity-50 shrink-0 cursor-pointer"
+            style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+          >
+            {isTesting ? (
+              <>
+                <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Testing...</span>
+              </>
+            ) : (
+              <>
+                <FiSend className="w-3 h-3" />
+                <span>Test Push</span>
+              </>
+            )}
+          </button>
+        </div>
+
         {/* Filter Buttons */}
         <div className="flex gap-1.5 mb-2.5 overflow-x-auto pb-1 scrollbar-hide">
           {[
@@ -254,7 +313,25 @@ const Notifications = () => {
           <div className="bg-white rounded-xl p-6 text-center shadow-sm border border-gray-100/80 my-4">
             <FiBell className="w-10 h-10 mx-auto mb-2 text-gray-300" />
             <p className="text-gray-700 font-semibold text-xs mb-0.5">No notifications</p>
-            <p className="text-[11px] text-gray-400">You're all caught up!</p>
+            <p className="text-[11px] text-gray-400 mb-3">You're all caught up!</p>
+            <button
+              onClick={handleSendTestNotification}
+              disabled={isTesting}
+              className="px-4 py-2 rounded-xl text-white text-xs font-semibold inline-flex items-center gap-1.5 shadow-xs active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+            >
+              {isTesting ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Sending Test...</span>
+                </>
+              ) : (
+                <>
+                  <FiSend className="w-3.5 h-3.5" />
+                  <span>Send Test Notification</span>
+                </>
+              )}
+            </button>
           </div>
         ) : (
           <div className="space-y-2">

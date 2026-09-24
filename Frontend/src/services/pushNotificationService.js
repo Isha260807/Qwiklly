@@ -30,11 +30,15 @@ function getPlatformType() {
 async function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     try {
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-      // console.log('✅ Service Worker registered:', registration.scope);
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+        updateViaCache: 'none' // Force fetch from network, don't use cache
+      });
+      // Force update to pick up any config changes
+      await registration.update();
+      console.log('✅ Service Worker registered:', registration.scope);
       return registration;
     } catch (error) {
-      // console.error('❌ Service Worker registration failed:', error);
+      console.error('❌ Service Worker registration failed:', error);
       throw error;
     }
   } else {
@@ -50,10 +54,10 @@ async function requestNotificationPermission() {
   if ('Notification' in window) {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
-      // console.log('✅ Notification permission granted');
+      console.log('✅ Notification permission granted');
       return true;
     } else {
-      // console.log('❌ Notification permission denied');
+      console.log('❌ Notification permission denied');
       return false;
     }
   }
@@ -68,7 +72,7 @@ async function requestNotificationPermission() {
 async function getFCMToken() {
   try {
     if (!messaging) {
-      // console.error('Firebase messaging not initialized');
+      console.error('Firebase messaging not initialized');
       return null;
     }
 
@@ -81,14 +85,14 @@ async function getFCMToken() {
     });
 
     if (token) {
-      // console.log('✅ FCM Token obtained:', token.substring(0, 20) + '...');
+      console.log('✅ FCM Token obtained:', token.substring(0, 20) + '...');
       return token;
     } else {
-      // console.log('❌ No FCM token available');
+      console.log('❌ No FCM token available');
       return null;
     }
   } catch (error) {
-    // console.error('❌ Error getting FCM token:', error);
+    console.error('❌ Error getting FCM token:', error);
     throw error;
   }
 }
@@ -101,7 +105,7 @@ async function getFCMToken() {
  */
 async function registerFCMToken(userType = 'user', forceUpdate = false) {
   try {
-    // console.log(`[FCM] Starting registration for ${userType}, forceUpdate: ${forceUpdate}`);
+    console.log(`[FCM] Starting registration for ${userType}, forceUpdate: ${forceUpdate}`);
 
     // Check if already registered
     const storageKey = `fcm_token_${userType}_web`;
@@ -112,21 +116,21 @@ async function registerFCMToken(userType = 'user', forceUpdate = false) {
     }
 
     // Request permission
-    // console.log('[FCM] Requesting notification permission...');
+    console.log('[FCM] Requesting notification permission...');
     const hasPermission = await requestNotificationPermission();
     if (!hasPermission) {
-      // console.log('[FCM] ❌ Notification permission not granted, skipping FCM registration');
+      console.log('[FCM] ❌ Notification permission not granted, skipping FCM registration');
       return null;
     }
 
     // Get token
-    // console.log('[FCM] Getting FCM token from Firebase...');
+    console.log('[FCM] Getting FCM token from Firebase...');
     const token = await getFCMToken();
     if (!token) {
-      // console.log('[FCM] ❌ Failed to get FCM token from Firebase');
+      console.log('[FCM] ❌ Failed to get FCM token from Firebase');
       return null;
     }
-    // console.log('[FCM] ✅ Got FCM token:', token.substring(0, 30) + '...');
+    console.log('[FCM] ✅ Got FCM token:', token.substring(0, 30) + '...');
 
     // Determine API endpoint based on user type
     let endpoint;
@@ -153,13 +157,13 @@ async function registerFCMToken(userType = 'user', forceUpdate = false) {
     // Get auth token
     const authToken = localStorage.getItem(authTokenKey);
     if (!authToken) {
-      // console.log(`[FCM] ❌ No auth token found for ${userType} (${authTokenKey}), skipping registration`);
+      console.log(`[FCM] ❌ No auth token found for ${userType} (${authTokenKey}), skipping registration`);
       return null;
     }
 
     // Save to backend
     const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-    // console.log(`[FCM] Saving to backend: ${baseUrl}${endpoint}`);
+    console.log(`[FCM] Saving to backend: ${baseUrl}${endpoint}`);
 
     const response = await fetch(`${baseUrl}${endpoint}`, {
       method: 'POST',
@@ -173,19 +177,19 @@ async function registerFCMToken(userType = 'user', forceUpdate = false) {
       })
     });
 
-    // console.log(`[FCM] Backend response status: ${response.status}`);
+    console.log(`[FCM] Backend response status: ${response.status}`);
 
     if (response.ok) {
       localStorage.setItem(storageKey, token);
-      // console.log('[FCM] ✅ FCM token registered with backend successfully!');
+      console.log('[FCM] ✅ FCM token registered with backend successfully!');
       return token;
     } else {
       const error = await response.json();
-      // console.error('[FCM] ❌ Failed to register token with backend:', error);
+      console.error('[FCM] ❌ Failed to register token with backend:', error);
       return null;
     }
   } catch (error) {
-    // console.error('[FCM] ❌ Error registering FCM token:', error);
+    console.error('[FCM] ❌ Error registering FCM token:', error);
     return null;
   }
 }
@@ -309,11 +313,127 @@ async function initializePushNotifications() {
   }
 }
 
+/**
+ * Test push notification for current user device
+ * @param {string} userType - 'user' | 'vendor'
+ * @returns {Promise<{success: boolean, message?: string, error?: string, details?: any}>}
+ */
+async function testPushNotification(userType = 'user') {
+  try {
+    // 1. Check browser support
+    if (!('Notification' in window)) {
+      return {
+        success: false,
+        error: 'Push notifications are not supported in this browser.'
+      };
+    }
+
+    if (!('serviceWorker' in navigator)) {
+      return {
+        success: false,
+        error: 'Service Workers are not supported in this browser.'
+      };
+    }
+
+    // 2. Request / check permission
+    let permission = Notification.permission;
+    if (permission === 'default') {
+      permission = await Notification.requestPermission();
+    }
+
+    if (permission === 'denied') {
+      return {
+        success: false,
+        error: 'Notification permission is blocked. Please allow notifications in your browser settings (lock icon near URL).'
+      };
+    }
+
+    // 3. Register service worker and get/register FCM token
+    let token = null;
+    try {
+      token = await registerFCMToken(userType, true);
+    } catch (e) {
+      console.warn('[FCM] registerFCMToken warning:', e);
+    }
+
+    if (!token) {
+      try {
+        token = await getFCMToken();
+      } catch (e) {
+        console.warn('[FCM] getFCMToken warning:', e);
+      }
+    }
+
+    // 4. Send request to backend
+    const authTokenKey = userType === 'vendor' ? 'vendorAccessToken' : 'accessToken';
+    const authToken = localStorage.getItem(authTokenKey) || sessionStorage.getItem(authTokenKey);
+
+    if (!authToken) {
+      return {
+        success: false,
+        error: 'You need to be logged in to test notifications.'
+      };
+    }
+
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const endpoint = userType === 'vendor' ? '/vendors/fcm-tokens/test' : '/users/fcm-tokens/test';
+
+    const response = await fetch(`${baseUrl}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ token: token || undefined })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || 'Failed to send test notification from backend.'
+      };
+    }
+
+    // 5. Trigger local notification fallback through Service Worker to guarantee immediate visual feedback
+    try {
+      if ('serviceWorker' in navigator && Notification.permission === 'granted') {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && reg.showNotification) {
+          await reg.showNotification('🔔 Test Notification', {
+            body: 'This is a test notification from Quiklly! Push notifications are working properly.',
+            icon: '/Homster-logo.png',
+            badge: '/Homster-logo.png',
+            tag: `test-push-${Date.now()}`
+          });
+        }
+      }
+    } catch (swErr) {
+      console.warn('[FCM] Local notification banner fallback error:', swErr);
+    }
+
+    return {
+      success: true,
+      message: data.message || 'Test notification sent successfully!',
+      details: data
+    };
+  } catch (error) {
+    console.error('[FCM] testPushNotification failed:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to send test notification.'
+    };
+  }
+}
+
 export {
   initializePushNotifications,
   registerFCMToken,
   removeFCMToken,
   setupForegroundNotificationHandler,
   requestNotificationPermission,
-  getFCMToken
+  getFCMToken,
+  testPushNotification
 };
+

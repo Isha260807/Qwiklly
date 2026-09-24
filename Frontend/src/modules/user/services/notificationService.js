@@ -120,3 +120,19 @@ export const getUnreadCount = async () => {
     return 0;
   }
 };
+
+/**
+ * Send test push notification
+ * @param {string} [token] - Optional FCM token
+ * @returns {Promise<Object>}
+ */
+export const sendTestPushNotification = async (token = null) => {
+  try {
+    const response = await api.post('/users/fcm-tokens/test', token ? { token } : {});
+    return response.data;
+  } catch (error) {
+    console.error('Error sending test push notification:', error);
+    throw error;
+  }
+};
+
