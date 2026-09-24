@@ -530,8 +530,6 @@ const cancelBooking = async (req, res) => {
 
     const hasStartedJourney = !!booking.journeyStartedAt;
     const isPaid = booking.paymentStatus === PAYMENT_STATUS.SUCCESS;
-    const isWalletOrOnline = ['wallet', 'razorpay', 'upi', 'card'].includes(booking.paymentMethod);
-    const isCash = booking.paymentMethod === 'cash';
 
     if (hasStartedJourney) {
       // SCENARIO: Worker/Vendor already started journey
@@ -546,7 +544,7 @@ const cancelBooking = async (req, res) => {
         cancellationFee = settingsPenalty;
       }
 
-      if (isPaid && isWalletOrOnline) {
+      if (isPaid) {
         // User paid upfront -> Refund (Total - Fee)
         refundAmount = Math.max(0, booking.finalAmount - cancellationFee);
         refundMessage = `Booking cancelled after ${hasReached ? 'professional arrival' : 'journey start'}. Refund of ₹${refundAmount} initiated (Cancellation Fee: ₹${cancellationFee} deducted).`;
@@ -562,7 +560,7 @@ const cancelBooking = async (req, res) => {
       // Policy: Full Refund
       cancellationFee = 0;
 
-      if (isPaid && isWalletOrOnline) {
+      if (isPaid) {
         refundAmount = booking.finalAmount;
         refundMessage = `Booking cancelled successfully. Full refund of ₹${refundAmount} initiated to your wallet.`;
       } else {

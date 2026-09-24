@@ -77,6 +77,11 @@ const settingsSchema = new mongoose.Schema({
     default: 5, // 5 km default search radius
     min: 1
   },
+  paymentTimeoutMinutes: {
+    type: Number,
+    default: 15, // Release vendor & re-search if unpaid after this many minutes
+    min: 1
+  },
   // Razorpay Settings
   razorpayKeyId: {
     type: String,

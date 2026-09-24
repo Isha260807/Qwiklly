@@ -69,7 +69,12 @@ app.use(cors({
 // CORS configuration finished above
 
 // Body parser middleware
-app.use(express.json({ limit: '50mb' }));
+// The `verify` callback stashes the raw request bytes on req.rawBody — needed to
+// validate the Razorpay webhook's HMAC signature, which is computed over the raw body.
+app.use(express.json({
+  limit: '50mb',
+  verify: (req, res, buf) => { req.rawBody = buf; }
+}));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 

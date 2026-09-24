@@ -4,7 +4,7 @@ const Settings = require('../../models/Settings');
 const Plan = require('../../models/Plan');
 const { validationResult } = require('express-validator');
 const { PAYMENT_STATUS, BOOKING_STATUS } = require('../../utils/constants');
-const { createOrder, verifyPayment, refundPayment } = require('../../services/razorpayService');
+const { createOrder, verifyPayment, verifyWebhookSignature, refundPayment } = require('../../services/razorpayService');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { recordBookingEarning } = require('../../services/earningTrackerService');
 
@@ -48,6 +48,22 @@ const createPaymentOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Please wait for a vendor to accept your booking before paying.'
+      });
+    }
+
+    // Reuse an already-created, still-unpaid order instead of minting a new one on
+    // every "Pay Now" click (Razorpay orders stay valid for repeated checkout attempts).
+    if (booking.razorpayOrderId) {
+      return res.status(200).json({
+        success: true,
+        message: 'Payment order already exists',
+        data: {
+          orderId: booking.razorpayOrderId,
+          amount: booking.finalAmount,
+          currency: 'INR',
+          key: process.env.RAZORPAY_KEY_ID,
+          bookingId: booking._id
+        }
       });
     }
 
@@ -101,7 +117,179 @@ const createPaymentOrder = async (req, res) => {
 };
 
 /**
- * Verify payment (webhook handler)
+ * Shared "payment succeeded" logic — called from both the client-invoked verify
+ * endpoint and the server-to-server Razorpay webhook, so payment truth never
+ * depends solely on the frontend staying online. Idempotent: safe to call twice
+ * for the same booking (e.g. webhook arrives after the client already verified).
+ */
+const finalizePaymentSuccess = async (booking, paymentId) => {
+  if (booking.paymentStatus === PAYMENT_STATUS.SUCCESS) {
+    return { alreadyProcessed: true };
+  }
+
+  // Update booking payment status
+  booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
+  booking.paymentMethod = 'online';
+  booking.razorpayPaymentId = paymentId;
+  booking.paymentId = paymentId;
+
+  // Update booking status based on current state
+  if ([BOOKING_STATUS.PENDING, BOOKING_STATUS.SEARCHING, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
+    booking.status = !booking.vendorId ? BOOKING_STATUS.SEARCHING : BOOKING_STATUS.CONFIRMED;
+    if (!booking.vendorId) {
+      booking.waveStartedAt = new Date();
+    }
+  } else if (booking.status === BOOKING_STATUS.WORK_DONE) {
+    booking.status = BOOKING_STATUS.COMPLETED;
+    booking.completedAt = new Date();
+  }
+
+  await booking.save();
+
+  // ── Atomic Coupon Consumption on Payment Success ──
+  if (booking.coupon && booking.coupon.couponId) {
+    try {
+      const Coupon = require('../../models/Coupon');
+      const CouponUsage = require('../../models/CouponUsage');
+      const usage = await CouponUsage.findOne({ bookingId: booking._id });
+      if (usage && usage.status !== 'CONSUMED') {
+        usage.status = 'CONSUMED';
+        usage.paymentId = paymentId;
+        await usage.save();
+
+        // Increment global coupon used count atomically
+        await Coupon.findByIdAndUpdate(booking.coupon.couponId, { $inc: { usedCount: 1 } });
+      }
+    } catch (couponUsageErr) {
+      console.error('[PaymentVerification] Error finalizing coupon usage:', couponUsageErr);
+    }
+  }
+
+  // ── Credit Vendor Wallet from VendorBill (single source of truth) ──
+  const Transaction = require('../../models/Transaction');
+  const Vendor = require('../../models/Vendor');
+  const VendorBill = require('../../models/VendorBill');
+
+  // User payment transaction
+  await Transaction.create({
+    userId: booking.userId,
+    bookingId: booking._id,
+    amount: booking.finalAmount,
+    type: 'payment',
+    paymentMethod: 'razorpay',
+    status: 'completed',
+    description: `Online payment for booking ${booking.bookingNumber}`,
+    referenceId: paymentId
+  });
+
+  // If booking does not have a vendor assigned yet (Upfront pre-paid booking), dispatch to nearby vendors now!
+  if (!booking.vendorId) {
+    const { dispatchBookingToVendors } = require('../bookingControllers/userBookingController');
+    if (typeof dispatchBookingToVendors === 'function') {
+      setImmediate(() => {
+        console.log(`[Payment] Payment successful for booking ${booking.bookingNumber}. Alerting nearby vendors now!`);
+        dispatchBookingToVendors(booking._id);
+      });
+    }
+  }
+
+  // Fetch VendorBill for earnings (only if bill exists = post-completion payment)
+  const bill = await VendorBill.findOne({ bookingId: booking._id });
+
+  if (bill && booking.vendorId) {
+    const vendorEarning = bill.vendorTotalEarning;
+
+    // Mark bill as paid
+    bill.status = 'paid';
+    bill.paidAt = new Date();
+    await bill.save();
+
+    // Online payment: only earnings increase, NO dues (platform holds the money)
+    await Vendor.findByIdAndUpdate(booking.vendorId, {
+      $inc: { 'wallet.earnings': vendorEarning }
+    });
+
+    // Earnings credit transaction
+    if (vendorEarning > 0) {
+      await Transaction.create({
+        vendorId: booking.vendorId,
+        bookingId: booking._id,
+        amount: vendorEarning,
+        type: 'earnings_credit',
+        paymentMethod: 'system',
+        status: 'completed',
+        description: `Earnings ₹${vendorEarning} credited for booking ${booking.bookingNumber} (online payment)`,
+        metadata: {
+          type: 'earnings_increase',
+          billId: bill._id.toString(),
+          serviceEarning: bill.vendorServiceEarning,
+          partsEarning: bill.vendorPartsEarning
+        }
+      });
+    }
+
+    console.log(`[Payment] Credited ₹${vendorEarning} to vendor ${booking.vendorId}`);
+  }
+
+  // Record stats in the Daily Earning Tracker (Async)
+  recordBookingEarning({
+    date: new Date(),
+    totalRevenue: Number(bill ? bill.grandTotal : booking.finalAmount) || 0,
+    platformCommission: Number(bill ? bill.companyRevenue : (booking.finalAmount * 0.2)) || 0,
+    vendorEarnings: Number(bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8)) || 0,
+    totalGST: Number(bill ? bill.totalGST : 0) || 0,
+    totalTDS: 0 // Tracked in withdrawals
+  }).catch(err => console.error('[Payment] Daily tracker failed:', err));
+
+  // Send notification to user
+  await createNotification({
+    userId: booking.userId,
+    type: 'payment_success',
+    title: 'Payment Successful',
+    message: `Payment of ₹${booking.finalAmount} for booking ${booking.bookingNumber} was successful. Thank you!`,
+    relatedId: booking._id,
+    relatedType: 'payment',
+    priority: 'high'
+  });
+
+  // Notify vendor & worker
+  let vendorTitle = 'Booking Confirmed';
+  let vendorMsg = `Payment received for booking ${booking.bookingNumber}. The service is now confirmed.`;
+
+  if (booking.status === BOOKING_STATUS.COMPLETED) {
+    vendorTitle = 'Payment Received (Online)';
+    vendorMsg = `User paid ₹${booking.finalAmount} online for booking ${booking.bookingNumber}. Job Completed!`;
+  }
+
+  if (booking.vendorId) {
+    await createNotification({
+      vendorId: booking.vendorId,
+      type: 'payment_success',
+      title: vendorTitle,
+      message: vendorMsg,
+      relatedId: booking._id,
+      relatedType: 'booking',
+      priority: 'high'
+    });
+  }
+
+  if (booking.workerId) {
+    await createNotification({
+      workerId: booking.workerId,
+      type: 'payment_success',
+      title: vendorTitle,
+      message: vendorMsg,
+      relatedId: booking._id,
+      relatedType: 'booking',
+      priority: 'high'
+    });
+  }
+
+  return { alreadyProcessed: false };
+};
+
+/**
+ * Verify payment (client-invoked, right after Razorpay checkout succeeds)
  */
 const verifyPaymentWebhook = async (req, res) => {
   try {
@@ -131,163 +319,7 @@ const verifyPaymentWebhook = async (req, res) => {
       });
     }
 
-    // Update booking payment status
-    booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
-    booking.paymentMethod = 'online';
-    booking.razorpayPaymentId = razorpay_payment_id;
-    booking.paymentId = razorpay_payment_id;
-
-    // Update booking status based on current state
-    if ([BOOKING_STATUS.PENDING, BOOKING_STATUS.SEARCHING, BOOKING_STATUS.AWAITING_PAYMENT].includes(booking.status)) {
-      booking.status = !booking.vendorId ? BOOKING_STATUS.SEARCHING : BOOKING_STATUS.CONFIRMED;
-      if (!booking.vendorId) {
-        booking.waveStartedAt = new Date();
-      }
-    } else if (booking.status === BOOKING_STATUS.WORK_DONE) {
-      booking.status = BOOKING_STATUS.COMPLETED;
-      booking.completedAt = new Date();
-    }
-
-    await booking.save();
-
-    // ── Atomic Coupon Consumption on Payment Success ──
-    if (booking.coupon && booking.coupon.couponId) {
-      try {
-        const Coupon = require('../../models/Coupon');
-        const CouponUsage = require('../../models/CouponUsage');
-        const usage = await CouponUsage.findOne({ bookingId: booking._id });
-        if (usage && usage.status !== 'CONSUMED') {
-          usage.status = 'CONSUMED';
-          usage.paymentId = razorpay_payment_id;
-          await usage.save();
-
-          // Increment global coupon used count atomically
-          await Coupon.findByIdAndUpdate(booking.coupon.couponId, { $inc: { usedCount: 1 } });
-        }
-      } catch (couponUsageErr) {
-        console.error('[PaymentVerification] Error finalizing coupon usage:', couponUsageErr);
-      }
-    }
-
-    // ── Credit Vendor Wallet from VendorBill (single source of truth) ──
-    const Transaction = require('../../models/Transaction');
-    const Vendor = require('../../models/Vendor');
-    const VendorBill = require('../../models/VendorBill');
-
-    // User payment transaction
-    await Transaction.create({
-      userId: booking.userId,
-      bookingId: booking._id,
-      amount: booking.finalAmount,
-      type: 'payment',
-      paymentMethod: 'razorpay',
-      status: 'completed',
-      description: `Online payment for booking ${booking.bookingNumber}`,
-      referenceId: razorpay_payment_id
-    });
-
-    // If booking does not have a vendor assigned yet (Upfront pre-paid booking), dispatch to nearby vendors now!
-    if (!booking.vendorId) {
-      const { dispatchBookingToVendors } = require('../bookingControllers/userBookingController');
-      if (typeof dispatchBookingToVendors === 'function') {
-        setImmediate(() => {
-          console.log(`[verifyPaymentWebhook] Payment successful for booking ${booking.bookingNumber}. Alerting nearby vendors now!`);
-          dispatchBookingToVendors(booking._id);
-        });
-      }
-    }
-
-    // Fetch VendorBill for earnings (only if bill exists = post-completion payment)
-    const bill = await VendorBill.findOne({ bookingId: booking._id });
-
-    if (bill && booking.vendorId) {
-      const vendorEarning = bill.vendorTotalEarning;
-
-      // Mark bill as paid
-      bill.status = 'paid';
-      bill.paidAt = new Date();
-      await bill.save();
-
-      // Online payment: only earnings increase, NO dues (platform holds the money)
-      await Vendor.findByIdAndUpdate(booking.vendorId, {
-        $inc: { 'wallet.earnings': vendorEarning }
-      });
-
-      // Earnings credit transaction
-      if (vendorEarning > 0) {
-        await Transaction.create({
-          vendorId: booking.vendorId,
-          bookingId: booking._id,
-          amount: vendorEarning,
-          type: 'earnings_credit',
-          paymentMethod: 'system',
-          status: 'completed',
-          description: `Earnings ₹${vendorEarning} credited for booking ${booking.bookingNumber} (online payment)`,
-          metadata: {
-            type: 'earnings_increase',
-            billId: bill._id.toString(),
-            serviceEarning: bill.vendorServiceEarning,
-            partsEarning: bill.vendorPartsEarning
-          }
-        });
-      }
-
-      console.log(`[Payment] Credited ₹${vendorEarning} to vendor ${booking.vendorId}`);
-    }
-
-    // Record stats in the Daily Earning Tracker (Async)
-    recordBookingEarning({
-      date: new Date(),
-      totalRevenue: Number(bill ? bill.grandTotal : booking.finalAmount) || 0,
-      platformCommission: Number(bill ? bill.companyRevenue : (booking.finalAmount * 0.2)) || 0,
-      vendorEarnings: Number(bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8)) || 0,
-      totalGST: Number(bill ? bill.totalGST : 0) || 0,
-      totalTDS: 0 // Tracked in withdrawals
-    }).catch(err => console.error('[Payment] Daily tracker failed:', err));
-
-    // Send notification to user
-    await createNotification({
-      userId: booking.userId,
-      type: 'payment_success',
-      title: 'Payment Successful',
-      message: `Payment of ₹${booking.finalAmount} for booking ${booking.bookingNumber} was successful. Thank you!`,
-      relatedId: booking._id,
-      relatedType: 'payment',
-      priority: 'high'
-    });
-
-    // Notify vendor & worker
-    let vendorTitle = 'Booking Confirmed';
-    let vendorMsg = `Payment received for booking ${booking.bookingNumber}. The service is now confirmed.`;
-
-    if (booking.status === BOOKING_STATUS.COMPLETED) {
-      vendorTitle = 'Payment Received (Online)';
-      vendorMsg = `User paid ₹${booking.finalAmount} online for booking ${booking.bookingNumber}. Job Completed!`;
-    }
-
-    if (booking.vendorId) {
-      await createNotification({
-        vendorId: booking.vendorId,
-        type: 'payment_success',
-        title: vendorTitle,
-        message: vendorMsg,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high'
-      });
-    }
-
-    if (booking.workerId) {
-      await createNotification({
-        workerId: booking.workerId,
-        type: 'payment_success',
-        title: vendorTitle,
-        message: vendorMsg,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high'
-      });
-    }
+    await finalizePaymentSuccess(booking, razorpay_payment_id);
 
     res.status(200).json({
       success: true,
@@ -299,6 +331,49 @@ const verifyPaymentWebhook = async (req, res) => {
       success: false,
       message: 'Failed to verify payment'
     });
+  }
+};
+
+/**
+ * Razorpay webhook (server-to-server) — the authoritative source of payment truth,
+ * independent of whether the client stayed online long enough to call /verify.
+ */
+const handleRazorpayWebhook = async (req, res) => {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    const settings = await Settings.findOne({ type: 'global' }).select('razorpayWebhookSecret').lean();
+    const secret = settings?.razorpayWebhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    if (!secret) {
+      console.error('[RazorpayWebhook] No webhook secret configured — rejecting.');
+      return res.status(400).json({ success: false, message: 'Webhook not configured' });
+    }
+
+    const isValid = verifyWebhookSignature(req.rawBody, signature, secret);
+    if (!isValid) {
+      console.warn('[RazorpayWebhook] Invalid signature received.');
+      return res.status(400).json({ success: false, message: 'Invalid signature' });
+    }
+
+    const event = req.body?.event;
+    const paymentEntity = req.body?.payload?.payment?.entity;
+
+    if ((event === 'payment.captured' || event === 'order.paid') && paymentEntity?.order_id) {
+      const booking = await Booking.findOne({ razorpayOrderId: paymentEntity.order_id });
+      if (booking) {
+        await finalizePaymentSuccess(booking, paymentEntity.id);
+      } else {
+        console.warn(`[RazorpayWebhook] No booking found for order ${paymentEntity.order_id}`);
+      }
+    }
+
+    // Always ack quickly — Razorpay retries on non-200
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('[RazorpayWebhook] Error:', error);
+    // Still ack so Razorpay doesn't hammer retries for a local bug; the payment
+    // remains reconcilable via getPaymentDetails/admin tooling if needed.
+    res.status(200).json({ success: false });
   }
 };
 
@@ -759,6 +834,7 @@ const verifyPlanPayment = async (req, res) => {
 module.exports = {
   createPaymentOrder,
   verifyPaymentWebhook,
+  handleRazorpayWebhook,
   processWalletPayment,
   processRefund,
   getPaymentHistory,

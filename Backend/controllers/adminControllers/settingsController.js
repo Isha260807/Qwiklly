@@ -49,7 +49,7 @@ exports.updateSettings = async (req, res, next) => {
       // Support Settings
       supportEmail, supportPhone, supportWhatsapp,
       // Booking Timing
-      maxSearchTime, waveDuration, searchRadius,
+      maxSearchTime, waveDuration, searchRadius, paymentTimeoutMinutes,
       // Payment Control
       isOnlinePaymentEnabled,
       // Dynamic Booking Slots Configuration
@@ -77,6 +77,10 @@ exports.updateSettings = async (req, res, next) => {
         cloudinaryCloudName,
         cloudinaryApiKey,
         cloudinaryApiSecret,
+        maxSearchTime,
+        waveDuration,
+        searchRadius,
+        paymentTimeoutMinutes,
         slotStartHour,
         slotEndHour,
         slotIntervalMins,
@@ -127,6 +131,7 @@ exports.updateSettings = async (req, res, next) => {
       if (maxSearchTime !== undefined) settings.maxSearchTime = maxSearchTime;
       if (waveDuration !== undefined) settings.waveDuration = waveDuration;
       if (searchRadius !== undefined) settings.searchRadius = searchRadius;
+      if (paymentTimeoutMinutes !== undefined) settings.paymentTimeoutMinutes = paymentTimeoutMinutes;
       if (isOnlinePaymentEnabled !== undefined) settings.isOnlinePaymentEnabled = isOnlinePaymentEnabled;
 
       // Dynamic Slots update

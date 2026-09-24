@@ -16,7 +16,7 @@
 
 const Booking = require('../models/Booking');
 const Vendor = require('../models/Vendor');
-const { BOOKING_STATUS } = require('../utils/constants');
+const { BOOKING_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { createNotification } = require('../controllers/notificationControllers/notificationController');
 
 const Settings = require('../models/Settings');
@@ -66,9 +66,12 @@ class BookingScheduler {
   scheduleNext(intervalMs) {
     if (this.intervalId) clearTimeout(this.intervalId);
     this.intervalId = setTimeout(async () => {
-      const hadWork = await this.processWaves();
+      const [hadWaveWork, hadTimeoutWork] = await Promise.all([
+        this.processWaves(),
+        this.processPaymentTimeouts()
+      ]);
       // Adaptive interval: if idle, slow down; if active, stay fast
-      this.scheduleNext(hadWork ? ACTIVE_INTERVAL_MS : IDLE_INTERVAL_MS);
+      this.scheduleNext((hadWaveWork || hadTimeoutWork) ? ACTIVE_INTERVAL_MS : IDLE_INTERVAL_MS);
     }, intervalMs);
   }
 
@@ -235,6 +238,88 @@ class BookingScheduler {
       return true; // Had work to do
     } catch (error) {
       console.error('[BookingScheduler] Error processing waves:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Release a vendor's acceptance and put the booking back into search if the
+   * customer hasn't paid within the admin-configured window.
+   * @returns {boolean} true if any booking was released, false if idle
+   */
+  async processPaymentTimeouts() {
+    try {
+      const globalSettings = await Settings.findOne({ type: 'global' }).select('paymentTimeoutMinutes').lean();
+      const timeoutMs = (globalSettings?.paymentTimeoutMinutes || 15) * 60 * 1000;
+      const cutoff = new Date(Date.now() - timeoutMs);
+
+      const timedOutBookings = await Booking.find({
+        status: BOOKING_STATUS.CONFIRMED,
+        vendorId: { $ne: null },
+        paymentStatus: PAYMENT_STATUS.PENDING,
+        acceptedAt: { $lte: cutoff }
+      });
+
+      if (timedOutBookings.length === 0) return false;
+
+      await Promise.all(timedOutBookings.map(async (booking) => {
+        try {
+          const releasedVendorId = booking.vendorId;
+
+          booking.vendorId = null;
+          booking.acceptedAt = null;
+          booking.status = BOOKING_STATUS.SEARCHING;
+          await booking.save();
+
+          // Release the vendor so they're available for new bookings again
+          await Vendor.findByIdAndUpdate(releasedVendorId, { availability: 'AVAILABLE' });
+
+          await createNotification({
+            vendorId: releasedVendorId,
+            type: 'booking_reassigned',
+            title: 'Booking Reassigned',
+            message: `Booking ${booking.bookingNumber} was reassigned — the customer didn't complete payment in time.`,
+            relatedId: booking._id,
+            relatedType: 'booking'
+          });
+
+          await createNotification({
+            userId: booking.userId,
+            type: 'booking_updated',
+            title: 'Still Searching',
+            message: `We're still finding a professional for booking ${booking.bookingNumber}. Please pay promptly once one accepts.`,
+            relatedId: booking._id,
+            relatedType: 'booking'
+          });
+
+          if (this.io) {
+            this.io.to(`user_${booking.userId}`).emit('booking_updated', {
+              bookingId: booking._id,
+              status: BOOKING_STATUS.SEARCHING,
+              message: 'Vendor released — searching for a new professional'
+            });
+            this.io.to(`vendor_${releasedVendorId}`).emit('booking_updated', {
+              bookingId: booking._id,
+              status: BOOKING_STATUS.SEARCHING,
+              message: 'Booking reassigned due to pending payment'
+            });
+          }
+
+          console.log(`[BookingScheduler] ${booking.bookingNumber}: Payment timeout — vendor ${releasedVendorId} released, re-searching.`);
+
+          // Re-run dispatch immediately rather than waiting for the next wave tick
+          const { dispatchBookingToVendors } = require('../controllers/bookingControllers/userBookingController');
+          if (typeof dispatchBookingToVendors === 'function') {
+            await dispatchBookingToVendors(booking._id);
+          }
+        } catch (err) {
+          console.error(`[BookingScheduler] Error releasing timed-out booking ${booking._id}:`, err);
+        }
+      }));
+
+      return true;
+    } catch (error) {
+      console.error('[BookingScheduler] Error processing payment timeouts:', error);
       return false;
     }
   }

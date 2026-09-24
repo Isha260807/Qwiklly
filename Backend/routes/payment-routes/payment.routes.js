@@ -6,6 +6,7 @@ const { isUser } = require('../../middleware/roleMiddleware');
 const {
   createPaymentOrder,
   verifyPaymentWebhook,
+  handleRazorpayWebhook,
   processWalletPayment,
   processRefund,
   getPaymentHistory,
@@ -37,6 +38,8 @@ const refundValidation = [
 // Routes
 router.post('/create-order', authenticate, isUser, createOrderValidation, createPaymentOrder);
 router.post('/verify', authenticate, isUser, verifyPaymentValidation, verifyPaymentWebhook);
+// Razorpay calls this directly (server-to-server) — signature verification is the auth, no user session exists.
+router.post('/webhook', handleRazorpayWebhook);
 router.post('/wallet', authenticate, isUser, walletPaymentValidation, processWalletPayment);
 router.post('/refund', authenticate, isUser, refundValidation, processRefund);
 router.get('/history', authenticate, isUser, getPaymentHistory);

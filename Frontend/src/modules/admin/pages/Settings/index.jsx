@@ -25,6 +25,7 @@ const AdminSettings = () => {
     maxSearchTime: 5,
     waveDuration: 60,
     searchRadius: 5,
+    paymentTimeoutMinutes: 15,
     isOnlinePaymentEnabled: true
   });
 
@@ -134,7 +135,10 @@ const AdminSettings = () => {
             platformFeePercentage: res.settings.platformFeePercentage ?? 0,
             vendorCashLimit: res.settings.vendorCashLimit ?? 0,
             cancellationPenalty: res.settings.cancellationPenalty !== undefined ? res.settings.cancellationPenalty : 0,
+            maxSearchTime: res.settings.maxSearchTime || 5,
+            waveDuration: res.settings.waveDuration || 60,
             searchRadius: res.settings.searchRadius || 5,
+            paymentTimeoutMinutes: res.settings.paymentTimeoutMinutes || 15,
             isOnlinePaymentEnabled: res.settings.isOnlinePaymentEnabled !== undefined ? res.settings.isOnlinePaymentEnabled : true
           });
           // Load billing settings
@@ -781,6 +785,12 @@ const AdminSettings = () => {
                           <input type="number" name="searchRadius" value={financialSettings.searchRadius} onChange={handleFinancialChange}
                             className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
                           <p className="text-[10px] text-gray-400 mt-1">Default distance to hunt for vendors around booking location</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Payment Timeout (Mins)</label>
+                          <input type="number" name="paymentTimeoutMinutes" value={financialSettings.paymentTimeoutMinutes} onChange={handleFinancialChange}
+                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
+                          <p className="text-[10px] text-gray-400 mt-1">If customer doesn't pay within this time after a vendor accepts, the vendor is released and search resumes</p>
                         </div>
                       </div>
                     </div>

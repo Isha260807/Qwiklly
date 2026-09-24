@@ -91,6 +91,20 @@ const verifyPayment = (razorpay_order_id, razorpay_payment_id, razorpay_signatur
 };
 
 /**
+ * Verify a Razorpay webhook's signature (server-to-server events, independent of the client)
+ */
+const verifyWebhookSignature = (rawBody, signature, secret) => {
+  if (!rawBody || !signature || !secret) return false;
+  const crypto = require('crypto');
+  const generated_signature = crypto
+    .createHmac('sha256', secret)
+    .update(rawBody)
+    .digest('hex');
+
+  return generated_signature === signature;
+};
+
+/**
  * Get payment details
  */
 const getPaymentDetails = async (paymentId) => {
@@ -291,6 +305,7 @@ const getQRCodePayments = async (id) => {
 module.exports = {
   createOrder,
   verifyPayment,
+  verifyWebhookSignature,
   getPaymentDetails,
   refundPayment,
   createQRCode,

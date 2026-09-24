@@ -587,6 +587,35 @@ const updateBookingStatus = async (req, res) => {
       if (status === BOOKING_STATUS.COMPLETED) {
         booking.completedAt = new Date();
       }
+
+      if (status === BOOKING_STATUS.CANCELLED) {
+        booking.cancelledAt = new Date();
+        booking.cancelledBy = 'vendor';
+
+        // Refund an already-paid booking — money must not get stuck when a vendor
+        // cancels a booking the customer has already paid for.
+        if (booking.paymentStatus === PAYMENT_STATUS.SUCCESS) {
+          const User = require('../../models/User');
+          const Transaction = require('../../models/Transaction');
+          const refundAmount = booking.finalAmount || 0;
+          const user = await User.findById(booking.userId);
+          if (user) {
+            user.wallet.balance = (user.wallet.balance || 0) + refundAmount;
+            await user.save();
+            await Transaction.create({
+              userId: user._id,
+              type: 'refund',
+              amount: refundAmount,
+              status: 'completed',
+              paymentMethod: 'wallet',
+              description: `Refund for booking #${booking.bookingNumber} cancelled by vendor`,
+              bookingId: booking._id,
+              balanceAfter: user.wallet.balance
+            });
+          }
+          booking.paymentStatus = PAYMENT_STATUS.REFUNDED;
+        }
+      }
     }
 
     // Update other fields
