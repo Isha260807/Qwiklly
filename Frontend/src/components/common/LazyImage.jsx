@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 
 /**
  * LazyImage Component - Optimized image loading with:
@@ -82,7 +82,7 @@ const LazyImage = ({
         style={{ backgroundColor: hasError ? '#f9fafb' : placeholder }}
       >
         <img
-          src="/Homestr-logo.png"
+          src="/Qwiklly-logo.png"
           alt="Broken image"
           className="w-12 h-12 object-contain opacity-40 grayscale"
         />

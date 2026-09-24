@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiMapPin, FiNavigation, FiX, FiCheckCircle, FiShield, FiSettings } from 'react-icons/fi';
 import { themeColors } from '../../theme';
@@ -31,13 +31,13 @@ const LocationAccessModal = ({
     if (locationDisabled) {
       return {
         title: "LOCATION IS OFF",
-        subtitle: "Please turn on your GPS to continue using Homestr features.",
+        subtitle: "Please turn on your GPS to continue using Qwiklly features.",
         icon: FiSettings
       };
     }
     return {
       title: "ALLOW GPS LOCATION",
-      subtitle: "Homestr needs your location to show available services and vendors near you.",
+      subtitle: "Qwiklly needs your location to show available services and vendors near you.",
       icon: FiNavigation
     };
   };

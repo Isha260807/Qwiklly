@@ -1,11 +1,11 @@
-import React from 'react';
+﻿import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiUsers, FiShield, FiClock, FiAward, FiGlobe, FiSmile, FiSmartphone } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import Logo from '../../../../components/common/Logo';
 import { themeColors } from '../../../../theme';
 
-const AboutHomestr = () => {
+const AboutQwiklly = () => {
   const navigate = useNavigate();
 
   const containerVariants = {
@@ -208,4 +208,4 @@ const AboutHomestr = () => {
   );
 };
 
-export default AboutHomestr;
+export default AboutQwiklly;

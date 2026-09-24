@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { FaUser, FaStore, FaHammer, FaCheckCircle, FaClock, FaArrowRight, FaChevronDown, FaChevronLeft, FaChevronRight, FaQuoteLeft, FaStar, FaHandshake, FaTruck, FaBroom, FaToolbox, FaBolt, FaPaintRoller, FaBug, FaAirFreshener, FaMapMarkerAlt, FaTv, FaTemperatureLow, FaTshirt, FaUtensils, FaMicrochip, FaGooglePlay, FaShieldAlt, FaMapMarker, FaFileInvoiceDollar, FaBars, FaTimes, FaMobileAlt, FaChartLine, FaTools } from 'react-icons/fa';
@@ -24,7 +24,7 @@ const LandingPage = () => {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
   const heroScale = useTransform(scrollYProgress, [0, 0.2], [1, 0.95]);
 
-  const PLAY_STORE_URL = "https://play.google.com/store/search?q=homestr&c=apps";
+  const PLAY_STORE_URL = "https://play.google.com/store/search?q=Qwiklly&c=apps";
 
   useEffect(() => {
     const handleScroll = () => {
@@ -292,7 +292,7 @@ const LandingPage = () => {
             >
               <div className="relative z-10 p-2 sm:p-4 bg-gray-50 rounded-[3rem] sm:rounded-[4rem] border border-gray-100 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] overflow-hidden group">
                 <div className="overflow-hidden rounded-[2.5rem] sm:rounded-[3.5rem] relative aspect-[4/5] lg:aspect-square">
-                  <img src="/hero-image.png" alt="Homestr Pro Electronics" className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
+                  <img src="/hero-image.png" alt="Qwiklly Pro Electronics" className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
                   <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 via-transparent to-transparent"></div>
                 </div>
                 
@@ -306,7 +306,7 @@ const LandingPage = () => {
                         <FaShieldAlt className="text-base sm:text-2xl" />
                      </div>
                      <div>
-                        <p className="text-[9px] sm:text-[10px] text-gray-400 font-normal leading-none mb-1">Homestr Certified</p>
+                        <p className="text-[9px] sm:text-[10px] text-gray-400 font-normal leading-none mb-1">Qwiklly Certified</p>
                         <p className="text-xs sm:text-sm font-normal whitespace-nowrap">Genuine Platform Parts</p>
                      </div>
                   </div>
@@ -355,7 +355,7 @@ const LandingPage = () => {
                 <div className="relative w-full max-w-[260px] sm:max-w-[280px] mb-10">
                    <div className="absolute inset-0 bg-brand/20 blur-[80px] rounded-full scale-50 group-hover:scale-100 transition-transform duration-700"></div>
                    <div className="relative z-10 p-2.5 sm:p-4 bg-gray-900 rounded-[2.5rem] sm:rounded-[3rem] border-[4px] sm:border-[8px] border-white shadow-2xl aspect-[9/18.5] overflow-hidden transform group-hover:rotate-1 transition-transform duration-500">
-                      <img src="/homster user.png" alt="Homestr User App" className="w-full h-full object-cover rounded-2xl brightness-95 group-hover:brightness-100 transition-all duration-500" />
+                      <img src="/homster user.png" alt="Qwiklly User App" className="w-full h-full object-cover rounded-2xl brightness-95 group-hover:brightness-100 transition-all duration-500" />
                       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/20 rounded-full"></div>
                    </div>
                 </div>
@@ -374,7 +374,7 @@ const LandingPage = () => {
                 <div className="relative w-full max-w-[260px] sm:max-w-[280px] mb-10">
                    <div className="absolute inset-0 bg-cyan-500/20 blur-[80px] rounded-full scale-50 group-hover:scale-100 transition-transform duration-700"></div>
                    <div className="relative z-10 p-2.5 sm:p-4 bg-gray-900 rounded-[2.5rem] sm:rounded-[3rem] border-[4px] sm:border-[8px] border-white shadow-2xl aspect-[9/18.5] overflow-hidden transform group-hover:-rotate-1 transition-transform duration-500">
-                      <img src="/homster vendor.png" alt="Homestr Vendor App" className="w-full h-full object-contain bg-gray-50 rounded-2xl brightness-95 group-hover:brightness-100 transition-all duration-500" />
+                      <img src="/homster vendor.png" alt="Qwiklly Vendor App" className="w-full h-full object-contain bg-gray-50 rounded-2xl brightness-95 group-hover:brightness-100 transition-all duration-500" />
                       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/20 rounded-full"></div>
                    </div>
                 </div>
@@ -393,7 +393,7 @@ const LandingPage = () => {
                 <div className="relative w-full max-w-[260px] sm:max-w-[280px] mb-10">
                    <div className="absolute inset-0 bg-orange-500/20 blur-[80px] rounded-full scale-50 group-hover:scale-100 transition-transform duration-700"></div>
                    <div className="relative z-10 p-2.5 sm:p-4 bg-gray-900 rounded-[2.5rem] sm:rounded-[3rem] border-[4px] sm:border-[8px] border-white shadow-2xl aspect-[9/18.5] overflow-hidden transform group-hover:rotate-1 transition-transform duration-500">
-                      <img src="/Homster xpert .png" alt="Homestr Xpert App" className="w-full h-full object-contain bg-gray-50 rounded-2xl brightness-95 group-hover:brightness-100 transition-all duration-500" />
+                      <img src="/Homster xpert .png" alt="Qwiklly Xpert App" className="w-full h-full object-contain bg-gray-50 rounded-2xl brightness-95 group-hover:brightness-100 transition-all duration-500" />
                       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/20 rounded-full"></div>
                    </div>
                 </div>
@@ -417,7 +417,7 @@ const LandingPage = () => {
                 {[
                     { title: "Real-time Tracking", desc: "Monitor your Xpert live on the map as they head to your location.", icon: <FaMapMarker />, bg: "https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?auto=format&fit=crop&q=80&w=800" },
                     { title: "Doorstep Billing", desc: "Verified invoices generated at home. Transparency in every charge.", icon: <FaFileInvoiceDollar />, bg: "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&q=80&w=800" },
-                    { title: "Platform Warranty", desc: "6-month warranty on every certified Homestr spare part replaced.", icon: <FaShieldAlt />, bg: "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&q=80&w=800" },
+                    { title: "Platform Warranty", desc: "6-month warranty on every certified Qwiklly spare part replaced.", icon: <FaShieldAlt />, bg: "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&q=80&w=800" },
                     { title: "Direct Connect", desc: "Call or chat with your assigned technician directly in-app.", icon: <FaHandshake />, bg: "https://images.unsplash.com/photo-1521791136064-7986c2959213?auto=format&fit=crop&q=80&w=800" }
                 ].map((item, i) => (
                     <div key={i} className="group relative p-8 sm:p-10 rounded-[3rem] sm:rounded-[4rem] overflow-hidden transition-all duration-700 hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.3)] hover:-translate-y-4 h-[350px] sm:h-[400px] flex flex-col justify-end text-left border border-gray-100">
@@ -558,7 +558,7 @@ const LandingPage = () => {
             <div className="flex flex-col items-center lg:items-start text-nowrap">
               <h4 className="text-[10px] font-normal text-brand mb-8 sm:mb-10">Contact Support</h4>
               <ul className="space-y-4 sm:space-y-6 text-gray-400 font-normal text-sm">
-                 <li>Email: <a href={`mailto:${settings?.supportEmail || 'support@homestr.in'}`} className="hover:text-white transition-all">{settings?.supportEmail || 'support@homestr.in'}</a></li>
+                 <li>Email: <a href={`mailto:${settings?.supportEmail || 'support@Qwiklly.in'}`} className="hover:text-white transition-all">{settings?.supportEmail || 'support@Qwiklly.in'}</a></li>
                  <li>Phone: <a href={`tel:${settings?.supportPhone || '+919876543210'}`} className="hover:text-white transition-all">{settings?.supportPhone || '+91 98765 43210'}</a></li>
                  <li className="text-[11px] opacity-50">
                     {settings?.companyAddress ? `${settings.companyAddress}, ${settings.companyCity}` : 'Indore, Madhya Pradesh'}

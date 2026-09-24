@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
@@ -333,7 +333,7 @@ const Account = () => {
               />
               <button
                 type="button"
-                onClick={() => navigate('/user/about-homestr')}
+                onClick={() => navigate('/user/about-Qwiklly')}
                 className="w-full flex items-center justify-between p-3 hover:bg-[#FCEBF3]/60 active:bg-[#FCEBF3] transition-colors text-left group cursor-pointer"
               >
                 <div className="flex items-center gap-3">

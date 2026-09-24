@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FiFacebook, FiTwitter, FiInstagram, FiLinkedin, FiMail, FiPhone, FiMapPin } from 'react-icons/fi';
 import Logo from '../../../../components/common/Logo';
@@ -28,7 +28,7 @@ const Footer = () => {
     {
       title: 'Company',
       links: [
-        { label: 'About Us', path: '/user/about-homestr' },
+        { label: 'About Us', path: '/user/about-Qwiklly' },
         { label: 'Help & Support', path: '/user/help-support' },
         { label: 'Cancellation Policy', path: '/user/cancellation-policy' },
         { label: 'Terms & Conditions', path: '#' },
@@ -49,8 +49,8 @@ const Footer = () => {
       title: 'Contact Us',
       links: [
         { 
-          label: settings?.supportEmail || settings?.companyEmail || 'support@homestr.in', 
-          path: `mailto:${settings?.supportEmail || settings?.companyEmail || 'support@homestr.in'}`, 
+          label: settings?.supportEmail || settings?.companyEmail || 'support@Qwiklly.in', 
+          path: `mailto:${settings?.supportEmail || settings?.companyEmail || 'support@Qwiklly.in'}`, 
           icon: FiMail 
         },
         { 
@@ -81,7 +81,7 @@ const Footer = () => {
               <Logo className="h-10 w-auto" />
             </Link>
             <p className="text-gray-500 text-sm leading-relaxed max-w-xs">
-              {settings?.companyName || 'Homestr'} is your one-stop destination for all home services. From electrical repairs to premium salon services, we bring the experts to your doorstep.
+              {settings?.companyName || 'Qwiklly'} is your one-stop destination for all home services. From electrical repairs to premium salon services, we bring the experts to your doorstep.
             </p>
             <div className="flex items-center gap-4">
               {[FiFacebook, FiTwitter, FiInstagram, FiLinkedin].map((Icon, i) => (
@@ -133,7 +133,7 @@ const Footer = () => {
         {/* Bottom Row */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <p className="text-gray-400 text-sm">
-            © {currentYear} {settings?.companyName || 'Homestr'}. All rights reserved.
+            © {currentYear} {settings?.companyName || 'Qwiklly'}. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
             <Link to="#" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">Privacy</Link>

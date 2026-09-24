@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react';
+﻿import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiLayers, FiHeadphones, FiPhoneCall, FiX, FiClock } from 'react-icons/fi';
 import { FaWallet, FaWhatsapp } from 'react-icons/fa';
@@ -37,7 +37,7 @@ const Profile = () => {
     { id: 7, label: 'Manage Address', icon: FiMapPin, path: '/vendor/address-management' },
     { id: 8, label: 'Settings', icon: FiSettings, path: '/vendor/settings' },
     { id: 'support', label: 'Help & Support', icon: FiHeadphones, onClick: () => setShowSupportModal(true) },
-    { id: 9, label: 'About Qwiklly', icon: null, customIcon: 'Q', path: '/vendor/about-homestr' },
+    { id: 9, label: 'About Qwiklly', icon: null, customIcon: 'Q', path: '/vendor/about-Qwiklly' },
   ];
 
   useLayoutEffect(() => {

@@ -1,4 +1,4 @@
-// Location Permission Checker Component for Homestr
+﻿// Location Permission Checker Component for Qwiklly
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import flutterBridge from '../../utils/flutterBridge';

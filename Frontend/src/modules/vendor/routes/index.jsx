@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+﻿import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/common/PageTransition';
 import BottomNav from '../components/layout/BottomNav';
@@ -58,7 +58,7 @@ const Notifications = lazyLoad(() => import('../pages/Notifications'));
 const SettlementRequest = lazyLoad(() => import('../pages/Wallet/SettlementRequest'));
 const SettlementHistory = lazyLoad(() => import('../pages/Wallet/SettlementHistory'));
 const MyRatings = lazyLoad(() => import('../pages/MyRatings'));
-const AboutHomestr = lazyLoad(() => import('../pages/AboutHomster'));
+const AboutQwiklly = lazyLoad(() => import('../pages/AboutHomster'));
 const BillingPage = lazyLoad(() => import('../pages/BillingPage'));
 const MyServices = lazyLoad(() => import('../pages/MyServices'));
 
@@ -116,7 +116,7 @@ const VendorRoutes = () => {
               <Route path="/services" element={<ProtectedRoute userType="vendor"><MyServices /></ProtectedRoute>} />
               <Route path="/my-services" element={<ProtectedRoute userType="vendor"><MyServices /></ProtectedRoute>} />
               <Route path="/my-ratings" element={<ProtectedRoute userType="vendor"><MyRatings /></ProtectedRoute>} />
-              <Route path="/about-homestr" element={<ProtectedRoute userType="vendor"><AboutHomestr /></ProtectedRoute>} />
+              <Route path="/about-Qwiklly" element={<ProtectedRoute userType="vendor"><AboutQwiklly /></ProtectedRoute>} />
             </Routes>
           </PageTransition>
         </Suspense>

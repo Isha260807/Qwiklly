@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+﻿import React, { memo } from 'react';
 import { AiFillStar } from 'react-icons/ai';
 import { themeColors } from '../../../../theme';
 
@@ -32,7 +32,7 @@ const ServiceWithRatingCard = memo(({ image, title, rating, reviews, price, orig
         ) : (
           <div className="w-full h-36 flex items-center justify-center bg-gray-50 border-b border-gray-100">
             <img
-              src="/Homestr-logo.png"
+              src="/Qwiklly-logo.png"
               alt="Placeholder"
               className="w-12 h-12 object-contain opacity-40 grayscale"
             />

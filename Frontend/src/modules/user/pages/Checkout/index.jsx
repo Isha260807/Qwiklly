@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { FiArrowLeft, FiShoppingCart, FiTrash2, FiMinus, FiPlus, FiPhone, FiHome, FiClock, FiEdit2, FiCheckCircle, FiInfo, FiCreditCard, FiShield, FiCheck } from 'react-icons/fi';
@@ -750,7 +750,7 @@ const Checkout = () => {
           key,
           amount: amount * 100,
           currency: 'INR',
-          name: 'Homestr',
+          name: 'Qwiklly',
           description: `Payment for ${plan.name} ${isUpgrade ? '(Upgrade)' : ''}`,
           order_id: orderId,
           handler: async (response) => {

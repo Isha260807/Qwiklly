@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiCheck, FiCalendar, FiClock, FiCreditCard, FiInfo, FiShield, FiStar, FiZap, FiCheckCircle, FiGift } from 'react-icons/fi';
 import { getPlans } from '../../services/planService';
@@ -433,7 +433,7 @@ const PlanDetails = () => {
             </p>
           </div>
           <p className="text-center text-gray-300 text-[10px] uppercase font-bold tracking-widest pb-10">
-            Homestr Subscription • Secure & Trusted
+            Qwiklly Subscription • Secure & Trusted
           </p>
         </div>
       </div>

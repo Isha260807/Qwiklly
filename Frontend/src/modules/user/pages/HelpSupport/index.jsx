@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FiArrowLeft, FiSearch, FiMessageCircle, FiMail, FiPhone,
@@ -14,7 +14,7 @@ const HelpSupport = () => {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [showContactForm, setShowContactForm] = useState(false);
   const [supportInfo, setSupportInfo] = useState({
-    email: 'support@homestr.com',
+    email: 'support@Qwiklly.com',
     phone: '',
     whatsapp: ''
   });
@@ -26,7 +26,7 @@ const HelpSupport = () => {
         if (response.data?.success && response.data?.settings) {
           const { supportEmail, supportPhone, supportWhatsapp } = response.data.settings;
           setSupportInfo({
-            email: supportEmail || 'support@homestr.com',
+            email: supportEmail || 'support@Qwiklly.com',
             phone: supportPhone || '',
             whatsapp: supportWhatsapp || ''
           });

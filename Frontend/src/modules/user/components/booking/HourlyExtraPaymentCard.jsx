@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { FiClock, FiAlertTriangle } from 'react-icons/fi';
 import { themeColors } from '../../../../theme';
@@ -41,7 +41,7 @@ export default function HourlyExtraPaymentCard({ booking, onPaid }) {
         amount: Math.round(orderResponse.data.amount * 100),
         currency: orderResponse.data.currency || 'INR',
         order_id: orderResponse.data.orderId,
-        name: 'Homestr',
+        name: 'Qwiklly',
         description: `Extra time charge for ${booking.serviceName}`,
         handler: async function (response) {
           toast.loading('Verifying payment...');

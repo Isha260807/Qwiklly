@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { FiUser, FiMail, FiPhone, FiArrowRight, FiChevronLeft, FiCheckCircle } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
@@ -99,7 +99,7 @@ const Signup = () => {
 
           toast.success(
             <div className="flex flex-col">
-              <span className="font-bold">Welcome to Homestr!</span>
+              <span className="font-bold">Welcome to Qwiklly!</span>
               <span className="text-xs">Your account has been created successfully.</span>
             </div>,
             { icon: <FiCheckCircle className="text-green-500" /> }
@@ -190,7 +190,7 @@ const Signup = () => {
 
         toast.success(
           <div className="flex flex-col">
-            <span className="font-bold">Welcome to Homestr!</span>
+            <span className="font-bold">Welcome to Qwiklly!</span>
             <span className="text-xs">Account created successfully.</span>
           </div>,
           { icon: <FiCheckCircle className="text-green-500" /> }
@@ -220,7 +220,7 @@ const Signup = () => {
           {step === 'details' ? 'Create Account' : 'Verify Phone'}
         </h2>
         <p className="mt-2 text-sm text-gray-600 animate-stagger-1 animate-fade-in">
-          {step === 'details' ? 'Join Homestr to start booking services' : `We've sent a 6-digit code to ${formData.phoneNumber}`}
+          {step === 'details' ? 'Join Qwiklly to start booking services' : `We've sent a 6-digit code to ${formData.phoneNumber}`}
         </p>
       </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import { optimizeCloudinaryUrl } from '../../utils/cloudinaryOptimize';
 
 /**
@@ -74,7 +74,7 @@ const OptimizedImage = ({
         style={{ width, height, ...style }}
       >
         <img
-          src="/Homestr-logo.png"
+          src="/Qwiklly-logo.png"
           alt="Image not available"
           className="w-12 h-12 object-contain opacity-40 grayscale"
         />
