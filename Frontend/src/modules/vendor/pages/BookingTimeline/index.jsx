@@ -171,6 +171,27 @@ const BookingTimeline = () => {
     });
   };
 
+  const handleCompleteBooking = async () => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Complete Booking',
+      message: 'Confirm and finalize booking completion?',
+      type: 'info',
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          await updateBookingStatus(id, 'completed');
+          toast.success('Booking completed successfully');
+          window.location.reload();
+        } catch (e) {
+          toast.error(e.response?.data?.message || 'Failed to complete booking');
+        } finally {
+          setActionLoading(false);
+        }
+      }
+    });
+  };
+
   const handleFinalSettlement = async () => {
     setConfirmDialog({
       isOpen: true,
@@ -308,7 +329,7 @@ const BookingTimeline = () => {
         if (booking?.status === 'completed' || booking?.status === 'COMPLETED') return null;
 
         if (booking?.isSelfJob && currentStage === 7) {
-          return () => navigate(`/vendor/booking/${id}/billing`);
+          return handleCompleteBooking;
         }
 
         if (!booking?.isSelfJob && currentStage === 7) {

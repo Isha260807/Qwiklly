@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { FiClock, FiPlay, FiSquare, FiAlertTriangle } from 'react-icons/fi';
+import { FiClock, FiPlay, FiSquare, FiAlertTriangle, FiCheckCircle } from 'react-icons/fi';
 import { startHourlyService, getHourlyServiceStatus, endHourlyService } from '../../services/bookingService';
 
 // Formats minutes into "Hh MMm"
@@ -13,51 +13,88 @@ const formatMinutes = (mins) => {
 
 /**
  * Vendor-side hourly service timer.
- * Server timestamps (serviceStartedAt) are the source of truth for elapsed time —
- * this component only re-derives elapsed = now - serviceStartedAt for display,
- * and periodically resyncs with the backend via getHourlyServiceStatus.
+ * Automatically ends service when booked duration finishes, and transitions to the next step.
  */
 export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded, onStarted, displayOnly = false, actionOnly = false }) {
   const [tracking, setTracking] = useState(hourlyTracking);
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [starting, setStarting] = useState(false);
   const [ending, setEnding] = useState(false);
-  const [endResult, setEndResult] = useState(null);
-  const notifiedRef = useRef(false);
+  const autoEndedRef = useRef(false);
 
   useEffect(() => {
     setTracking(hourlyTracking);
   }, [hourlyTracking]);
 
-  // Display-only tick, recomputed from the server-provided start timestamp
+  const handleEnd = useCallback(async (isAuto = false) => {
+    if (ending) return;
+    setEnding(true);
+    try {
+      const res = await endHourlyService(bookingId);
+      if (res.success) {
+        setTracking(prev => ({ ...prev, ...res.data, phase: 'ENDED', workDoneAllowed: true }));
+        if (isAuto) {
+          toast.success('Booked service time completed! Service ended automatically.');
+        } else {
+          toast.success('Service ended successfully');
+        }
+        onEnded?.(res.data);
+      } else {
+        if (!isAuto) {
+          toast.error(res.message || 'Failed to end service');
+        }
+      }
+    } catch (err) {
+      if (!isAuto) {
+        toast.error(err.response?.data?.message || 'Failed to end service');
+      }
+    } finally {
+      setEnding(false);
+    }
+  }, [bookingId, ending, onEnded]);
+
+  // Display tick & auto-end check when booked duration is reached
   useEffect(() => {
-    if (!tracking?.serviceStartedAt) return;
+    if (!tracking?.serviceStartedAt || tracking.phase !== 'SERVICE_STARTED') return;
     const started = new Date(tracking.serviceStartedAt).getTime();
-    const tick = () => setElapsedMinutes(Math.floor((Date.now() - started) / 60000));
+    const bookedMins = Number(tracking.bookedMinutes) || 0;
+    const totalMs = bookedMins * 60 * 1000;
+
+    const tick = () => {
+      const now = Date.now();
+      const elapsedMs = Math.max(0, now - started);
+      const elapsedM = Math.floor(elapsedMs / 60000);
+      setElapsedMinutes(Math.min(elapsedM, bookedMins));
+
+      // If time is up, trigger auto-end
+      if (elapsedMs >= totalMs && !autoEndedRef.current && bookedMins > 0) {
+        autoEndedRef.current = true;
+        handleEnd(true);
+      }
+    };
+
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [tracking?.serviceStartedAt]);
+  }, [tracking?.serviceStartedAt, tracking?.phase, tracking?.bookedMinutes, handleEnd]);
 
-  // Periodic resync with backend (authoritative), also flips phase server-side
-  // the first time booked duration is crossed.
+  // Periodic resync with backend
   useEffect(() => {
-    if (!tracking?.serviceStartedAt || tracking.phase === 'EXTRA_TIME' || tracking.phase === 'ENDED') return;
+    if (!tracking?.serviceStartedAt || tracking.phase === 'ENDED') return;
     const poll = async () => {
       try {
         const res = await getHourlyServiceStatus(bookingId);
-        if (res.success) {
+        if (res.success && res.data) {
           setTracking(prev => ({ ...prev, ...res.data }));
-          if (res.data.phase === 'BOOKED_TIME_COMPLETED' && !notifiedRef.current) {
-            notifiedRef.current = true;
-            toast('Booked service duration completed. Extra time will now be charged.', { icon: '⚠️', duration: 6000 });
+          if (res.data.phase === 'ENDED') {
+            onEnded?.(res.data);
           }
         }
       } catch (_) { /* non-fatal, retried on next tick */ }
     };
-    const interval = setInterval(poll, 15000);
+    const interval = setInterval(poll, 12000);
     return () => clearInterval(interval);
-  }, [bookingId, tracking?.serviceStartedAt, tracking?.phase]);
+  }, [bookingId, tracking?.serviceStartedAt, tracking?.phase, onEnded]);
 
   const handleStart = async () => {
     if (starting) return;
@@ -78,46 +115,16 @@ export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded,
     }
   };
 
-  const handleEnd = async () => {
-    if (ending) return;
-    setEnding(true);
-    try {
-      const res = await endHourlyService(bookingId);
-      if (res.success) {
-        setTracking(prev => ({ ...prev, ...res.data }));
-        setEndResult(res.data);
-        onEnded?.(res.data);
-      } else {
-        toast.error(res.message || 'Failed to end service');
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to end service');
-    } finally {
-      setEnding(false);
-    }
-  };
-
   if (!tracking?.isHourly) return null;
+
+  // If already ended, don't show timer controls
+  if (tracking.phase === 'ENDED') {
+    return null;
+  }
 
   // DISPLAY-ONLY MODE (Timer Banner)
   if (displayOnly) {
-    if (tracking.phase === 'EXTRA_TIME') {
-      return (
-        <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-2.5">
-          <div className="flex items-center gap-1.5 text-amber-700 font-bold text-xs mb-0.5">
-            <FiAlertTriangle className="w-3.5 h-3.5 shrink-0" />
-            <span>Extra Time Detected</span>
-          </div>
-          <div className="text-[10px] text-amber-800 space-y-0.5">
-            <div>Booked: {formatMinutes(tracking.bookedMinutes)} · Actual: {formatMinutes(tracking.actualDurationMinutes)}</div>
-            <div>Extra: {formatMinutes(tracking.extraDurationMinutes)} · Amount: ₹{tracking.extraAmount}</div>
-            <div className="italic text-[9px]">Waiting for customer payment before Work Done unlocks.</div>
-          </div>
-        </div>
-      );
-    }
-
-    if (tracking.phase === 'SERVICE_STARTED' || tracking.phase === 'BOOKED_TIME_COMPLETED') {
+    if (tracking.phase === 'SERVICE_STARTED') {
       return (
         <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-between shadow-xs">
           <div className="flex items-center gap-2 min-w-0">
@@ -128,12 +135,9 @@ export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded,
             <span className="text-[11px] font-bold text-slate-700 truncate">Active Service Timer</span>
           </div>
           <div className="flex items-center gap-1 text-xs font-bold text-slate-900 shrink-0">
-            <FiClock className={`w-3.5 h-3.5 ${tracking.phase === 'BOOKED_TIME_COMPLETED' ? 'text-amber-600' : 'text-slate-500'}`} />
+            <FiClock className="w-3.5 h-3.5 text-slate-500" />
             <span>{formatMinutes(elapsedMinutes)}</span>
             <span className="text-slate-400 font-normal text-[11px]">/ {formatMinutes(tracking.bookedMinutes)}</span>
-            {tracking.phase === 'BOOKED_TIME_COMPLETED' && (
-              <span className="text-[10px] text-amber-700 bg-amber-100 px-1 py-0.5 rounded font-bold ml-0.5">Extra</span>
-            )}
           </div>
         </div>
       );
@@ -159,18 +163,10 @@ export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded,
       );
     }
 
-    if (tracking.phase === 'EXTRA_TIME') {
-      return (
-        <div className="flex-1 py-2 px-2.5 rounded-xl font-bold text-[11px] text-amber-700 bg-amber-50 border border-amber-200 flex items-center justify-center text-center">
-          <span>Extra Time Pending</span>
-        </div>
-      );
-    }
-
     return (
       <button
         type="button"
-        onClick={handleEnd}
+        onClick={() => handleEnd(false)}
         disabled={ending}
         className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs disabled:opacity-60 whitespace-nowrap"
         style={{ background: 'linear-gradient(135deg, #EF4444, #DC2626)' }}
@@ -197,22 +193,6 @@ export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded,
     );
   }
 
-  if (tracking.phase === 'EXTRA_TIME') {
-    return (
-      <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-2.5">
-        <div className="flex items-center gap-1.5 text-amber-700 font-bold text-xs mb-0.5">
-          <FiAlertTriangle className="w-3.5 h-3.5 shrink-0" />
-          <span>Extra Time Detected</span>
-        </div>
-        <div className="text-[10px] text-amber-800 space-y-0.5">
-          <div>Booked: {formatMinutes(tracking.bookedMinutes)} · Actual: {formatMinutes(tracking.actualDurationMinutes)}</div>
-          <div>Extra: {formatMinutes(tracking.extraDurationMinutes)} · Amount: ₹{tracking.extraAmount}</div>
-          <div className="italic text-[9px]">Waiting for customer payment before Work Done unlocks.</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="w-full space-y-2">
       <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex items-center justify-between shadow-xs">
@@ -224,17 +204,14 @@ export default function HourlyServiceTimer({ bookingId, hourlyTracking, onEnded,
           <span className="text-[11px] font-bold text-slate-700">Active Service Timer</span>
         </div>
         <div className="flex items-center gap-1 text-xs font-bold text-slate-900">
-          <FiClock className={`w-3.5 h-3.5 ${tracking.phase === 'BOOKED_TIME_COMPLETED' ? 'text-amber-600' : 'text-slate-500'}`} />
+          <FiClock className="w-3.5 h-3.5 text-slate-500" />
           <span>{formatMinutes(elapsedMinutes)}</span>
           <span className="text-slate-400 font-normal text-[11px]">/ {formatMinutes(tracking.bookedMinutes)}</span>
-          {tracking.phase === 'BOOKED_TIME_COMPLETED' && (
-            <span className="text-[10px] text-amber-700 bg-amber-100 px-1 py-0.5 rounded font-bold ml-0.5">Extra</span>
-          )}
         </div>
       </div>
       <button
         type="button"
-        onClick={handleEnd}
+        onClick={() => handleEnd(false)}
         disabled={ending}
         className="w-full py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs disabled:opacity-60"
         style={{ background: 'linear-gradient(135deg, #EF4444, #DC2626)' }}

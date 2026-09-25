@@ -1003,18 +1003,39 @@ const getHourlyServiceStatus = async (req, res) => {
       elapsedMinutes = Math.floor((endRef.getTime() - tracking.serviceStartedAt.getTime()) / 60000);
     }
 
+    // Auto-end service when booked time completes
     if (
       tracking.phase === 'SERVICE_STARTED' &&
-      elapsedMinutes >= tracking.bookedMinutes
+      elapsedMinutes >= (tracking.bookedMinutes || 0)
     ) {
-      tracking.phase = 'BOOKED_TIME_COMPLETED';
-      tracking.bookedTimeCompletedNotifiedAt = new Date();
+      const serviceEndedAt = new Date();
+      tracking.serviceEndedAt = serviceEndedAt;
+      tracking.actualDurationMinutes = tracking.bookedMinutes;
+      tracking.extraDurationMinutes = 0;
+      tracking.extraAmount = 0;
+      tracking.extraPaymentStatus = 'NOT_REQUIRED';
+      tracking.phase = 'ENDED';
+      tracking.workDoneAllowed = true;
       await booking.save();
 
       const io = req.app.get('io');
       if (io) {
-        io.to(`vendor_${vendorId}`).emit('hourly_booked_time_completed', { bookingId: booking._id });
-        io.to(`user_${booking.userId}`).emit('hourly_booked_time_completed', { bookingId: booking._id });
+        io.to(`vendor_${vendorId}`).emit('hourly_service_ended', {
+          bookingId: booking._id,
+          actualDurationMinutes: tracking.bookedMinutes,
+          extraDurationMinutes: 0,
+          extraAmount: 0,
+          extraPaymentRequired: false,
+          autoEnded: true
+        });
+        io.to(`user_${booking.userId}`).emit('hourly_service_ended', {
+          bookingId: booking._id,
+          actualDurationMinutes: tracking.bookedMinutes,
+          extraDurationMinutes: 0,
+          extraAmount: 0,
+          extraPaymentRequired: false,
+          autoEnded: true
+        });
       }
     }
 
@@ -1037,9 +1058,8 @@ const getHourlyServiceStatus = async (req, res) => {
 };
 
 /**
- * End the hourly service. Backend calculates actual duration and any extra
- * amount from serviceStartedAt/serviceEndedAt — never trusts client-supplied
- * durations. Idempotent: a second END call returns the already-computed result.
+ * End the hourly service. Backend calculates actual duration and marks service completed.
+ * Idempotent: a second END call returns the already-computed result.
  */
 const endHourlyService = async (req, res) => {
   try {
@@ -1058,84 +1078,63 @@ const endHourlyService = async (req, res) => {
     }
 
     // Idempotency: already ended, return the existing computed result
-    if (tracking.phase === 'EXTRA_TIME' || tracking.phase === 'ENDED') {
+    if (tracking.phase === 'ENDED' || tracking.phase === 'EXTRA_TIME') {
       return res.status(200).json({
         success: true,
         message: 'Service already ended',
         data: {
           phase: tracking.phase,
           actualDurationMinutes: tracking.actualDurationMinutes,
-          extraDurationMinutes: tracking.extraDurationMinutes,
-          extraAmount: tracking.extraAmount,
-          extraPaymentStatus: tracking.extraPaymentStatus,
-          workDoneAllowed: tracking.workDoneAllowed
+          extraDurationMinutes: tracking.extraDurationMinutes || 0,
+          extraAmount: tracking.extraAmount || 0,
+          extraPaymentStatus: tracking.extraPaymentStatus || 'NOT_REQUIRED',
+          workDoneAllowed: true
         }
       });
     }
 
     const serviceEndedAt = new Date();
-    const actualDurationMinutes = Math.max(0, Math.ceil((serviceEndedAt.getTime() - tracking.serviceStartedAt.getTime()) / 60000));
-    const extraDurationMinutes = Math.max(0, actualDurationMinutes - tracking.bookedMinutes);
+    const rawElapsedMinutes = Math.max(0, Math.ceil((serviceEndedAt.getTime() - tracking.serviceStartedAt.getTime()) / 60000));
+    const actualDurationMinutes = Math.min(rawElapsedMinutes, tracking.bookedMinutes || rawElapsedMinutes);
 
     tracking.serviceEndedAt = serviceEndedAt;
     tracking.actualDurationMinutes = actualDurationMinutes;
-    tracking.extraDurationMinutes = extraDurationMinutes;
-
-    if (extraDurationMinutes > 0) {
-      const rate = tracking.extraHourlyRate || tracking.hourlyRate || 0;
-      tracking.extraAmount = parseFloat(((rate / 60) * extraDurationMinutes).toFixed(2));
-      tracking.extraPaymentStatus = 'PENDING';
-      tracking.phase = 'EXTRA_TIME';
-      tracking.workDoneAllowed = false;
-    } else {
-      tracking.extraAmount = 0;
-      tracking.extraPaymentStatus = 'NOT_REQUIRED';
-      tracking.phase = 'ENDED';
-      tracking.workDoneAllowed = true;
-    }
+    tracking.extraDurationMinutes = 0;
+    tracking.extraAmount = 0;
+    tracking.extraPaymentStatus = 'NOT_REQUIRED';
+    tracking.phase = 'ENDED';
+    tracking.workDoneAllowed = true;
 
     await booking.save();
 
     const io = req.app.get('io');
     if (io) {
+      io.to(`vendor_${vendorId}`).emit('hourly_service_ended', {
+        bookingId: booking._id,
+        actualDurationMinutes,
+        extraDurationMinutes: 0,
+        extraAmount: 0,
+        extraPaymentRequired: false
+      });
       io.to(`user_${booking.userId}`).emit('hourly_service_ended', {
         bookingId: booking._id,
         actualDurationMinutes,
-        extraDurationMinutes,
-        extraAmount: tracking.extraAmount,
-        extraPaymentRequired: extraDurationMinutes > 0
-      });
-    }
-
-    if (extraDurationMinutes > 0) {
-      const { createNotification } = require('../notificationControllers/notificationController');
-      await createNotification({
-        userId: booking.userId,
-        type: 'hourly_extra_payment_required',
-        title: 'Additional Service Payment Required',
-        message: `The service ran ${extraDurationMinutes} minutes beyond the booked time. Please pay ₹${tracking.extraAmount} extra.`,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high',
-        pushData: {
-          type: 'hourly_extra_payment_required',
-          bookingId: booking._id.toString(),
-          extraAmount: tracking.extraAmount,
-          link: `/user/booking/${booking._id}`
-        }
+        extraDurationMinutes: 0,
+        extraAmount: 0,
+        extraPaymentRequired: false
       });
     }
 
     res.status(200).json({
       success: true,
-      message: extraDurationMinutes > 0 ? 'Service ended. Extra time payment required.' : 'Service ended',
+      message: 'Service ended successfully',
       data: {
         phase: tracking.phase,
         actualDurationMinutes,
-        extraDurationMinutes,
-        extraAmount: tracking.extraAmount,
-        extraPaymentStatus: tracking.extraPaymentStatus,
-        workDoneAllowed: tracking.workDoneAllowed
+        extraDurationMinutes: 0,
+        extraAmount: 0,
+        extraPaymentStatus: 'NOT_REQUIRED',
+        workDoneAllowed: true
       }
     });
   } catch (error) {
@@ -1239,99 +1238,44 @@ const completeSelfJob = async (req, res) => {
     const partsGstPct = settings?.partsGstPercentage ?? 0;
 
     // ═══════════════════════════════════════════
-    // STEP 1: BUILD LINE ITEMS
+    // STEP 1: ORIGINAL SERVICE ONLY (No extra services or parts)
     // ═══════════════════════════════════════════
-
-    // -- Original booking service (from basePrice) --
-    const originalBase = Number(booking.basePrice) || 0;
+    const originalBase = Number(booking.basePrice) || (Number(booking.finalAmount) ? Number(booking.finalAmount) / (1 + serviceGstPct / 100) : 0);
     const originalGST = parseFloat(((originalBase * serviceGstPct) / 100).toFixed(2));
-
-    // -- Vendor-added services --
-    const billServices = (billDetails?.services || []).map(svc => {
-      const price = Number(svc.price) || 0;
-      const qty = Number(svc.quantity) || 1;
-      const base = price * qty;
-      const gst = parseFloat(((base * serviceGstPct) / 100).toFixed(2));
-      return {
-        catalogId: svc.catalogId || undefined,
-        name: svc.name || 'Service',
-        price,
-        gstPercentage: serviceGstPct,
-        quantity: qty,
-        gstAmount: gst,
-        total: parseFloat((base + gst).toFixed(2)),
-        isOriginal: false
-      };
-    });
-
-    // -- Parts --
-    const billParts = (billDetails?.parts || []).map(part => {
-      const price = Number(part.price) || 0;
-      const qty = Number(part.quantity) || 1;
-      const pGstPct = (part.gstPercentage != null) ? Number(part.gstPercentage) : partsGstPct;
-      const base = price * qty;
-      const gst = parseFloat(((base * pGstPct) / 100).toFixed(2));
-      return {
-        catalogId: part.catalogId || undefined,
-        name: part.name || 'Part',
-        price,
-        gstPercentage: pGstPct,
-        quantity: qty,
-        gstAmount: gst,
-        total: parseFloat((base + gst).toFixed(2))
-      };
-    });
-
-    // ═══════════════════════════════════════════
-    // STEP 2: CALCULATE BASE TOTALS
-    // ═══════════════════════════════════════════
-
-    const vendorServiceBase = billServices.reduce((s, sv) => s + (sv.price * sv.quantity), 0);
-    const totalServiceBase = parseFloat((originalBase + vendorServiceBase).toFixed(2));
-    const totalPartsBase = parseFloat(billParts.reduce((s, p) => s + (p.price * p.quantity), 0).toFixed(2));
-
-    // ═══════════════════════════════════════════
-    // STEP 3: CALCULATE GST TOTALS
-    // ═══════════════════════════════════════════
-
-    const vendorServiceGST = parseFloat(billServices.reduce((s, sv) => s + sv.gstAmount, 0).toFixed(2));
-    const partsGST = parseFloat(billParts.reduce((s, p) => s + p.gstAmount, 0).toFixed(2));
-    const totalGST = parseFloat((originalGST + vendorServiceGST + partsGST).toFixed(2));
-
-    // ═══════════════════════════════════════════
-    // STEP 4: FINAL BILL (what user pays)
-    // ═══════════════════════════════════════════
-
     const visitingCharges = Number(booking.visitingCharges) || 0;
-    const grandTotal = parseFloat((totalServiceBase + totalPartsBase + totalGST + visitingCharges).toFixed(2));
+
+    const totalServiceBase = parseFloat(originalBase.toFixed(2));
+    const totalPartsBase = 0;
+    const vendorServiceBase = 0;
+    const vendorServiceGST = 0;
+    const partsGST = 0;
+    const totalGST = originalGST;
+
+    const grandTotal = booking.finalAmount || parseFloat((totalServiceBase + totalGST + visitingCharges).toFixed(2));
 
     // ═══════════════════════════════════════════
-    // STEP 5: REVENUE SPLIT (internal only)
+    // STEP 2: REVENUE SPLIT (Vendor % on service base)
     // ═══════════════════════════════════════════
-    // Vendor % is applied ONLY on base — never on GST
-
     const vendorServiceEarning = parseFloat(((totalServiceBase * serviceSplitPct) / 100).toFixed(2));
-    const vendorPartsEarning = parseFloat(((totalPartsBase * partsSplitPct) / 100).toFixed(2));
-    const vendorTotalEarning = parseFloat((vendorServiceEarning + vendorPartsEarning).toFixed(2));
+    const vendorPartsEarning = 0;
+    const vendorTotalEarning = vendorServiceEarning;
     const companyRevenue = parseFloat((grandTotal - vendorTotalEarning).toFixed(2));
 
     // ═══════════════════════════════════════════
-    // STEP 6: PERSIST BILL
+    // STEP 3: PERSIST BILL
     // ═══════════════════════════════════════════
-
-    // Include original service as line item for completeness
     const allServices = [
       {
-        name: booking.serviceName || 'Original Service',
+        name: booking.serviceName || 'Service',
         price: originalBase,
         gstPercentage: serviceGstPct,
         quantity: 1,
         gstAmount: originalGST,
         total: parseFloat((originalBase + originalGST).toFixed(2)),
         isOriginal: true
-      },
-      ...billServices
+      }
     ];
+    const billParts = [];
 
     const bill = await VendorBill.create({
       bookingId: booking._id,
@@ -1343,15 +1287,15 @@ const completeSelfJob = async (req, res) => {
 
       // Base totals
       originalServiceBase: originalBase,
-      vendorServiceBase,
+      vendorServiceBase: 0,
       totalServiceBase,
-      totalPartsBase,
+      totalPartsBase: 0,
       visitingCharges,
 
       // GST totals
       originalGST,
-      vendorServiceGST,
-      partsGST,
+      vendorServiceGST: 0,
+      partsGST: 0,
       totalGST,
 
       // Bill total
@@ -1367,7 +1311,7 @@ const completeSelfJob = async (req, res) => {
 
       // Revenue split
       vendorServiceEarning,
-      vendorPartsEarning,
+      vendorPartsEarning: 0,
       vendorTotalEarning,
       companyRevenue,
 

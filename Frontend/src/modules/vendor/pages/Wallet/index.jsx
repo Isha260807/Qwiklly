@@ -1,6 +1,15 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiDollarSign, FiArrowUp, FiArrowDown, FiArrowRight, FiClock, FiCheckCircle, FiAlertCircle, FiSend } from 'react-icons/fi';
+import { 
+  FiDollarSign, 
+  FiArrowUp, 
+  FiArrowRight, 
+  FiClock, 
+  FiCheckCircle, 
+  FiAlertCircle, 
+  FiTrendingUp,
+  FiCreditCard
+} from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
@@ -13,14 +22,9 @@ const Wallet = () => {
   const [loading, setLoading] = useState(true);
   const [wallet, setWallet] = useState({
     balance: 0,
-    dues: 0,
     earnings: 0,
-    amountDue: 0,
-    totalCashCollected: 0,
-    totalSettled: 0,
     totalWithdrawn: 0,
-    pendingSettlements: 0,
-    cashLimit: 10000
+    pendingSettlements: 0
   });
   const [transactions, setTransactions] = useState([]);
   const [filter, setFilter] = useState('all');
@@ -76,20 +80,16 @@ const Wallet = () => {
 
   const getTransactionIcon = (type) => {
     switch (type) {
-      case 'cash_collected':
-        return <FiArrowDown className="w-5 h-5 text-red-500" />;
       case 'earnings_credit':
-        return <FiArrowUp className="w-5 h-5 text-green-500" />;
-      case 'settlement':
-        return <FiSend className="w-5 h-5 text-blue-500" />;
+        return <FiArrowUp className="w-5 h-5 text-emerald-600" />;
       case 'withdrawal':
-        return <FiDollarSign className="w-5 h-5 text-purple-500" />;
+        return <FiDollarSign className="w-5 h-5 text-purple-600" />;
       case 'tds_deduction':
-        return <FiAlertCircle className="w-5 h-5 text-amber-500" />;
+        return <FiAlertCircle className="w-5 h-5 text-amber-600" />;
       case 'commission':
-        return <FiDollarSign className="w-5 h-5 text-orange-500" />;
+        return <FiDollarSign className="w-5 h-5 text-orange-600" />;
       case 'platform_fee':
-        return <FiAlertCircle className="w-5 h-5 text-rose-500" />;
+        return <FiAlertCircle className="w-5 h-5 text-rose-600" />;
       default:
         return <FiDollarSign className="w-5 h-5 text-gray-500" />;
     }
@@ -97,12 +97,8 @@ const Wallet = () => {
 
   const getTransactionLabel = (type) => {
     switch (type) {
-      case 'cash_collected':
-        return 'Cash Collected';
       case 'earnings_credit':
         return 'Earnings Credited';
-      case 'settlement':
-        return 'Settlement Paid';
       case 'withdrawal':
         return 'Withdrawal Payout';
       case 'tds_deduction':
@@ -112,11 +108,12 @@ const Wallet = () => {
       case 'platform_fee':
         return 'Platform Charge';
       default:
-        return type;
+        return type?.replace(/_/g, ' ') || 'Transaction';
     }
   };
 
   const formatDate = (dateStr) => {
+    if (!dateStr) return '';
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-IN', {
       day: 'numeric',
@@ -129,140 +126,76 @@ const Wallet = () => {
     return <LogoLoader />;
   }
 
+  const lifetimeEarnings = (wallet.earnings || 0) + (wallet.totalWithdrawn || 0);
+
   return (
     <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
       <Header title="Wallet" />
 
-      <main className="px-4 py-3">
-        {/* Earnings Card */}
-        <div className="rounded-xl p-4 shadow-sm relative overflow-hidden mb-3 border border-[#E8D9DF]" style={{ background: '#FCEBF3' }}>
+      <main className="px-4 py-3 max-w-lg mx-auto">
+        {/* Available Earnings Card */}
+        <div 
+          className="rounded-2xl p-4 shadow-sm relative overflow-hidden mb-3 border border-[#E8D9DF]" 
+          style={{ background: 'linear-gradient(135deg, #FCEBF3 0%, #FFF5F9 100%)' }}
+        >
           <div className="relative z-10">
             <div className="flex justify-between items-start mb-3">
               <div>
-                <p className="text-[#6F5A64] text-xs font-medium mb-0.5">Available Earnings</p>
-                <p className="text-2xl font-bold text-[#720C3E]">₹{wallet.earnings?.toLocaleString() || 0}</p>
+                <p className="text-[#6F5A64] text-xs font-semibold mb-1 uppercase tracking-wider">Available Balance</p>
+                <p className="text-3xl font-extrabold text-[#720C3E]">₹{(wallet.earnings || 0).toLocaleString()}</p>
+                <p className="text-[11px] text-[#6F5A64]/80 mt-1">Available for immediate payout</p>
               </div>
-              <div className="p-1.5 rounded-lg bg-white/70">
-                <FiDollarSign className="w-5 h-5 text-[#720C3E]" />
+              <div className="p-2.5 rounded-xl bg-white shadow-xs border border-[#E8D9DF]">
+                <FiDollarSign className="w-6 h-6 text-[#720C3E]" />
               </div>
             </div>
+            
             <button
               onClick={() => navigate('/vendor/wallet/withdraw')}
-              className="w-full py-2 rounded-lg font-bold text-xs active:scale-95 transition-all text-white"
-              style={{ background: '#720C3E' }}
+              disabled={(wallet.earnings || 0) <= 0}
+              className="w-full py-2.5 rounded-xl font-bold text-xs active:scale-95 transition-all text-white shadow-xs disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
             >
-              Request Withdrawal
+              <FiCreditCard className="w-3.5 h-3.5" />
+              <span>Request Withdrawal</span>
             </button>
           </div>
         </div>
 
-        {/* Dues Card */}
-        <div className="rounded-xl p-4 shadow-sm relative overflow-hidden mb-3 border border-[#E8D9DF]" style={{ background: '#FFF0F4' }}>
-          <div className="relative z-10">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <p className="text-[#6F5A64] text-xs font-medium">Amount Due to Admin</p>
-                  {wallet.dues > 0 && <FiAlertCircle className="w-3.5 h-3.5 text-[#720C3E] animate-pulse" />}
-                </div>
-                <p className="text-2xl font-bold text-[#720C3E]">₹{wallet.dues?.toLocaleString() || 0}</p>
-              </div>
-              <div className="p-1.5 rounded-lg bg-white/70">
-                <FiArrowDown className="w-5 h-5 text-[#720C3E]" />
-              </div>
-            </div>
-            {wallet.dues > 0 ? (
-              <button
-                onClick={() => navigate('/vendor/wallet/settle')}
-                className="w-full py-2 rounded-lg font-bold text-xs active:scale-95 transition-all text-white"
-                style={{ background: '#720C3E' }}
-              >
-                Pay Now
-              </button>
-            ) : (
-              <div className="w-full py-2 rounded-lg font-medium text-xs text-center border border-[#E8D9DF] bg-white/60 text-[#6F5A64]">
-                No Dues Pending
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Summary Cards */}
+        {/* Lifetime Earnings & Withdrawn Summary */}
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-white rounded-xl p-3 shadow-sm border border-[#E8D9DF]">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <div className="p-1.5 rounded-lg bg-[#FCEBF3]">
-                <FiArrowDown className="w-3.5 h-3.5 text-[#720C3E]" />
+          <div className="bg-white rounded-xl p-3.5 shadow-xs border border-[#E8D9DF]">
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
+                <FiTrendingUp className="w-4 h-4" />
               </div>
-              <p className="text-xs text-[#6F5A64] font-semibold">Cash Collected</p>
+              <p className="text-[11px] text-[#6F5A64] font-semibold">Total Earned</p>
             </div>
-            <p className="text-lg font-bold text-[#720C3E]">
-              ₹{wallet.totalCashCollected?.toLocaleString() || 0}
+            <p className="text-lg font-bold text-gray-900">
+              ₹{lifetimeEarnings.toLocaleString()}
             </p>
+            <p className="text-[10px] text-gray-400 mt-0.5">Lifetime earnings</p>
           </div>
 
-          <div className="bg-white rounded-xl p-3 shadow-sm border border-[#E8D9DF]">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <div className="p-1.5 rounded-lg bg-[#FCEBF3]">
-                <FiArrowUp className="w-3.5 h-3.5 text-[#720C3E]" />
+          <div className="bg-white rounded-xl p-3.5 shadow-xs border border-[#E8D9DF]">
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="p-1.5 rounded-lg bg-purple-50 text-purple-600">
+                <FiCheckCircle className="w-4 h-4" />
               </div>
-              <p className="text-xs text-[#6F5A64] font-semibold">Total Settled</p>
+              <p className="text-[11px] text-[#6F5A64] font-semibold">Total Withdrawn</p>
             </div>
-            <p className="text-lg font-bold text-[#720C3E]">
-              ₹{wallet.totalSettled?.toLocaleString() || 0}
+            <p className="text-lg font-bold text-gray-900">
+              ₹{(wallet.totalWithdrawn || 0).toLocaleString()}
             </p>
+            <p className="text-[10px] text-gray-400 mt-0.5">Paid out to bank</p>
           </div>
         </div>
 
-        {/* Blocked Status Notice */}
-        {wallet.isBlocked && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-            <div className="flex items-start gap-3">
-              <FiX className="w-5 h-5 text-red-600 mt-0.5" />
-              <div>
-                <p className="font-bold text-red-800">Account Blocked</p>
-                <p className="text-sm text-red-600 mb-2">
-                  {wallet.blockReason || 'Your account is blocked due to excessive dues.'}
-                </p>
-                <button
-                  onClick={() => navigate('/vendor/wallet/settle')}
-                  className="text-xs font-bold uppercase tracking-wider text-white bg-red-600 px-3 py-1.5 rounded-lg shadow-sm active:scale-95 transition-all"
-                >
-                  Pay Now to Unblock
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Cash Limit Indicator */}
-        <div className="bg-white rounded-2xl p-4 shadow-lg mb-6 border border-blue-50">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-semibold text-gray-700">Cash Collection Limit</p>
-            <p className="text-xs font-medium text-gray-500">
-              ₹{(wallet.dues || 0).toLocaleString()} / ₹{(wallet.cashLimit || 10000).toLocaleString()}
-            </p>
-          </div>
-          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all duration-500 ${(wallet.dues / (wallet.cashLimit || 10000)) > 0.8 ? 'bg-red-500' : 'bg-blue-500'
-                }`}
-              style={{ width: `${Math.min(100, (wallet.dues / (wallet.cashLimit || 10000)) * 100)}%` }}
-            />
-          </div>
-          <p className="text-[10px] text-gray-400 mt-2">
-            * Your account will be auto-blocked if you exceed the ₹{(wallet.cashLimit || 10000).toLocaleString()} limit.
-          </p>
-        </div>
-
-
-
-        {/* Filter Buttons */}
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide">
+        {/* Filter Tags */}
+        <div className="flex gap-2 mb-3.5 overflow-x-auto pb-1 scrollbar-hide">
           {[
             { id: 'all', label: 'All' },
-            { id: 'cash_collected', label: 'Cash Collected' },
-            { id: 'settlement', label: 'Settlements' },
+            { id: 'earnings_credit', label: 'Earnings' },
             { id: 'withdrawal', label: 'Withdrawals' },
             { id: 'tds_deduction', label: 'TDS' },
             { id: 'platform_fee', label: 'Platform Fees' },
@@ -270,19 +203,17 @@ const Wallet = () => {
             <button
               key={filterOption.id}
               onClick={() => setFilter(filterOption.id)}
-              className={`px-4 py-2 rounded-full font-semibold text-sm whitespace-nowrap transition-all ${filter === filterOption.id
-                ? 'text-white'
-                : 'bg-white text-gray-700'
-                }`}
+              className={`px-3.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
+                filter === filterOption.id
+                  ? 'text-white shadow-xs'
+                  : 'bg-white text-gray-600 border border-gray-200'
+              }`}
               style={
                 filter === filterOption.id
                   ? {
-                    background: themeColors.button,
-                    boxShadow: `0 2px 8px ${themeColors.button}40`,
-                  }
-                  : {
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                  }
+                      background: themeColors.button,
+                    }
+                  : {}
               }
             >
               {filterOption.label}
@@ -290,84 +221,74 @@ const Wallet = () => {
           ))}
         </div>
 
-        {/* Transactions/Ledger */}
+        {/* Transactions / Ledger */}
         <div>
-          <h3 className="font-bold text-gray-800 mb-4">Transaction History</h3>
+          <div className="flex items-center justify-between mb-2.5">
+            <h3 className="font-bold text-gray-900 text-xs uppercase tracking-wider">Transaction History</h3>
+            <span className="text-[11px] text-gray-400 font-medium">{filteredTransactions.length} records</span>
+          </div>
+
           {filteredTransactions.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center shadow-md">
-              <FiDollarSign className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-gray-600 font-semibold mb-2">No transactions yet</p>
-              <p className="text-sm text-gray-500">Your ledger will appear here</p>
+            <div className="bg-white rounded-xl p-8 text-center shadow-xs border border-gray-100">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                <FiDollarSign className="w-6 h-6 text-gray-300" />
+              </div>
+              <p className="text-gray-700 font-bold text-xs mb-1">No transactions found</p>
+              <p className="text-[11px] text-gray-400">Your completed booking payouts will appear here</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredTransactions.map((txn) => (
-                <div
-                  key={txn._id}
-                  className="bg-white rounded-xl p-4 shadow-md border-l-4"
-                  style={{
-                    borderLeftColor:
-                      txn.type === 'cash_collected' ? '#DC2626' :
-                        txn.type === 'settlement' ? '#10B981' :
-                          txn.type === 'withdrawal' ? '#8B5CF6' :
-                            txn.type === 'tds_deduction' ? '#F59E0B' :
-                              txn.type === 'platform_fee' ? '#E11D48' : '#F97316'
-                  }}
-                >
-                  <div className="flex items-center gap-3">
+            <div className="space-y-2">
+              {filteredTransactions.map((txn) => {
+                const isDebit = ['tds_deduction', 'withdrawal', 'platform_fee'].includes(txn.type);
+                return (
+                  <div
+                    key={txn._id}
+                    className="bg-white rounded-xl p-3 shadow-xs border border-gray-100 flex items-center gap-3 transition-all"
+                  >
                     <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center"
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
                       style={{
                         background:
-                          txn.type === 'cash_collected' ? '#FEE2E2' :
-                            txn.type === 'settlement' ? '#D1FAE5' :
-                              txn.type === 'withdrawal' ? '#EDE9FE' :
-                                txn.type === 'tds_deduction' ? '#FEF3C7' :
-                                  txn.type === 'platform_fee' ? '#FFF1F2' : '#FFEDD5'
+                          txn.type === 'earnings_credit' ? '#ECFDF5' :
+                          txn.type === 'withdrawal' ? '#F5F3FF' :
+                          txn.type === 'tds_deduction' ? '#FFFBEB' :
+                          txn.type === 'platform_fee' ? '#FFF1F2' : '#F3F4F6'
                       }}
                     >
                       {getTransactionIcon(txn.type)}
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="font-bold text-gray-900 text-sm">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="font-bold text-gray-900 text-xs truncate">
                           {getTransactionLabel(txn.type)}
                         </p>
-                        <p className={`text-lg font-bold ${['cash_collected', 'tds_deduction', 'withdrawal', 'platform_fee'].includes(txn.type)
-                          ? 'text-red-600'
-                          : 'text-green-600'
-                          }`}>
-                          {['cash_collected', 'tds_deduction', 'withdrawal', 'platform_fee'].includes(txn.type) ? '-' : '+'}₹{Math.abs(txn.amount).toLocaleString()}
+                        <p className={`text-sm font-extrabold ${isDebit ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {isDebit ? '-' : '+'}₹{Math.abs(txn.amount).toLocaleString()}
                         </p>
                       </div>
 
-                      <p className="text-xs text-gray-600 truncate mb-1">{txn.description}</p>
+                      <p className="text-[11px] text-gray-500 truncate mb-1">
+                        {txn.description || txn.bookingId?.bookingNumber || 'Transaction details'}
+                      </p>
 
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">{formatDate(txn.createdAt)}</span>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${txn.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          txn.status === 'pending' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'
-                          }`}>
+                        <span className="text-[10px] text-gray-400 font-medium">{formatDate(txn.createdAt)}</span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md uppercase tracking-wider ${
+                          txn.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                          txn.status === 'pending' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 
+                          'bg-gray-50 text-gray-600 border border-gray-100'
+                        }`}>
                           {txn.status}
                         </span>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
-
-        {/* View Settlements Link */}
-        <button
-          onClick={() => navigate('/vendor/wallet/settlements')}
-          className="w-full mt-6 py-3 rounded-xl font-semibold text-gray-700 bg-white border border-gray-200 flex items-center justify-center gap-2 transition-all active:scale-95"
-        >
-          View Settlement History
-          <FiArrowRight className="w-4 h-4" />
-        </button>
       </main>
 
       <BottomNav />

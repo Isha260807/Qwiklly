@@ -13,6 +13,13 @@ import { OtpVerificationModal, ScanAndPayModal } from '../../components/common';
 const BillingPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (id) {
+      navigate(`/vendor/booking/${id}/timeline`, { replace: true });
+    }
+  }, [id, navigate]);
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [booking, setBooking] = useState(null);
