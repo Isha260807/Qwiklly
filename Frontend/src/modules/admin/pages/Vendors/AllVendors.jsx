@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiCheck, FiX, FiEye, FiSearch, FiFilter, FiDownload, FiLoader, FiPower, FiTrash2 } from 'react-icons/fi';
+import { FiCheck, FiX, FiEye, FiSearch, FiFilter, FiDownload, FiLoader, FiPower, FiTrash2, FiCopy, FiCreditCard, FiSmartphone } from 'react-icons/fi';
+import { FaQrcode } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 import CardShell from '../UserCategories/components/CardShell';
 import Modal from '../UserCategories/components/Modal';
@@ -41,6 +42,7 @@ const AllVendors = () => {
             pan: vendor.pan?.document,
             other: vendor.otherDocuments?.[0]
           },
+          bankDetails: vendor.bankDetails || {},
           createdAt: vendor.createdAt,
           isActive: vendor.isActive
         }));
@@ -54,6 +56,12 @@ const AllVendors = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const copyToClipboard = (text, label) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard!`);
   };
 
   const filteredVendors = useMemo(() => {
@@ -227,6 +235,7 @@ const AllVendors = () => {
                 <tr className="border-b border-gray-100 bg-gray-50/50">
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Vendor Details</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Business Info</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Payout Details (UPI / Bank)</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -234,11 +243,11 @@ const AllVendors = () => {
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   <tr>
-                    <td colSpan="4" className="px-4 py-8 text-center text-xs text-gray-500">Loading vendors...</td>
+                    <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-500">Loading vendors...</td>
                   </tr>
                 ) : filteredVendors.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="px-4 py-8 text-center text-xs text-gray-500">No vendors found</td>
+                    <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-500">No vendors found</td>
                   </tr>
                 ) : (
                   filteredVendors.map((vendor) => (
@@ -256,6 +265,45 @@ const AllVendors = () => {
                           <p className="text-[10px] text-blue-600 font-medium">
                             {Array.isArray(vendor.service) ? vendor.service.join(', ') : (vendor.service || 'No service')}
                           </p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="space-y-1">
+                          {vendor.bankDetails?.upiQrCode && (
+                            <button
+                              type="button"
+                              onClick={() => handleViewDetails(vendor)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#FCEBF3] text-[#720C3E] border border-[#720C3E]/20 hover:bg-[#720C3E] hover:text-white transition-all shadow-2xs"
+                              title="Click to view & scan QR Code"
+                            >
+                              <FaQrcode className="w-2.5 h-2.5" />
+                              <span>QR Code Available</span>
+                            </button>
+                          )}
+                          {vendor.bankDetails?.upiId && (
+                            <div className="flex items-center gap-1 text-[10px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 font-mono w-fit">
+                              <FiSmartphone className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                              <span className="truncate max-w-[130px]">{vendor.bankDetails.upiId}</span>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(vendor.bankDetails.upiId, 'UPI ID')}
+                                className="hover:text-emerald-950 p-0.5"
+                                title="Copy UPI"
+                              >
+                                <FiCopy className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          )}
+                          {vendor.bankDetails?.accountNumber && (
+                            <div className="flex items-center gap-1 text-[10px] text-blue-800 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100 font-mono w-fit">
+                              <FiCreditCard className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                              <span>A/C: ...{vendor.bankDetails.accountNumber.slice(-4)}</span>
+                              <span className="text-[9px] text-blue-600">({vendor.bankDetails.ifscCode || 'Bank'})</span>
+                            </div>
+                          )}
+                          {!vendor.bankDetails?.upiQrCode && !vendor.bankDetails?.upiId && !vendor.bankDetails?.accountNumber && (
+                            <span className="text-[10px] text-gray-400 italic">Not set</span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -374,6 +422,118 @@ const AllVendors = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Active</label>
                 <div className={`text-sm font-semibold ${selectedVendor.isActive ? 'text-green-600' : 'text-red-600'}`}>
                   {selectedVendor.isActive ? 'Active' : 'Inactive'}
+                </div>
+              </div>
+            </div>
+
+            {/* Bank & UPI Details for Manual Payouts */}
+            <div className="bg-gradient-to-br from-emerald-50/60 to-blue-50/40 rounded-xl p-4 border border-emerald-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                    <FiCreditCard className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900">Payout Details (UPI / Bank / QR)</h4>
+                    <p className="text-[10px] text-gray-500">For manual salary / earnings transfer</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* QR Code Scanner (If uploaded by vendor) */}
+              {selectedVendor.bankDetails?.upiQrCode && (
+                <div className="bg-white rounded-xl p-3.5 border border-emerald-100 shadow-xs flex flex-col sm:flex-row items-center gap-3.5">
+                  <div className="w-36 h-36 rounded-xl overflow-hidden border-2 border-emerald-500/30 p-1 bg-white shrink-0 shadow-sm">
+                    <img
+                      src={selectedVendor.bankDetails.upiQrCode}
+                      alt="Vendor UPI QR Code"
+                      className="w-full h-full object-contain rounded-lg"
+                    />
+                  </div>
+                  <div className="space-y-1.5 text-center sm:text-left">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                      <FaQrcode className="w-3 h-3" /> Scan & Pay QR Code
+                    </span>
+                    <h5 className="text-xs font-bold text-gray-900">Pay vendor via QR Scanner</h5>
+                    <p className="text-[11px] text-gray-500">Scan this code using PhonePe, Google Pay, or Paytm scanner directly from your phone screen.</p>
+                    <a
+                      href={selectedVendor.bankDetails.upiQrCode}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:underline pt-1"
+                    >
+                      <FiEye className="w-3.5 h-3.5" /> View Full QR
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                {/* UPI ID */}
+                <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-xs flex items-center justify-between">
+                  <div className="min-w-0 flex-1 mr-2">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">UPI ID</span>
+                    <span className="font-bold text-gray-900 break-all text-xs font-mono">
+                      {selectedVendor.bankDetails?.upiId || <span className="text-gray-400 font-normal italic font-sans">Not provided</span>}
+                    </span>
+                  </div>
+                  {selectedVendor.bankDetails?.upiId && (
+                    <button
+                      onClick={() => copyToClipboard(selectedVendor.bankDetails.upiId, 'UPI ID')}
+                      className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition-colors shrink-0"
+                      title="Copy UPI ID"
+                    >
+                      <FiCopy className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Account Holder Name */}
+                <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-xs">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Account Holder</span>
+                  <span className="font-bold text-gray-900 text-xs">
+                    {selectedVendor.bankDetails?.accountHolderName || selectedVendor.name || 'N/A'}
+                  </span>
+                </div>
+
+                {/* Bank Name & Account Number */}
+                <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-xs flex items-center justify-between">
+                  <div className="min-w-0 flex-1 mr-2">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">
+                      {selectedVendor.bankDetails?.bankName ? `${selectedVendor.bankDetails.bankName} Account` : 'Account Number'}
+                    </span>
+                    <span className="font-bold text-gray-900 font-mono text-xs">
+                      {selectedVendor.bankDetails?.accountNumber || <span className="text-gray-400 font-normal italic font-sans">Not provided</span>}
+                    </span>
+                  </div>
+                  {selectedVendor.bankDetails?.accountNumber && (
+                    <button
+                      onClick={() => copyToClipboard(selectedVendor.bankDetails.accountNumber, 'Account Number')}
+                      className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors shrink-0"
+                      title="Copy Account Number"
+                    >
+                      <FiCopy className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* IFSC Code */}
+                <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-xs flex items-center justify-between">
+                  <div className="min-w-0 flex-1 mr-2">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">IFSC Code</span>
+                    <span className="font-bold text-gray-900 font-mono text-xs">
+                      {selectedVendor.bankDetails?.ifscCode || <span className="text-gray-400 font-normal italic font-sans">Not provided</span>}
+                    </span>
+                  </div>
+                  {selectedVendor.bankDetails?.ifscCode && (
+                    <button
+                      onClick={() => copyToClipboard(selectedVendor.bankDetails.ifscCode, 'IFSC Code')}
+                      className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors shrink-0"
+                      title="Copy IFSC Code"
+                    >
+                      <FiCopy className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

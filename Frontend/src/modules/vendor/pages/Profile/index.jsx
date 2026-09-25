@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiLayers, FiHeadphones, FiPhoneCall, FiX, FiClock } from 'react-icons/fi';
 import { FaWallet, FaWhatsapp } from 'react-icons/fa';
@@ -33,6 +33,7 @@ const Profile = () => {
   });
 
   const menuItems = [
+    { id: 'payout', label: 'Payout & Bank Details (QR / UPI)', icon: FiCreditCard, path: '/vendor/profile/payout' },
     { id: 5, label: 'My Ratings', icon: FiStar, path: '/vendor/my-ratings' },
     { id: 7, label: 'Manage Address', icon: FiMapPin, path: '/vendor/address-management' },
     { id: 8, label: 'Settings', icon: FiSettings, path: '/vendor/settings' },

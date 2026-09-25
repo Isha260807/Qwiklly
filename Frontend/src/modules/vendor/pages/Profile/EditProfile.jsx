@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiSave, FiUser, FiBriefcase, FiPhone, FiMail, FiMapPin, FiChevronDown, FiCamera, FiUpload, FiSearch, FiX, FiCheck } from 'react-icons/fi';
+import { FiSave, FiUser, FiBriefcase, FiPhone, FiMail, FiMapPin, FiChevronDown, FiCamera, FiUpload, FiSearch, FiX, FiCheck, FiCreditCard, FiSmartphone } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
@@ -45,6 +45,13 @@ const EditProfile = () => {
     profilePhoto: '', // URL
     aadharDocument: '', // URL
     serviceRange: 10,
+    bankDetails: {
+      upiId: '',
+      accountHolderName: '',
+      accountNumber: '',
+      ifscCode: '',
+      bankName: ''
+    }
   });
 
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -181,6 +188,13 @@ const EditProfile = () => {
             profilePhoto: v.profilePhoto || '',
             aadharDocument: v.aadharDocument || (v.aadhar && v.aadhar.document) || '',
             serviceRange: v.settings?.serviceRange || 10,
+            bankDetails: {
+              upiId: v.bankDetails?.upiId || '',
+              accountHolderName: v.bankDetails?.accountHolderName || '',
+              accountNumber: v.bankDetails?.accountNumber || '',
+              ifscCode: v.bankDetails?.ifscCode || '',
+              bankName: v.bankDetails?.bankName || ''
+            }
           });
 
           // Update local storage
@@ -207,9 +221,17 @@ const EditProfile = () => {
               phone: storedData.phone || '',
               email: storedData.email || '',
               address: addressData,
-              serviceCategory: storedData.service || storedData.serviceCategory || '',
+              serviceCategories: Array.isArray(storedData.service) ? storedData.service : (storedData.service ? [storedData.service] : (storedData.serviceCategory ? [storedData.serviceCategory] : [])),
               profilePhoto: storedData.profilePhoto || '',
               aadharDocument: storedData.aadharDocument || (storedData.aadhar && storedData.aadhar.document) || '',
+              serviceRange: storedData.serviceRange || 10,
+              bankDetails: {
+                upiId: storedData.bankDetails?.upiId || '',
+                accountHolderName: storedData.bankDetails?.accountHolderName || '',
+                accountNumber: storedData.bankDetails?.accountNumber || '',
+                ifscCode: storedData.bankDetails?.ifscCode || '',
+                bankName: storedData.bankDetails?.bankName || ''
+              }
             });
           }
         }
@@ -317,6 +339,16 @@ const EditProfile = () => {
     }
   };
 
+  const handleBankChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      bankDetails: {
+        ...(prev.bankDetails || {}),
+        [field]: value
+      }
+    }));
+  };
+
   const handleCategoryChange = (val) => {
     setFormData(prev => {
       const current = prev.serviceCategories || [];
@@ -324,13 +356,9 @@ const EditProfile = () => {
         ? current.filter(c => c !== val)
         : [...current, val];
 
-      // When categories change, we might want to filter out skills that no longer apply?
-      // For now, let's keep all skills or clear them if categories become empty.
-      // Better: Keep skills, user can remove them manually.
       return {
         ...prev,
         serviceCategories: updated,
-        // skills: [] // Optional: clear skills on category change? Maybe annoying. Let's keep them.
       };
     });
   };
@@ -383,7 +411,6 @@ const EditProfile = () => {
       }
 
       // Prepare payload to match backend structure
-      // Prepare payload to match backend structure
       const payload = {
         name: formData.name,
         businessName: formData.businessName,
@@ -391,13 +418,14 @@ const EditProfile = () => {
         serviceCategory: formData.serviceCategories,
         profilePhoto: photoUrl,
         aadharDocument: aadharUrl,
-        serviceRange: formData.serviceRange
+        serviceRange: formData.serviceRange,
+        bankDetails: formData.bankDetails
       };
 
       try {
         const response = await vendorAuthService.updateProfile(payload);
         if (response.success) {
-          const updatedProfile = { ...response.vendor, skills: formData.skills }; // Keep local skills 
+          const updatedProfile = { ...response.vendor, skills: formData.skills, bankDetails: formData.bankDetails };
 
           // Update Local Storage
           localStorage.setItem('vendorProfile', JSON.stringify(updatedProfile));
@@ -407,13 +435,13 @@ const EditProfile = () => {
           window.dispatchEvent(new Event('vendorProfileUpdated'));
           window.dispatchEvent(new Event('vendorDataUpdated'));
 
+          toast.success('Profile & Bank details updated successfully!');
           navigate('/vendor/profile');
         } else {
           throw new Error(response.message || 'Failed to update profile');
         }
       } catch (apiError) {
         console.error('API update failed:', apiError);
-        // Fallback to local storage if API is mock or fails? No, display error
         alert(apiError.message || 'Failed to save profile on server.');
       }
 
@@ -856,6 +884,25 @@ const EditProfile = () => {
               </div>
             </div>
             {errors.aadharDocument && <p className="text-red-500 text-sm mt-1">{errors.aadharDocument}</p>}
+          </div>
+
+          {/* Dedicated Link to Payout & Bank Details */}
+          <div
+            onClick={() => navigate('/vendor/profile/payout')}
+            className="p-4 rounded-2xl border border-emerald-200/80 bg-gradient-to-r from-emerald-50 to-teal-50 shadow-xs cursor-pointer hover:shadow-sm transition-all active:scale-[0.99] flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                <FiCreditCard className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-gray-900 leading-tight">Payout & Bank Details (QR / UPI)</h4>
+                <p className="text-[10px] text-gray-500 mt-0.5">Manage UPI ID, Bank Account & QR Scanner</p>
+              </div>
+            </div>
+            <span className="text-xs font-bold text-emerald-700 bg-white px-2.5 py-1 rounded-lg border border-emerald-200">
+              Manage →
+            </span>
           </div>
 
         </div>

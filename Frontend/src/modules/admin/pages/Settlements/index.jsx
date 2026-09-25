@@ -816,16 +816,66 @@ const SettlementManagement = () => {
                       <span className="font-mono font-bold text-gray-800">{request.transactionReference}</span>
                     </div>
                   )}
-                  {request.bankDetails && (
+                  {(request.bankDetails || request.vendorId?.bankDetails) && (
                     <div className="pt-1.5 border-t border-gray-200/60 mt-1.5 text-[10px]">
-                      <p className="font-bold text-gray-400 uppercase mb-0.5">Bank Details</p>
-                      <div className="grid grid-cols-2 gap-1 text-gray-700">
-                        {Object.entries(request.bankDetails).map(([key, val]) => (
-                          <div key={key} className="truncate">
-                            <span className="text-gray-400 capitalize">{key}:</span> <span className="font-semibold">{val}</span>
+                      <p className="font-bold text-gray-500 uppercase mb-1">Payout Account / UPI / QR</p>
+                      {(() => {
+                        const b = request.bankDetails || request.vendorId?.bankDetails || {};
+                        return (
+                          <div className="space-y-1.5 bg-white p-2 rounded-lg border border-gray-100">
+                            {b.upiQrCode && (
+                              <div className="flex items-center gap-2 p-1 bg-emerald-50/60 rounded border border-emerald-100/60 mb-1">
+                                <img
+                                  src={b.upiQrCode}
+                                  alt="Vendor QR"
+                                  className="w-10 h-10 object-contain rounded border border-gray-200 bg-white"
+                                />
+                                <div>
+                                  <span className="text-[10px] font-bold text-emerald-800 block">QR Code Uploaded</span>
+                                  <a
+                                    href={b.upiQrCode}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[9px] text-emerald-600 font-semibold underline"
+                                  >
+                                    View & Scan QR
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+                            {b.upiId && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-semibold">UPI ID:</span>
+                                <span className="font-bold text-emerald-700 font-mono">{b.upiId}</span>
+                              </div>
+                            )}
+                            {b.accountNumber && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-semibold">A/C No:</span>
+                                <span className="font-bold text-gray-800 font-mono">{b.accountNumber}</span>
+                              </div>
+                            )}
+                            {b.ifscCode && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-semibold">IFSC:</span>
+                                <span className="font-bold text-gray-800 font-mono">{b.ifscCode}</span>
+                              </div>
+                            )}
+                            {b.accountHolderName && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-semibold">Holder:</span>
+                                <span className="font-semibold text-gray-800">{b.accountHolderName}</span>
+                              </div>
+                            )}
+                            {b.bankName && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-semibold">Bank:</span>
+                                <span className="font-semibold text-gray-800">{b.bankName}</span>
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>

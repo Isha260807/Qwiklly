@@ -51,6 +51,7 @@ const WithdrawalRequest = lazyLoad(() => import('../pages/WithdrawalRequest'));
 const Profile = lazyLoad(() => import('../pages/Profile'));
 const ProfileDetails = lazyLoad(() => import('../pages/Profile/ProfileDetails'));
 const EditProfile = lazyLoad(() => import('../pages/Profile/EditProfile'));
+const PayoutDetails = lazyLoad(() => import('../pages/Profile/PayoutDetails'));
 const BookingMap = lazyLoad(() => import('../pages/BookingMap'));
 const Settings = lazyLoad(() => import('../pages/Settings'));
 const AddressManagement = lazyLoad(() => import('../pages/AddressManagement'));
@@ -110,6 +111,8 @@ const VendorRoutes = () => {
               <Route path="/profile" element={<ProtectedRoute userType="vendor"><Profile /></ProtectedRoute>} />
               <Route path="/profile/details" element={<ProtectedRoute userType="vendor"><ProfileDetails /></ProtectedRoute>} />
               <Route path="/profile/edit" element={<ProtectedRoute userType="vendor"><EditProfile /></ProtectedRoute>} />
+              <Route path="/profile/payout" element={<ProtectedRoute userType="vendor"><PayoutDetails /></ProtectedRoute>} />
+              <Route path="/payout-details" element={<ProtectedRoute userType="vendor"><PayoutDetails /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute userType="vendor"><Settings /></ProtectedRoute>} />
               <Route path="/address-management" element={<ProtectedRoute userType="vendor"><AddressManagement /></ProtectedRoute>} />
               <Route path="/notifications" element={<ProtectedRoute userType="vendor"><Notifications /></ProtectedRoute>} />

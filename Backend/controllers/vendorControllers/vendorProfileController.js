@@ -43,6 +43,14 @@ const getProfile = async (req, res) => {
         service: vendor.service,
         skills: vendor.skills || [],
         address: vendor.address || null,
+        bankDetails: vendor.bankDetails || {
+          accountHolderName: '',
+          accountNumber: '',
+          ifscCode: '',
+          bankName: '',
+          upiId: '',
+          upiQrCode: ''
+        },
         rating: rating > 0 ? parseFloat(rating.toFixed(1)) : 0,
         totalJobs,
         completionRate,
@@ -112,7 +120,27 @@ const updateProfile = async (req, res) => {
     }
 
     const vendorId = req.user.id;
-    const { name, businessName, address, profilePhoto, serviceCategory, services, service, skills, aadharNumber, aadharDocument, panNumber, panDocument, serviceRange } = req.body;
+    const { 
+      name, 
+      businessName, 
+      address, 
+      profilePhoto, 
+      serviceCategory, 
+      services, 
+      service, 
+      skills, 
+      aadharNumber, 
+      aadharDocument, 
+      panNumber, 
+      panDocument, 
+      serviceRange,
+      bankDetails,
+      upiId,
+      accountHolderName,
+      accountNumber,
+      ifscCode,
+      bankName
+    } = req.body;
 
     console.log('Update Vendor Profile Body:', JSON.stringify(req.body, null, 2));
 
@@ -231,6 +259,27 @@ const updateProfile = async (req, res) => {
       }
     }
 
+    // Update Bank & UPI Details
+    if (bankDetails || upiId !== undefined || accountNumber !== undefined || req.body.upiQrCode !== undefined) {
+      const incomingBank = bankDetails || {};
+      let qrCodeUrl = incomingBank.upiQrCode || req.body.upiQrCode || vendor.bankDetails?.upiQrCode || '';
+      
+      if (qrCodeUrl && qrCodeUrl.startsWith('data:')) {
+        const uploadRes = await cloudinaryService.uploadFile(qrCodeUrl, { folder: 'vendors/qr_codes' });
+        if (uploadRes.success) qrCodeUrl = uploadRes.url;
+      }
+
+      vendor.bankDetails = {
+        accountHolderName: incomingBank.accountHolderName ?? accountHolderName ?? vendor.bankDetails?.accountHolderName ?? '',
+        accountNumber: incomingBank.accountNumber ?? accountNumber ?? vendor.bankDetails?.accountNumber ?? '',
+        ifscCode: (incomingBank.ifscCode ?? ifscCode ?? vendor.bankDetails?.ifscCode ?? '').toUpperCase().trim(),
+        bankName: incomingBank.bankName ?? bankName ?? vendor.bankDetails?.bankName ?? '',
+        upiId: (incomingBank.upiId ?? upiId ?? vendor.bankDetails?.upiId ?? '').toLowerCase().trim(),
+        upiQrCode: qrCodeUrl
+      };
+      vendor.markModified('bankDetails');
+    }
+
     await vendor.save();
 
     res.status(200).json({
@@ -244,6 +293,7 @@ const updateProfile = async (req, res) => {
         phone: vendor.phone,
         service: vendor.service,
         address: vendor.address,
+        bankDetails: vendor.bankDetails,
         approvalStatus: vendor.approvalStatus,
         isPhoneVerified: vendor.isPhoneVerified,
         isEmailVerified: vendor.isEmailVerified,
