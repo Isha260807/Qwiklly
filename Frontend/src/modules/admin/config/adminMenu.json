@@ -39,26 +39,6 @@
   },
   {
     "section": "VENDOR MANAGEMENT",
-    "title": "Vendor Services",
-    "route": "/admin/user-categories/vendor-services",
-    "allowedRoles": [
-      "super_admin",
-      "admin"
-    ],
-    "children": []
-  },
-  {
-    "section": "VENDOR MANAGEMENT",
-    "title": "Vendor Parts",
-    "route": "/admin/user-categories/vendor-parts",
-    "allowedRoles": [
-      "super_admin",
-      "admin"
-    ],
-    "children": []
-  },
-  {
-    "section": "VENDOR MANAGEMENT",
     "title": "Plans",
     "route": "/admin/plans",
     "allowedRoles": [

@@ -97,8 +97,8 @@ const UserCategories = () => {
           <Route path="page-builder/:serviceId" element={<ServicePageBuilder selectedCity={selectedCity} />} />
           <Route path="categories" element={<Navigate to="services" replace />} />
           <Route path="brands" element={<Navigate to="services" replace />} />
-          <Route path="vendor-services" element={<VendorServicesPage />} />
-          <Route path="vendor-parts" element={<VendorPartsPage />} />
+          <Route path="vendor-services" element={<Navigate to="services" replace />} />
+          <Route path="vendor-parts" element={<Navigate to="services" replace />} />
           <Route path="*" element={<Navigate to="sections" replace />} />
         </Routes>
       </motion.div>
