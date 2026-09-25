@@ -61,11 +61,35 @@ const cartItemSchema = new mongoose.Schema({
     default: 1,
     min: 1
   },
-  // Selected hours for HOURLY-priced services (null for FIXED items)
+  // Pricing Type: FIXED or DURATION
+  pricingType: {
+    type: String,
+    enum: ['FIXED', 'DURATION', 'HOURLY'],
+    default: 'FIXED'
+  },
+  // Duration in minutes for DURATION-priced services (multiples of 30)
+  durationMinutes: {
+    type: Number,
+    default: null
+  },
+  // Price per 30 minutes for DURATION-priced services
+  pricePer30Minutes: {
+    type: Number,
+    default: null
+  },
+  minDurationMinutes: {
+    type: Number,
+    default: 30
+  },
+  maxDurationMinutes: {
+    type: Number,
+    default: 480
+  },
+  // Selected hours for legacy HOURLY-priced services (null for FIXED items)
   hours: {
     type: Number,
     default: null,
-    min: 1
+    min: 0
   },
   rating: {
     type: String,

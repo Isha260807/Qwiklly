@@ -29,6 +29,9 @@ const initialServiceForm = {
   originalPrice: "",
   discountPrice: "",
   pricingType: "FIXED",
+  pricePer30Minutes: "",
+  minDurationMinutes: 30,
+  maxDurationMinutes: 240,
   hourlyRate: "",
   minHours: 1,
   maxHours: 8,
@@ -110,6 +113,11 @@ const ServicesPage = ({ selectedCity }) => {
   // Open Modal for Edit
   const handleOpenEdit = (service) => {
     setEditingServiceId(service._id || service.id);
+    const pType = service.pricingType === "DURATION" ? "DURATION" : (service.pricingType === "HOURLY" ? "DURATION" : "FIXED");
+    const p30 = service.pricePer30Minutes ?? service.durationPricing?.pricePer30Minutes ?? (service.hourlyRate ? Math.round(service.hourlyRate / 2) : (service.basePrice || ""));
+    const minM = service.minDurationMinutes ?? service.durationPricing?.minDurationMinutes ?? (service.minHours ? service.minHours * 60 : 30);
+    const maxM = service.maxDurationMinutes ?? service.durationPricing?.maxDurationMinutes ?? (service.maxHours ? service.maxHours * 60 : 240);
+
     setFormData({
       title: service.title || "",
       tagline: service.tagline || "",
@@ -119,7 +127,10 @@ const ServicesPage = ({ selectedCity }) => {
       basePrice: service.basePrice ?? "",
       originalPrice: service.originalPrice ?? "",
       discountPrice: service.discountPrice ?? "",
-      pricingType: service.pricingType === "HOURLY" ? "HOURLY" : "FIXED",
+      pricingType: pType,
+      pricePer30Minutes: p30,
+      minDurationMinutes: minM,
+      maxDurationMinutes: maxM,
       hourlyRate: service.hourlyRate ?? "",
       minHours: service.minHours ?? 1,
       maxHours: service.maxHours ?? 8,
@@ -165,37 +176,60 @@ const ServicesPage = ({ selectedCity }) => {
       return;
     }
 
-    if (formData.basePrice === "" || isNaN(formData.basePrice)) {
-      toast.error("Valid base price is required");
-      return;
-    }
-
-    if (formData.pricingType === "HOURLY") {
-      if (formData.hourlyRate === "" || isNaN(formData.hourlyRate) || Number(formData.hourlyRate) <= 0) {
-        toast.error("Valid hourly rate is required for hourly services");
+    if (formData.pricingType === "DURATION") {
+      if (formData.pricePer30Minutes === "" || isNaN(formData.pricePer30Minutes) || Number(formData.pricePer30Minutes) <= 0) {
+        toast.error("Valid Price per 30 minutes is required");
         return;
       }
-      if (Number(formData.minHours) > Number(formData.maxHours)) {
-        toast.error("Minimum hours cannot be greater than maximum hours");
+      const minM = Number(formData.minDurationMinutes) || 30;
+      const maxM = Number(formData.maxDurationMinutes) || 240;
+      if (minM < 30 || minM % 30 !== 0) {
+        toast.error("Minimum duration must be at least 30 minutes and a multiple of 30");
+        return;
+      }
+      if (maxM < minM || maxM % 30 !== 0) {
+        toast.error("Maximum duration must be greater than or equal to minimum duration and a multiple of 30");
+        return;
+      }
+    } else {
+      if (formData.basePrice === "" || isNaN(formData.basePrice)) {
+        toast.error("Valid base price is required");
         return;
       }
     }
 
     try {
       setSaving(true);
+      const isDur = formData.pricingType === "DURATION";
+      const p30 = isDur ? Number(formData.pricePer30Minutes) : null;
+      const minM = isDur ? (Number(formData.minDurationMinutes) || 30) : 30;
+      const maxM = isDur ? (Number(formData.maxDurationMinutes) || 240) : 240;
+
       const payload = {
         title: formData.title.trim(),
         tagline: formData.tagline?.trim(),
         description: formData.description?.trim(),
         badge: formData.badge?.trim() || null,
         iconUrl: formData.iconUrl || null,
-        basePrice: Number(formData.basePrice),
+        basePrice: isDur ? (p30 * (minM / 30)) : Number(formData.basePrice),
+        fixedPrice: isDur ? null : Number(formData.basePrice),
         originalPrice: formData.originalPrice ? Number(formData.originalPrice) : 0,
         discountPrice: formData.discountPrice ? Number(formData.discountPrice) : null,
-        pricingType: formData.pricingType === "HOURLY" ? "HOURLY" : "FIXED",
-        hourlyRate: formData.pricingType === "HOURLY" ? Number(formData.hourlyRate) : null,
-        minHours: Number(formData.minHours) || 1,
-        maxHours: Number(formData.maxHours) || 8,
+        pricingType: isDur ? "DURATION" : "FIXED",
+        pricePer30Minutes: p30,
+        minDurationMinutes: minM,
+        maxDurationMinutes: maxM,
+        durationStepMinutes: 30,
+        durationPricing: isDur ? {
+          pricePer30Minutes: p30,
+          minDurationMinutes: minM,
+          maxDurationMinutes: maxM,
+          stepMinutes: 30
+        } : undefined,
+        // Legacy hourly rate bridge for vendor timers
+        hourlyRate: isDur ? (p30 * 2) : null,
+        minHours: isDur ? (minM / 60) : 1,
+        maxHours: isDur ? (maxM / 60) : 8,
         allowCustomHours: !!formData.allowCustomHours,
         allowExtraHours: !!formData.allowExtraHours,
         allowExtraParts: !!formData.allowExtraParts,
@@ -379,10 +413,10 @@ const ServicesPage = ({ selectedCity }) => {
                     </span>
                   )}
 
-                  {/* Hourly Badge */}
-                  {service.pricingType === "HOURLY" && (
+                  {/* Duration / Hourly Badge */}
+                  {(service.pricingType === "DURATION" || service.pricingType === "HOURLY") && (
                     <span className="absolute bottom-2.5 left-2.5 px-2.5 py-0.5 bg-[#720C3E] text-white text-[10px] font-black uppercase tracking-wider rounded-md shadow-sm">
-                      Hourly
+                      Duration Based
                     </span>
                   )}
 
@@ -414,12 +448,12 @@ const ServicesPage = ({ selectedCity }) => {
                   {/* Pricing & Status Row */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                     <div>
-                      {service.pricingType === "HOURLY" ? (
+                      {service.pricingType === "DURATION" || service.pricingType === "HOURLY" ? (
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-lg font-black text-slate-900">
-                            ₹{service.hourlyRate}
+                            ₹{service.pricePer30Minutes ?? service.durationPricing?.pricePer30Minutes ?? (service.hourlyRate ? Math.round(service.hourlyRate / 2) : service.basePrice)}
                           </span>
-                          <span className="text-xs text-slate-400 font-medium">/hr</span>
+                          <span className="text-xs text-slate-500 font-semibold">/ 30 mins</span>
                         </div>
                       ) : (
                         <div className="flex items-baseline gap-1.5">
@@ -433,9 +467,9 @@ const ServicesPage = ({ selectedCity }) => {
                           )}
                         </div>
                       )}
-                      <span className="text-[10px] text-slate-400">
-                        {service.pricingType === "HOURLY"
-                          ? `${service.minHours ?? 1}–${service.maxHours ?? 8} hrs`
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {service.pricingType === "DURATION" || service.pricingType === "HOURLY"
+                          ? `Range: ${service.minDurationMinutes ?? 30}m – ${service.maxDurationMinutes ?? 240}m`
                           : `GST: ${service.gstPercentage ?? 18}%`}
                       </span>
                     </div>
@@ -494,7 +528,7 @@ const ServicesPage = ({ selectedCity }) => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingServiceId ? "Edit Service Info" : "Add New Service"}
-        maxWidth="max-w-xl"
+        maxWidth="max-w-2xl"
       >
         <form onSubmit={handleSaveService} className="space-y-4">
           <div>
@@ -503,7 +537,7 @@ const ServicesPage = ({ selectedCity }) => {
             </label>
             <input
               type="text"
-              placeholder="e.g. Bathroom Cleaning, Kitchen Cleaning"
+              placeholder="e.g. Bathroom Cleaning, Kitchen Help, Dusting"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
@@ -531,7 +565,7 @@ const ServicesPage = ({ selectedCity }) => {
               </label>
               <input
                 type="text"
-                placeholder="e.g. NEW, POPULAR"
+                placeholder="e.g. POPULAR, BESTSELLER"
                 value={formData.badge}
                 onChange={(e) => setFormData({ ...formData, badge: e.target.value })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
@@ -539,147 +573,155 @@ const ServicesPage = ({ selectedCity }) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Base Price (₹) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 400"
-                value={formData.basePrice}
-                onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Original Price / Strikethrough (₹)
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 500"
-                value={formData.originalPrice}
-                onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-              />
-            </div>
-          </div>
-
-          {/* Booking Type & Pricing Mode */}
+          {/* Pricing Model Selector */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-2">
-                Booking Type
+                Pricing Model <span className="text-red-500">*</span>
               </label>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, pricingType: "FIXED" })}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
                     formData.pricingType === "FIXED"
                       ? "bg-[#720C3E] text-white shadow-sm"
                       : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  Fixed Price
+                  <span>Fixed Price</span>
+                  <span className={`text-[10px] font-normal ${formData.pricingType === "FIXED" ? "text-pink-100" : "text-slate-400"}`}>
+                    Flat price per booking
+                  </span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, pricingType: "HOURLY" })}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    formData.pricingType === "HOURLY"
+                  onClick={() => setFormData({ ...formData, pricingType: "DURATION" })}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+                    formData.pricingType === "DURATION"
                       ? "bg-[#720C3E] text-white shadow-sm"
                       : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  Hourly Rate
+                  <span>Duration Based</span>
+                  <span className={`text-[10px] font-normal ${formData.pricingType === "DURATION" ? "text-pink-100" : "text-slate-400"}`}>
+                    30-minute scalable increments
+                  </span>
                 </button>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1.5">
-                {formData.pricingType === "HOURLY"
-                  ? "Users will select a number of hours; price scales with the hourly rate below."
-                  : "Uses the Base Price above as a single flat price for this service."}
-              </p>
             </div>
 
-            {formData.pricingType === "HOURLY" && (
-              <div className="space-y-4 pt-3 border-t border-slate-200">
+            {formData.pricingType === "FIXED" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-200">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Flat Base Price (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 199"
+                    value={formData.basePrice}
+                    onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                    required={formData.pricingType === "FIXED"}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Original Price / Strikethrough (₹)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 299"
+                    value={formData.originalPrice}
+                    onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-2 border-t border-slate-200">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Hourly Rate (₹/hr) <span className="text-red-500">*</span>
+                      Price per 30 mins (₹) <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
-                      placeholder="e.g. 300"
-                      value={formData.hourlyRate}
-                      onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                      required={formData.pricingType === "HOURLY"}
+                      placeholder="e.g. 30 or 150"
+                      value={formData.pricePer30Minutes}
+                      onChange={(e) => setFormData({ ...formData, pricePer30Minutes: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E] font-bold text-[#720C3E]"
+                      required={formData.pricingType === "DURATION"}
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Minimum Hours
+                      Minimum Duration
                     </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.minHours}
-                      onChange={(e) => setFormData({ ...formData, minHours: e.target.value })}
+                    <select
+                      value={formData.minDurationMinutes}
+                      onChange={(e) => setFormData({ ...formData, minDurationMinutes: Number(e.target.value) })}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                    />
+                    >
+                      <option value={30}>30 mins (0.5 hr)</option>
+                      <option value={60}>60 mins (1.0 hr)</option>
+                      <option value={90}>90 mins (1.5 hrs)</option>
+                      <option value={120}>120 mins (2.0 hrs)</option>
+                      <option value={180}>180 mins (3.0 hrs)</option>
+                    </select>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Maximum Hours
+                      Maximum Duration
                     </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.maxHours}
-                      onChange={(e) => setFormData({ ...formData, maxHours: e.target.value })}
+                    <select
+                      value={formData.maxDurationMinutes}
+                      onChange={(e) => setFormData({ ...formData, maxDurationMinutes: Number(e.target.value) })}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                    />
+                    >
+                      <option value={60}>60 mins (1.0 hr)</option>
+                      <option value={90}>90 mins (1.5 hrs)</option>
+                      <option value={120}>120 mins (2.0 hrs)</option>
+                      <option value={180}>180 mins (3.0 hrs)</option>
+                      <option value={240}>240 mins (4.0 hrs)</option>
+                      <option value={300}>300 mins (5.0 hrs)</option>
+                      <option value={360}>360 mins (6.0 hrs)</option>
+                      <option value={480}>480 mins (8.0 hrs)</option>
+                    </select>
                   </div>
                 </div>
 
-                <div className="space-y-2.5">
-                  <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.allowCustomHours}
-                      onChange={(e) => setFormData({ ...formData, allowCustomHours: e.target.checked })}
-                      className="w-4 h-4 rounded border-slate-300 text-[#720C3E] focus:ring-[#720C3E]"
-                    />
-                    Allow user to enter custom hours
-                  </label>
+                {/* Live Dynamic Pricing Preview Card */}
+                {formData.pricePer30Minutes && Number(formData.pricePer30Minutes) > 0 && (
+                  <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-3.5 rounded-xl border border-slate-700 shadow-inner">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-pink-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <FiDollarSign className="text-xs" /> Dynamic Live Pricing Preview
+                      </span>
+                      <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-slate-300">
+                        Formula: (Mins ÷ 30) × ₹{formData.pricePer30Minutes}
+                      </span>
+                    </div>
 
-                  <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.allowExtraHours}
-                      onChange={(e) => setFormData({ ...formData, allowExtraHours: e.target.checked })}
-                      className="w-4 h-4 rounded border-slate-300 text-[#720C3E] focus:ring-[#720C3E]"
-                    />
-                    Allow vendor to request extra hours during the job
-                  </label>
-
-                  <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.allowExtraParts}
-                      onChange={(e) => setFormData({ ...formData, allowExtraParts: e.target.checked })}
-                      className="w-4 h-4 rounded border-slate-300 text-[#720C3E] focus:ring-[#720C3E]"
-                    />
-                    Allow vendor to add extra parts to the final bill
-                  </label>
-                </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                      {Array.from(
+                        { length: Math.floor(((Number(formData.maxDurationMinutes) || 240) - (Number(formData.minDurationMinutes) || 30)) / 30) + 1 },
+                        (_, idx) => (Number(formData.minDurationMinutes) || 30) + idx * 30
+                      ).slice(0, 8).map((mins) => (
+                        <div key={mins} className="bg-white/10 rounded-lg p-2 text-center border border-white/5">
+                          <p className="text-[11px] text-slate-300 font-medium">{mins} mins {mins >= 60 ? `(${mins / 60}h)` : ''}</p>
+                          <p className="text-sm font-black text-amber-400 mt-0.5">
+                            ₹{(mins / 30) * Number(formData.pricePer30Minutes)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

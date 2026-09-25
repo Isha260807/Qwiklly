@@ -104,6 +104,9 @@ const bookingSchema = new mongoose.Schema({
       description: { type: String },
       imageUrl: { type: String },
       features: [{ type: String }],
+      pricingType: { type: String, enum: ['FIXED', 'DURATION', 'HOURLY', null], default: null },
+      durationMinutes: { type: Number, default: null },
+      pricePer30Minutes: { type: Number, default: null },
       hours: { type: Number, default: null } // Selected hours for HOURLY-priced services
     },
     quantity: { type: Number, default: 1 }

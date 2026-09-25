@@ -61,10 +61,13 @@ const addToCart = async (req, res) => {
       sectionTitle, // Brand name
       sectionIcon,  // Brand logo URL
       card,         // Card details snapshot
-      hours         // Selected hours for HOURLY-priced services
+      hours,        // Selected hours for legacy HOURLY
+      pricingType: requestedPricingType,
+      durationMinutes,
+      pricePer30Minutes
     } = req.body;
 
-    console.log(`[AddToCart] Request details - Title: ${title}, Section: ${sectionTitle}`);
+    console.log(`[AddToCart] Request details - Title: ${title}, Section: ${sectionTitle}, PricingType: ${requestedPricingType}`);
 
     // Verify service exists (only if serviceId is provided)
     let service = null;
@@ -76,26 +79,61 @@ const addToCart = async (req, res) => {
       }
     }
 
-    // Hourly pricing: validate hours and recompute price server-side — never trust client price
-    const isHourly = service?.pricingType === 'HOURLY';
+    const effectivePricingType = service?.pricingType || requestedPricingType || 'FIXED';
+    const isDuration = effectivePricingType === 'DURATION';
+    const isHourly = effectivePricingType === 'HOURLY';
+
+    let itemDurationMinutes = null;
+    let itemPricePer30 = null;
+    let itemMinDuration = 30;
+    let itemMaxDuration = 480;
     let itemHours = null;
-    if (isHourly) {
-      itemHours = Number(hours);
-      const minHours = service.minHours || 1;
-      const maxHours = service.maxHours || 8;
+
+    let itemUnitPrice = 0;
+    let itemCount = 1;
+    let itemTotalPrice = 0;
+
+    if (isDuration) {
+      itemPricePer30 = Number(service?.pricePer30Minutes ?? service?.durationPricing?.pricePer30Minutes ?? pricePer30Minutes ?? (service?.basePrice || 0));
+      itemMinDuration = Number(service?.minDurationMinutes ?? service?.durationPricing?.minDurationMinutes ?? 30);
+      itemMaxDuration = Number(service?.maxDurationMinutes ?? service?.durationPricing?.maxDurationMinutes ?? 480);
+
+      const requestedDuration = Number(durationMinutes || (hours ? Number(hours) * 60 : itemMinDuration));
+      
+      if (isNaN(requestedDuration) || requestedDuration < itemMinDuration || requestedDuration > itemMaxDuration || requestedDuration % 30 !== 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Duration must be between ${itemMinDuration} and ${itemMaxDuration} minutes, in 30-minute intervals.`
+        });
+      }
+
+      itemDurationMinutes = requestedDuration;
+      itemHours = requestedDuration / 60;
+      itemUnitPrice = itemPricePer30;
+      itemCount = 1;
+      itemTotalPrice = (itemDurationMinutes / 30) * itemPricePer30;
+    } else if (isHourly) {
+      itemHours = Number(hours || 1);
+      const minHours = service?.minHours || 1;
+      const maxHours = service?.maxHours || 8;
       if (!itemHours || itemHours < minHours || itemHours > maxHours) {
         return res.status(400).json({
           success: false,
           message: `Hours must be between ${minHours} and ${maxHours}`
         });
       }
+      itemUnitPrice = Number(service?.hourlyRate || 0);
+      itemCount = 1;
+      itemTotalPrice = itemUnitPrice * itemHours;
+    } else {
+      // FIXED Pricing
+      itemUnitPrice = Number(unitPrice ?? price ?? service?.basePrice ?? 0);
+      itemCount = Number(serviceCount || 1);
+      itemTotalPrice = Number(price ?? (itemUnitPrice * itemCount));
     }
 
     const itemTitle = title || service?.title || 'Service Item';
     const itemCategory = category || service?.categoryId?.title || service?.brandId?.title || sectionTitle || 'General';
-    const itemUnitPrice = isHourly ? Number(service.hourlyRate || 0) : Number(unitPrice ?? price ?? service?.basePrice ?? 0);
-    const itemCount = isHourly ? 1 : Number(serviceCount || 1);
-    const itemTotalPrice = isHourly ? (itemUnitPrice * itemHours) : Number(price ?? (itemUnitPrice * itemCount));
     const itemIcon = icon || service?.iconUrl || service?.image || '';
     const itemDescription = description || service?.description || service?.tagline || '';
 
@@ -114,7 +152,18 @@ const addToCart = async (req, res) => {
       item => item.title === itemTitle && (!serviceId || item.serviceId?.toString() === serviceId.toString())
     );
 
-    if (existingItemIndex !== -1 && isHourly) {
+    if (existingItemIndex !== -1 && isDuration) {
+      // Duration items: update duration and price rather than stacking quantity
+      cart.items[existingItemIndex].pricingType = 'DURATION';
+      cart.items[existingItemIndex].durationMinutes = itemDurationMinutes;
+      cart.items[existingItemIndex].pricePer30Minutes = itemPricePer30;
+      cart.items[existingItemIndex].minDurationMinutes = itemMinDuration;
+      cart.items[existingItemIndex].maxDurationMinutes = itemMaxDuration;
+      cart.items[existingItemIndex].hours = itemHours;
+      cart.items[existingItemIndex].unitPrice = itemUnitPrice;
+      cart.items[existingItemIndex].price = itemTotalPrice;
+      cart.items[existingItemIndex].serviceCount = 1;
+    } else if (existingItemIndex !== -1 && isHourly) {
       // Hourly items: replace the hour count/price rather than stacking a "quantity"
       cart.items[existingItemIndex].hours = itemHours;
       cart.items[existingItemIndex].unitPrice = itemUnitPrice;
@@ -135,6 +184,11 @@ const addToCart = async (req, res) => {
         description: itemDescription,
         icon: itemIcon,
         category: itemCategory,
+        pricingType: effectivePricingType,
+        durationMinutes: itemDurationMinutes,
+        pricePer30Minutes: itemPricePer30,
+        minDurationMinutes: itemMinDuration,
+        maxDurationMinutes: itemMaxDuration,
         price: itemTotalPrice,
         originalPrice: originalPrice ? Number(originalPrice) : (service?.originalPrice || null),
         unitPrice: itemUnitPrice,
@@ -174,7 +228,7 @@ const addToCart = async (req, res) => {
 };
 
 /**
- * Update cart item quantity
+ * Update cart item quantity or duration
  */
 const updateCartItem = async (req, res) => {
   try {
@@ -189,14 +243,7 @@ const updateCartItem = async (req, res) => {
 
     const userId = req.user.id;
     const { itemId } = req.params;
-    const { serviceCount } = req.body;
-
-    if (serviceCount < 1) {
-      return res.status(400).json({
-        success: false,
-        message: 'Quantity must be at least 1'
-      });
-    }
+    const { serviceCount, durationMinutes } = req.body;
 
     const cart = await Cart.findOne({ userId });
     if (!cart) {
@@ -214,8 +261,34 @@ const updateCartItem = async (req, res) => {
       });
     }
 
-    item.serviceCount = serviceCount;
-    item.price = item.unitPrice * serviceCount;
+    if (item.pricingType === 'DURATION' || durationMinutes !== undefined) {
+      const newDuration = Number(durationMinutes !== undefined ? durationMinutes : item.durationMinutes);
+      const minMins = item.minDurationMinutes || 30;
+      const maxMins = item.maxDurationMinutes || 480;
+
+      if (isNaN(newDuration) || newDuration < minMins || newDuration > maxMins || newDuration % 30 !== 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Duration must be between ${minMins} and ${maxMins} minutes in 30-minute intervals.`
+        });
+      }
+
+      item.durationMinutes = newDuration;
+      item.hours = newDuration / 60;
+      const rate = item.pricePer30Minutes || item.unitPrice || 0;
+      item.price = (newDuration / 30) * rate;
+    } else {
+      const count = Number(serviceCount || 1);
+      if (count < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Quantity must be at least 1'
+        });
+      }
+      item.serviceCount = count;
+      item.price = (item.unitPrice || 0) * count;
+    }
+
     await cart.save();
 
     res.status(200).json({

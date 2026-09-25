@@ -210,31 +210,56 @@ const createBooking = async (req, res) => {
       finalCategory = await Category.findOne({ title: service.category });
     }
 
-    // Map booked items to new schema (sectionTitle -> brandName)
-    const formattedBookedItems = (Array.isArray(bookedItems) && bookedItems.length > 0) ? bookedItems.map(item => ({
-      brandName: item.brandName || item.sectionTitle || item.brand || '',
-      brandIcon: item.brandIcon || item.sectionIcon || item.icon || null,
-      card: item.card || item,
-      quantity: item.quantity || 1
-    })) : [];
+    // Map booked items to schema (preserving pricing snapshot & duration metadata)
+    const formattedBookedItems = (Array.isArray(bookedItems) && bookedItems.length > 0) ? bookedItems.map(item => {
+      const cardObj = item.card || item;
+      const effectiveType = cardObj.pricingType || item.pricingType || (service.pricingType === 'DURATION' ? 'DURATION' : (item.hours ? 'HOURLY' : 'FIXED'));
+      const durationMins = cardObj.durationMinutes || item.durationMinutes || (cardObj.hours ? cardObj.hours * 60 : (item.hours ? item.hours * 60 : null));
+      const pricePer30 = cardObj.pricePer30Minutes || item.pricePer30Minutes || service.pricePer30Minutes || null;
+
+      return {
+        brandName: item.brandName || item.sectionTitle || item.brand || '',
+        brandIcon: item.brandIcon || item.sectionIcon || item.icon || null,
+        serviceName: item.serviceName || item.title || service.title || '',
+        card: {
+          title: cardObj.title || item.title || service.title,
+          subtitle: cardObj.subtitle || item.description || '',
+          price: cardObj.price ?? item.price ?? 0,
+          originalPrice: cardObj.originalPrice ?? item.originalPrice ?? null,
+          duration: cardObj.duration || (durationMins ? `${durationMins} mins` : ''),
+          description: cardObj.description || item.description || '',
+          imageUrl: cardObj.imageUrl || item.icon || service.iconUrl || '',
+          features: cardObj.features || [],
+          pricingType: effectiveType,
+          durationMinutes: durationMins,
+          pricePer30Minutes: pricePer30,
+          hours: cardObj.hours || (durationMins ? durationMins / 60 : null)
+        },
+        quantity: item.quantity || item.serviceCount || 1
+      };
+    }) : [];
 
     console.log('[CreateBooking] About to save with formatted items:', JSON.stringify(formattedBookedItems, null, 2));
 
-    // Detect HOURLY-priced bookings (isolated from fixed-price flow) and snapshot
-    // the rate/duration needed for the in-service timer + extra-time billing.
-    const totalBookedHours = formattedBookedItems.reduce((sum, item) => {
-      const hrs = item.card && item.card.hours ? Number(item.card.hours) : 0;
-      return sum + hrs * (item.quantity || 1);
+    // Detect DURATION / HOURLY priced bookings and snapshot duration/rates for timer
+    const totalBookedMinutes = formattedBookedItems.reduce((sum, item) => {
+      const mins = item.card?.durationMinutes || (item.card?.hours ? item.card.hours * 60 : 0);
+      return sum + (mins * (item.quantity || 1));
     }, 0);
+
     let hourlyTracking = { isHourly: false };
-    if (totalBookedHours > 0) {
-      const hourlyRate = service.hourlyRate || 0;
+    if (totalBookedMinutes > 0 || service.pricingType === 'DURATION' || service.pricingType === 'HOURLY') {
+      const effectiveDuration = totalBookedMinutes > 0 ? totalBookedMinutes : (service.minDurationMinutes || 30);
+      const effectiveHourlyRate = service.pricingType === 'DURATION' 
+        ? ((service.pricePer30Minutes || (service.basePrice || 0)) * 2) 
+        : (service.hourlyRate || 0);
+
       hourlyTracking = {
         isHourly: true,
-        bookedHours: totalBookedHours,
-        bookedMinutes: totalBookedHours * 60,
-        hourlyRate,
-        extraHourlyRate: hourlyRate,
+        bookedHours: effectiveDuration / 60,
+        bookedMinutes: effectiveDuration,
+        hourlyRate: effectiveHourlyRate,
+        extraHourlyRate: effectiveHourlyRate,
         phase: 'NOT_STARTED',
         extraPaymentStatus: 'NOT_REQUIRED',
         workDoneAllowed: true

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import useAppNotifications from '../../../../hooks/useAppNotifications';
@@ -24,7 +24,8 @@ import {
   FiUser,
   FiChevronRight,
   FiSearch,
-  FiAlertCircle
+  FiAlertCircle,
+  FiDownload
 } from 'react-icons/fi';
 import { bookingService } from '../../../../services/bookingService';
 import { paymentService } from '../../../../services/paymentService';
@@ -34,6 +35,7 @@ import PaymentVerificationModal from '../../components/booking/PaymentVerificati
 import HourlyExtraPaymentCard from '../../components/booking/HourlyExtraPaymentCard';
 import { ConfirmDialog } from '../../../../components/common';
 import ReviewCard from '../../components/booking/ReviewCard';
+import InvoiceModal from '../../components/booking/InvoiceModal';
 import NotificationBell from '../../components/common/NotificationBell';
 import api from '../../../../services/api';
 
@@ -53,6 +55,8 @@ const BookingDetails = () => {
   const [loading, setLoading] = useState(true);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [companySettings, setCompanySettings] = useState(null);
   const [paying, setPaying] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
@@ -76,6 +80,7 @@ const BookingDetails = () => {
         const response = await api.get('/public/config');
         if (response.data?.success && response.data?.settings) {
           const { supportEmail, supportPhone, serviceGstPercentage } = response.data.settings;
+          setCompanySettings(response.data.settings);
           setSupportInfo({
             email: supportEmail || 'help@Qwiklly.in',
             phone: supportPhone || '+919999999999'
@@ -1352,15 +1357,50 @@ const BookingDetails = () => {
             {/* Payment Status Footer */}
             <div className="bg-gray-50 px-5 py-3 border-t border-gray-100 flex justify-between items-center">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Payment Status</span>
-              <span className={`px-2.5 py-1 rounded-md text-xs font-bold capitalize ${['success', 'collected_by_vendor', 'paid'].includes(booking.paymentStatus?.toLowerCase()) ? 'bg-green-100 text-green-700' :
-                booking.paymentStatus === 'pending' || booking.paymentStatus === 'plan_covered' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                }`}>
-                {['success', 'collected_by_vendor', 'paid', 'paid_online'].includes(booking.paymentStatus?.toLowerCase()) ? 'Paid' :
-                  booking.paymentStatus === 'plan_covered' ? 'Processing Bill' :
-                    booking.paymentStatus?.replace(/_/g, ' ') || 'Pending'}
-              </span>
+              <div className="flex items-center gap-2.5">
+                <span className={`px-2.5 py-1 rounded-md text-xs font-bold capitalize ${['success', 'collected_by_vendor', 'paid', 'paid_online'].includes(booking.paymentStatus?.toLowerCase()) ? 'bg-green-100 text-green-700' :
+                  booking.paymentStatus === 'pending' || booking.paymentStatus === 'plan_covered' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                  }`}>
+                  {['success', 'collected_by_vendor', 'paid', 'paid_online'].includes(booking.paymentStatus?.toLowerCase()) ? 'Paid' :
+                    booking.paymentStatus === 'plan_covered' ? 'Processing Bill' :
+                      booking.paymentStatus?.replace(/_/g, ' ') || 'Pending'}
+                </span>
+                {['completed', 'work_done'].includes(booking.status?.toLowerCase()) && (
+                  <button
+                    onClick={() => setShowInvoiceModal(true)}
+                    className="px-2.5 py-1 bg-[#FFF7FA] text-[#720C3E] hover:bg-[#FCEBF3] border border-[#E8D9DF] rounded-md text-xs font-bold transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs"
+                    title="Download Tax Invoice"
+                  >
+                    <FiDownload className="text-xs" /> Invoice
+                  </button>
+                )}
+              </div>
             </div>
             </section>
+          )}
+
+          {/* Download Tax Invoice Card (Shown upon completion) */}
+          {['completed', 'work_done'].includes(booking.status?.toLowerCase()) && (
+            <div className="bg-gradient-to-br from-[#FFF7FA] to-white rounded-2xl p-4 border border-[#E8D9DF] shadow-2xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-[#720C3E]/10 flex items-center justify-center text-[#720C3E] shrink-0">
+                    <FiDownload className="text-lg" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-900 leading-tight">Service Completed</h4>
+                    <p className="text-[11px] text-slate-500">Your official tax invoice & receipt is ready</p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowInvoiceModal(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#5b0931] hover:to-[#720C3E] text-white rounded-xl font-bold text-xs sm:text-sm tracking-wide shadow-md shadow-[#720C3E]/20 transition-all active:scale-[0.98] cursor-pointer"
+              >
+                <FiDownload className="text-sm" /> Download Tax Invoice
+              </button>
+            </div>
           )}
 
           {/* Action Buttons */}
@@ -1439,6 +1479,14 @@ const BookingDetails = () => {
           onClose={() => setShowPaymentModal(false)}
           booking={booking}
           onPayOnline={handleOnlinePayment}
+        />
+
+        {/* Invoice Modal */}
+        <InvoiceModal
+          isOpen={showInvoiceModal}
+          onClose={() => setShowInvoiceModal(false)}
+          booking={booking}
+          companySettings={companySettings}
         />
 
         <ConfirmDialog

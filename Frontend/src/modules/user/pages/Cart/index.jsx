@@ -305,11 +305,17 @@ const Cart = () => {
                               <p className="text-xs sm:text-sm text-gray-800 font-bold capitalize truncate">
                                 {item.title}
                               </p>
-                              <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 bg-white px-1.5 py-0.2 rounded border border-gray-200/80 shrink-0">
-                                {item.hours ? `${item.hours} ${item.hours === 1 ? 'Hour' : 'Hours'}` : `× ${item.serviceCount || 1}`}
+                              <span className="text-[10px] sm:text-[11px] font-bold text-[#720C3E] bg-[#FFF7FA] px-1.5 py-0.5 rounded border border-[#E8D9DF] shrink-0">
+                                {item.durationMinutes 
+                                  ? `${item.durationMinutes} Mins` 
+                                  : (item.hours ? `${item.hours} ${item.hours === 1 ? 'Hour' : 'Hours'}` : `× ${item.serviceCount || 1}`)}
                               </span>
                             </div>
-                            {item.hours ? (
+                            {item.durationMinutes ? (
+                              <p className="text-[10px] sm:text-[11px] text-gray-500 font-medium mt-0.5 truncate">
+                                ₹{(item.pricePer30Minutes || item.unitPrice || 0).toLocaleString('en-IN')}/30m × {item.durationMinutes} mins
+                              </p>
+                            ) : item.hours ? (
                               <p className="text-[10px] sm:text-[11px] text-gray-400 mt-0.5 truncate">₹{(item.unitPrice || 0).toLocaleString('en-IN')}/hr × {item.hours} {item.hours === 1 ? 'hr' : 'hrs'}</p>
                             ) : item.description && (
                               <p className="text-[10px] sm:text-[11px] text-gray-400 mt-0.5 truncate">{item.description}</p>

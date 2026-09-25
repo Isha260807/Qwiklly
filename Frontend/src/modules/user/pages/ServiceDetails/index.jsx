@@ -114,8 +114,13 @@ const ServiceDetails = () => {
   const [loading, setLoading] = useState(!location.state?.service);
   const [addingToCart, setAddingToCart] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
-  const [selectedHours, setSelectedHours] = useState(location.state?.service?.minHours || 1);
-  const [customHoursMode, setCustomHoursMode] = useState(false);
+
+  const isDurationBased = service?.pricingType === 'DURATION' || service?.pricingType === 'HOURLY';
+  const pricePer30Minutes = Number(service?.pricePer30Minutes ?? service?.durationPricing?.pricePer30Minutes ?? (service?.hourlyRate ? Math.round(service.hourlyRate / 2) : (service?.basePrice || 0)));
+  const minDurationMinutes = Number(service?.minDurationMinutes ?? service?.durationPricing?.minDurationMinutes ?? (service?.minHours ? service.minHours * 60 : 30));
+  const maxDurationMinutes = Number(service?.maxDurationMinutes ?? service?.durationPricing?.maxDurationMinutes ?? (service?.maxHours ? service.maxHours * 60 : 240));
+
+  const [selectedDurationMinutes, setSelectedDurationMinutes] = useState(minDurationMinutes || 30);
 
   const howItWorksRef = useRef(null);
 
@@ -146,8 +151,10 @@ const ServiceDetails = () => {
 
         if (found) {
           setService(found);
-          if (found.pricingType === 'HOURLY') {
-            setSelectedHours(found.minHours || 1);
+          const isDur = found.pricingType === 'DURATION' || found.pricingType === 'HOURLY';
+          const minM = Number(found.minDurationMinutes ?? found.durationPricing?.minDurationMinutes ?? (found.minHours ? found.minHours * 60 : 30));
+          if (isDur) {
+            setSelectedDurationMinutes(minM || 30);
           }
         } else if (!service) {
           toast.error('Service details not found');
@@ -181,26 +188,24 @@ const ServiceDetails = () => {
     );
   }
 
-  const isHourly = service.pricingType === 'HOURLY';
-  const minHours = service.minHours || 1;
-  const maxHours = service.maxHours || 8;
-  const hourlyRate = Number(service.hourlyRate || 0);
-  const hourOptions = isHourly
-    ? Array.from({ length: Math.max(0, maxHours - minHours + 1) }, (_, i) => minHours + i)
-    : [];
+  const displayPrice = isDurationBased 
+    ? (selectedDurationMinutes / 30) * pricePer30Minutes 
+    : (service.price || service.basePrice || service.discountPrice || 0);
 
-  const displayPrice = isHourly ? hourlyRate * selectedHours : (service.price || service.basePrice || service.discountPrice || 0);
-  const originalPrice = isHourly ? null : (service.originalPrice || (service.discountPrice && service.basePrice ? service.basePrice : null));
+  const originalPrice = isDurationBased ? null : (service.originalPrice || (service.discountPrice && service.basePrice ? service.basePrice : null));
   const hasDiscount = originalPrice && Number(originalPrice) > Number(displayPrice);
 
-  const handleHoursSelect = (h) => {
-    const clamped = Math.min(maxHours, Math.max(minHours, Number(h) || minHours));
-    setSelectedHours(clamped);
+  const handleDurationDecrement = () => {
+    setSelectedDurationMinutes((prev) => Math.max(minDurationMinutes, prev - 30));
+  };
+
+  const handleDurationIncrement = () => {
+    setSelectedDurationMinutes((prev) => Math.min(maxDurationMinutes, prev + 30));
   };
 
   const inclusions = service.inclusions && service.inclusions.length > 0 ? service.inclusions : defaultInclusions;
   const whyLove = service.whyLove && service.whyLove.length > 0 ? service.whyLove : defaultWhyLove;
-  const whyLoveTitle = service.whyLoveTitle || `Why Customers Love ${service.title || 'Hourly Services'}`;
+  const whyLoveTitle = service.whyLoveTitle || `Why Customers Love ${service.title || 'Our Services'}`;
   const exclusions = service.exclusions && service.exclusions.length > 0 ? service.exclusions : defaultExclusions;
   const exclusionsTitle = service.exclusionsTitle || 'Does not include';
   const howItWorks = service.howItWorks && service.howItWorks.length > 0 ? service.howItWorks : defaultHowItWorks;
@@ -217,14 +222,21 @@ const ServiceDetails = () => {
         sectionTitle: service.brandName || service.title || '',
         description: service.tagline || service.description || '',
         icon: service.image || service.icon || service.imageUrl || service.iconUrl || '',
+        pricingType: isDurationBased ? 'DURATION' : 'FIXED',
         price: Number(displayPrice),
         originalPrice: originalPrice ? Number(originalPrice) : null,
-        unitPrice: isHourly ? hourlyRate : Number(displayPrice),
+        unitPrice: isDurationBased ? pricePer30Minutes : Number(displayPrice),
         serviceCount: 1,
         rating: service.rating || '4.9',
         reviews: service.ratingCount || '237.6k',
         inclusions: inclusions,
-        ...(isHourly ? { hours: selectedHours } : {})
+        ...(isDurationBased ? {
+          durationMinutes: selectedDurationMinutes,
+          pricePer30Minutes: pricePer30Minutes,
+          minDurationMinutes: minDurationMinutes,
+          maxDurationMinutes: maxDurationMinutes,
+          hours: selectedDurationMinutes / 60
+        } : {})
       };
 
       const response = await addToCart(cartItemData);
@@ -344,9 +356,9 @@ const ServiceDetails = () => {
                 <span className="text-lg sm:text-xl font-extrabold text-slate-900 leading-none">
                   ₹{displayPrice}
                 </span>
-                {isHourly && (
-                  <span className="text-xs sm:text-sm text-slate-400 font-medium leading-none">
-                    ({hourlyRate}/hr × {selectedHours} {selectedHours === 1 ? 'hr' : 'hrs'})
+                {isDurationBased && (
+                  <span className="text-xs sm:text-sm text-slate-500 font-semibold leading-none">
+                    (₹{pricePer30Minutes}/30m × {selectedDurationMinutes} mins)
                   </span>
                 )}
                 {hasDiscount && (
@@ -379,57 +391,77 @@ const ServiceDetails = () => {
           </div>
         </div>
 
-        {/* Select Hours (HOURLY-priced services only) */}
-        {isHourly && (
-          <div className="space-y-2.5 pb-2">
-            <h3 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">
-              Select Hours
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {hourOptions.map((h) => (
-                <button
-                  key={h}
-                  type="button"
-                  onClick={() => {
-                    setCustomHoursMode(false);
-                    handleHoursSelect(h);
-                  }}
-                  className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold border-2 transition-all cursor-pointer ${
-                    !customHoursMode && selectedHours === h
-                      ? 'bg-[#720C3E] border-[#720C3E] text-white'
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  {h} {h === 1 ? 'Hour' : 'Hours'}
-                </button>
-              ))}
+        {/* Select Duration (DURATION-priced services) */}
+        {isDurationBased && (
+          <div className="p-4 bg-[#FFF7FA] rounded-2xl border border-[#E8D9DF] space-y-3.5 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">
+                  Select Duration
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Scales in 30-minute blocks (₹{pricePer30Minutes} per 30 mins)
+                </p>
+              </div>
 
-              {service.allowCustomHours && (
-                <button
-                  type="button"
-                  onClick={() => setCustomHoursMode(true)}
-                  className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold border-2 transition-all cursor-pointer ${
-                    customHoursMode
-                      ? 'bg-[#720C3E] border-[#720C3E] text-white'
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  Custom
-                </button>
-              )}
+              <span className="px-2.5 py-1 bg-white border border-[#E8D9DF] text-[#720C3E] text-xs font-black rounded-lg shadow-2xs">
+                ₹{displayPrice}
+              </span>
             </div>
 
-            {customHoursMode && (
-              <input
-                type="number"
-                min={minHours}
-                max={maxHours}
-                value={selectedHours}
-                onChange={(e) => handleHoursSelect(e.target.value)}
-                placeholder={`Enter hours (${minHours}-${maxHours})`}
-                className="w-full sm:w-48 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-              />
-            )}
+            {/* Interactive Stepper */}
+            <div className="flex items-center justify-between bg-white rounded-xl p-2 border border-[#E8D9DF] shadow-xs">
+              <button
+                type="button"
+                onClick={handleDurationDecrement}
+                disabled={selectedDurationMinutes <= minDurationMinutes}
+                className="w-10 h-10 rounded-lg bg-[#FFF7FA] hover:bg-[#FCEBF3] active:scale-95 border border-[#E8D9DF] text-[#720C3E] flex items-center justify-center font-black transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                title="Decrease 30 minutes"
+              >
+                <FiMinus className="text-base" />
+              </button>
+
+              <div className="text-center px-4">
+                <p className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                  {selectedDurationMinutes} Mins
+                </p>
+                <p className="text-[11px] font-bold text-slate-500">
+                  {selectedDurationMinutes >= 60 
+                    ? `${(selectedDurationMinutes / 60).toFixed(1).replace('.0', '')} ${selectedDurationMinutes === 60 ? 'Hour' : 'Hours'}`
+                    : '30 Minutes Help'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDurationIncrement}
+                disabled={selectedDurationMinutes >= maxDurationMinutes}
+                className="w-10 h-10 rounded-lg bg-gradient-to-r from-[#720C3E] to-[#9A2459] active:scale-95 text-white flex items-center justify-center font-black transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer shadow-xs"
+                title="Increase 30 minutes"
+              >
+                <FiPlus className="text-base" />
+              </button>
+            </div>
+
+            {/* Quick Select Preset Pills */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {[30, 60, 90, 120, 180, 240, 300, 360, 480]
+                .filter((mins) => mins >= minDurationMinutes && mins <= maxDurationMinutes)
+                .map((mins) => (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => setSelectedDurationMinutes(mins)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      selectedDurationMinutes === mins
+                        ? 'bg-[#720C3E] text-white shadow-2xs'
+                        : 'bg-white border border-[#E8D9DF] text-slate-700 hover:bg-[#FFF7FA]'
+                    }`}
+                  >
+                    {mins >= 60 ? `${mins / 60}h (${mins}m)` : `${mins}m`} • ₹{(mins / 30) * pricePer30Minutes}
+                  </button>
+                ))}
+            </div>
           </div>
         )}
 

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { FiArrowLeft, FiShoppingCart, FiTrash2, FiMinus, FiPlus, FiPhone, FiHome, FiClock, FiEdit2, FiCheckCircle, FiInfo, FiCreditCard, FiShield, FiCheck } from 'react-icons/fi';
@@ -356,17 +356,23 @@ const Checkout = () => {
         brandName: item.sectionTitle || item.brand || '',
         brandIcon: item.sectionIcon || null,
         serviceId: (typeof item.serviceId === 'object' ? (item.serviceId?._id || item.serviceId?.id) : item.serviceId) || undefined,
-        hours: item.hours || item.card?.hours || undefined,
+        pricingType: item.pricingType || item.card?.pricingType || undefined,
+        durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+        pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
+        hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined),
         card: {
           title: item.card?.title || item.title,
           subtitle: item.card?.subtitle || item.description || '',
           price: item.card?.price || item.price || 0,
           originalPrice: item.card?.originalPrice || item.originalPrice || null,
-          duration: item.card?.duration || item.duration || '',
+          duration: item.card?.duration || item.duration || (item.durationMinutes ? `${item.durationMinutes} mins` : ''),
           description: item.card?.description || item.description || '',
           imageUrl: item.card?.imageUrl || item.icon || '',
           features: item.card?.features || [],
-          hours: item.hours || item.card?.hours || undefined
+          pricingType: item.pricingType || item.card?.pricingType || undefined,
+          durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+          pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
+          hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined)
         },
         quantity: item.serviceCount || 1
       }));
@@ -558,17 +564,23 @@ const Checkout = () => {
         brandName: item.sectionTitle || item.brand || '',
         brandIcon: item.sectionIcon || null,
         serviceId: (typeof item.serviceId === 'object' ? (item.serviceId?._id || item.serviceId?.id) : item.serviceId) || undefined,
-        hours: item.hours || item.card?.hours || undefined,
+        pricingType: item.pricingType || item.card?.pricingType || undefined,
+        durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+        pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
+        hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined),
         card: {
           title: item.card?.title || item.title || 'Unknown Service',
           subtitle: item.card?.subtitle || item.description || '',
           price: item.card?.price || item.price || 0,
           originalPrice: item.card?.originalPrice || item.originalPrice || null,
-          duration: item.card?.duration || item.duration || '',
+          duration: item.card?.duration || item.duration || (item.durationMinutes ? `${item.durationMinutes} mins` : ''),
           description: item.card?.description || item.description || '',
           imageUrl: item.card?.imageUrl || item.icon || '',
           features: item.card?.features || [],
-          hours: item.hours || item.card?.hours || undefined
+          pricingType: item.pricingType || item.card?.pricingType || undefined,
+          durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+          pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
+          hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined)
         },
         quantity: item.serviceCount || 1
       }));
@@ -1618,8 +1630,8 @@ const Checkout = () => {
         isDateSelected={isDateSelected}
         isTimeSelected={isTimeSelected}
         approxDuration={
-          cartItems.some((i) => i.hours)
-            ? Math.max(...cartItems.map((i) => (i.hours || 0) * 60))
+          cartItems.some((i) => i.durationMinutes || i.hours)
+            ? Math.max(...cartItems.map((i) => i.durationMinutes || (i.hours || 0) * 60))
             : (slotConfig.slotServiceDurationMins || 45)
         }
       />

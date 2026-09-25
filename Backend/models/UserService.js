@@ -48,14 +48,51 @@ const userServiceSchema = new mongoose.Schema({
     default: null
   },
   // ==========================================
-  // Hourly Booking Configuration
+  // Pricing Configuration (FIXED | DURATION)
   // ==========================================
   pricingType: {
     type: String,
-    enum: ['FIXED', 'HOURLY'],
+    enum: ['FIXED', 'DURATION', 'HOURLY'],
     default: 'FIXED',
     index: true
   },
+  fixedPrice: {
+    type: Number,
+    default: null,
+    min: [0, 'Fixed price cannot be negative']
+  },
+  estimatedDurationMinutes: {
+    type: Number,
+    default: 30,
+    min: 1
+  },
+  // Duration-based pricing (per 30-min block)
+  pricePer30Minutes: {
+    type: Number,
+    default: null,
+    min: [0, 'Price per 30 minutes cannot be negative']
+  },
+  minDurationMinutes: {
+    type: Number,
+    default: 30,
+    min: 30
+  },
+  maxDurationMinutes: {
+    type: Number,
+    default: 180,
+    min: 30
+  },
+  durationStepMinutes: {
+    type: Number,
+    default: 30
+  },
+  durationPricing: {
+    pricePer30Minutes: { type: Number, default: null },
+    minDurationMinutes: { type: Number, default: 30 },
+    maxDurationMinutes: { type: Number, default: 180 },
+    durationStepMinutes: { type: Number, default: 30 }
+  },
+  // Backward compatibility fields
   hourlyRate: {
     type: Number,
     default: null,
@@ -63,13 +100,13 @@ const userServiceSchema = new mongoose.Schema({
   },
   minHours: {
     type: Number,
-    default: 1,
-    min: 1
+    default: 0.5,
+    min: 0
   },
   maxHours: {
     type: Number,
     default: 8,
-    min: 1
+    min: 0
   },
   allowCustomHours: {
     type: Boolean,

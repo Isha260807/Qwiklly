@@ -101,6 +101,11 @@ const createService = async (req, res) => {
       originalPrice,
       discountPrice,
       pricingType,
+      fixedPrice,
+      estimatedDurationMinutes,
+      pricePer30Minutes,
+      minDurationMinutes,
+      maxDurationMinutes,
       hourlyRate,
       minHours,
       maxHours,
@@ -135,19 +140,49 @@ const createService = async (req, res) => {
       if (brand) validBrandId = brand._id;
     }
 
-    // Validate hourly pricing configuration
-    const resolvedPricingType = pricingType === 'HOURLY' ? 'HOURLY' : 'FIXED';
-    if (resolvedPricingType === 'HOURLY') {
-      if (!hourlyRate || Number(hourlyRate) <= 0) {
+    // Resolve pricing type: FIXED or DURATION
+    const isDuration = pricingType === 'DURATION' || pricingType === 'HOURLY';
+    const resolvedPricingType = isDuration ? 'DURATION' : 'FIXED';
+
+    let resolvedFixedPrice = null;
+    let resolvedEstimatedDuration = 30;
+    let resolvedPricePer30 = null;
+    let resolvedMinDuration = 30;
+    let resolvedMaxDuration = 180;
+    let resolvedBasePrice = 0;
+
+    if (resolvedPricingType === 'DURATION') {
+      resolvedPricePer30 = Number(pricePer30Minutes || (hourlyRate ? hourlyRate / 2 : 0) || basePrice || 0);
+      resolvedMinDuration = Number(minDurationMinutes || (minHours ? minHours * 60 : 30) || 30);
+      resolvedMaxDuration = Number(maxDurationMinutes || (maxHours ? maxHours * 60 : 180) || 180);
+
+      if (!resolvedPricePer30 || resolvedPricePer30 <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'Hourly rate is required for hourly services'
+          message: 'Price per 30 minutes must be greater than 0 for duration-based services'
         });
       }
-      if (minHours !== undefined && maxHours !== undefined && Number(minHours) > Number(maxHours)) {
+      if (resolvedMinDuration < 30 || resolvedMinDuration % 30 !== 0) {
         return res.status(400).json({
           success: false,
-          message: 'Minimum hours cannot be greater than maximum hours'
+          message: 'Minimum duration must be at least 30 minutes and divisible by 30 (e.g., 30, 60, 90, 120)'
+        });
+      }
+      if (resolvedMaxDuration < resolvedMinDuration || resolvedMaxDuration % 30 !== 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Maximum duration must be greater than or equal to minimum duration and divisible by 30'
+        });
+      }
+      resolvedBasePrice = resolvedPricePer30;
+    } else {
+      resolvedFixedPrice = Number(fixedPrice !== undefined && fixedPrice !== null && fixedPrice !== '' ? fixedPrice : (basePrice || 0));
+      resolvedEstimatedDuration = Number(estimatedDurationMinutes || 30);
+      resolvedBasePrice = resolvedFixedPrice;
+      if (resolvedBasePrice < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Fixed price cannot be negative'
         });
       }
     }
@@ -156,13 +191,26 @@ const createService = async (req, res) => {
       brandId: validBrandId,
       categoryId: categoryId || null,
       title: title.trim(),
-      basePrice: Number(basePrice),
+      basePrice: resolvedBasePrice,
       originalPrice: originalPrice ? Number(originalPrice) : 0,
       discountPrice: discountPrice ? Number(discountPrice) : null,
       pricingType: resolvedPricingType,
-      hourlyRate: resolvedPricingType === 'HOURLY' ? Number(hourlyRate) : null,
-      minHours: minHours !== undefined ? Number(minHours) : 1,
-      maxHours: maxHours !== undefined ? Number(maxHours) : 8,
+      fixedPrice: resolvedFixedPrice,
+      estimatedDurationMinutes: resolvedEstimatedDuration,
+      pricePer30Minutes: resolvedPricePer30,
+      minDurationMinutes: resolvedMinDuration,
+      maxDurationMinutes: resolvedMaxDuration,
+      durationStepMinutes: 30,
+      durationPricing: {
+        pricePer30Minutes: resolvedPricePer30,
+        minDurationMinutes: resolvedMinDuration,
+        maxDurationMinutes: resolvedMaxDuration,
+        durationStepMinutes: 30
+      },
+      // Backward compatibility fields
+      hourlyRate: resolvedPricingType === 'DURATION' ? resolvedPricePer30 * 2 : null,
+      minHours: resolvedMinDuration / 60,
+      maxHours: resolvedMaxDuration / 60,
       allowCustomHours: !!allowCustomHours,
       allowExtraHours: allowExtraHours !== undefined ? !!allowExtraHours : true,
       allowExtraParts: allowExtraParts !== undefined ? !!allowExtraParts : true,
@@ -219,39 +267,83 @@ const updateService = async (req, res) => {
     }
 
     if (updates.title !== undefined) service.title = updates.title.trim();
-    if (updates.basePrice !== undefined) service.basePrice = Number(updates.basePrice);
     if (updates.originalPrice !== undefined) service.originalPrice = Number(updates.originalPrice);
     if (updates.discountPrice !== undefined) service.discountPrice = updates.discountPrice ? Number(updates.discountPrice) : null;
 
-    // Hourly pricing configuration
-    if (updates.pricingType !== undefined) {
-      const resolvedPricingType = updates.pricingType === 'HOURLY' ? 'HOURLY' : 'FIXED';
-      const effectiveHourlyRate = updates.hourlyRate !== undefined ? updates.hourlyRate : service.hourlyRate;
-      const effectiveMinHours = updates.minHours !== undefined ? updates.minHours : service.minHours;
-      const effectiveMaxHours = updates.maxHours !== undefined ? updates.maxHours : service.maxHours;
+    // Pricing type & Duration logic
+    const currentType = updates.pricingType !== undefined ? updates.pricingType : service.pricingType;
+    const isDuration = currentType === 'DURATION' || currentType === 'HOURLY';
+    const resolvedPricingType = isDuration ? 'DURATION' : 'FIXED';
+    service.pricingType = resolvedPricingType;
 
-      if (resolvedPricingType === 'HOURLY') {
-        if (!effectiveHourlyRate || Number(effectiveHourlyRate) <= 0) {
-          return res.status(400).json({
-            success: false,
-            message: 'Hourly rate is required for hourly services'
-          });
-        }
-        if (Number(effectiveMinHours) > Number(effectiveMaxHours)) {
-          return res.status(400).json({
-            success: false,
-            message: 'Minimum hours cannot be greater than maximum hours'
-          });
-        }
+    if (resolvedPricingType === 'DURATION') {
+      const pricePer30 = Number(
+        updates.pricePer30Minutes !== undefined
+          ? updates.pricePer30Minutes
+          : (updates.hourlyRate ? updates.hourlyRate / 2 : (service.pricePer30Minutes || (service.hourlyRate ? service.hourlyRate / 2 : service.basePrice)))
+      );
+      const minDuration = Number(
+        updates.minDurationMinutes !== undefined
+          ? updates.minDurationMinutes
+          : (updates.minHours ? updates.minHours * 60 : (service.minDurationMinutes || (service.minHours ? service.minHours * 60 : 30)))
+      );
+      const maxDuration = Number(
+        updates.maxDurationMinutes !== undefined
+          ? updates.maxDurationMinutes
+          : (updates.maxHours ? updates.maxHours * 60 : (service.maxDurationMinutes || (service.maxHours ? service.maxHours * 60 : 180)))
+      );
+
+      if (!pricePer30 || pricePer30 <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Price per 30 minutes must be greater than 0 for duration-based services'
+        });
       }
-      service.pricingType = resolvedPricingType;
+      if (minDuration < 30 || minDuration % 30 !== 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Minimum duration must be at least 30 minutes and divisible by 30 (e.g., 30, 60, 90, 120)'
+        });
+      }
+      if (maxDuration < minDuration || maxDuration % 30 !== 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Maximum duration must be greater than or equal to minimum duration and divisible by 30'
+        });
+      }
+
+      service.basePrice = pricePer30;
+      service.pricePer30Minutes = pricePer30;
+      service.minDurationMinutes = minDuration;
+      service.maxDurationMinutes = maxDuration;
+      service.durationStepMinutes = 30;
+      service.durationPricing = {
+        pricePer30Minutes: pricePer30,
+        minDurationMinutes: minDuration,
+        maxDurationMinutes: maxDuration,
+        durationStepMinutes: 30
+      };
+      service.hourlyRate = pricePer30 * 2;
+      service.minHours = minDuration / 60;
+      service.maxHours = maxDuration / 60;
+    } else {
+      const fixedPriceVal = Number(
+        updates.fixedPrice !== undefined
+          ? updates.fixedPrice
+          : (updates.basePrice !== undefined ? updates.basePrice : (service.fixedPrice || service.basePrice || 0))
+      );
+      if (fixedPriceVal < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Fixed price cannot be negative'
+        });
+      }
+      service.basePrice = fixedPriceVal;
+      service.fixedPrice = fixedPriceVal;
+      if (updates.estimatedDurationMinutes !== undefined) {
+        service.estimatedDurationMinutes = Number(updates.estimatedDurationMinutes);
+      }
     }
-    if (updates.hourlyRate !== undefined) service.hourlyRate = updates.hourlyRate ? Number(updates.hourlyRate) : null;
-    if (updates.minHours !== undefined) service.minHours = Number(updates.minHours);
-    if (updates.maxHours !== undefined) service.maxHours = Number(updates.maxHours);
-    if (updates.allowCustomHours !== undefined) service.allowCustomHours = !!updates.allowCustomHours;
-    if (updates.allowExtraHours !== undefined) service.allowExtraHours = !!updates.allowExtraHours;
-    if (updates.allowExtraParts !== undefined) service.allowExtraParts = !!updates.allowExtraParts;
 
     if (updates.gstPercentage !== undefined) service.gstPercentage = Number(updates.gstPercentage);
     if (updates.rating !== undefined) service.rating = Number(updates.rating);

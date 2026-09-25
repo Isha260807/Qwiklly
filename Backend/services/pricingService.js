@@ -263,27 +263,43 @@ const calculateBookingPrice = async ({
   }
 
   // 3. Compute Item Total / Base Price
-  // Hourly items are recomputed server-side from the referenced service's hourlyRate —
-  // the client-sent price/card.price is never trusted for them.
+  // DURATION and HOURLY items are recomputed server-side from the referenced service —
+  // client-sent price is NEVER trusted.
   let basePrice = 0;
   let hourlyValidationError = null;
   if (Array.isArray(bookedItems) && bookedItems.length > 0) {
     const itemServiceIds = [...new Set(bookedItems.map(i => i.serviceId).filter(Boolean).map(String))];
-    let hourlyServiceMap = new Map();
+    let serviceMap = new Map();
     if (itemServiceIds.length > 0) {
-      const hourlyServices = await Service.find({ _id: { $in: itemServiceIds }, pricingType: 'HOURLY' })
-        .select('hourlyRate minHours maxHours')
+      const referencedServices = await Service.find({ _id: { $in: itemServiceIds } })
+        .select('pricingType pricePer30Minutes minDurationMinutes maxDurationMinutes durationPricing hourlyRate minHours maxHours basePrice')
         .lean();
-      hourlyServiceMap = new Map(hourlyServices.map(s => [String(s._id), s]));
+      serviceMap = new Map(referencedServices.map(s => [String(s._id), s]));
     }
 
     for (const item of bookedItems) {
-      const hourlySvc = item.serviceId ? hourlyServiceMap.get(String(item.serviceId)) : null;
+      const refSvc = item.serviceId ? serviceMap.get(String(item.serviceId)) : null;
+      const effectiveType = refSvc?.pricingType || item.pricingType || item.card?.pricingType || (item.hours ? 'HOURLY' : 'FIXED');
 
-      if (hourlySvc) {
+      if (effectiveType === 'DURATION' && refSvc) {
+        const pricePer30 = Number(refSvc.pricePer30Minutes ?? refSvc.durationPricing?.pricePer30Minutes ?? refSvc.basePrice ?? 0);
+        const minMins = Number(refSvc.minDurationMinutes ?? refSvc.durationPricing?.minDurationMinutes ?? 30);
+        const maxMins = Number(refSvc.maxDurationMinutes ?? refSvc.durationPricing?.maxDurationMinutes ?? 480);
+        
+        const durationMins = Number(item.durationMinutes ?? item.card?.durationMinutes ?? (item.hours ? item.hours * 60 : minMins));
+
+        if (!durationMins || durationMins < minMins || durationMins > maxMins || durationMins % 30 !== 0) {
+          hourlyValidationError = {
+            code: 'INVALID_DURATION',
+            error: `Duration must be between ${minMins} and ${maxMins} minutes in 30-minute intervals.`
+          };
+          break;
+        }
+        basePrice += (durationMins / 30) * pricePer30;
+      } else if (effectiveType === 'HOURLY' && refSvc) {
         const hours = Number(item.hours ?? item.card?.hours);
-        const minHours = hourlySvc.minHours || 1;
-        const maxHours = hourlySvc.maxHours || 8;
+        const minHours = refSvc.minHours || 1;
+        const maxHours = refSvc.maxHours || 8;
         if (!hours || hours < minHours || hours > maxHours) {
           hourlyValidationError = {
             code: 'INVALID_HOURS',
@@ -291,9 +307,9 @@ const calculateBookingPrice = async ({
           };
           break;
         }
-        basePrice += (hourlySvc.hourlyRate || 0) * hours;
+        basePrice += (refSvc.hourlyRate || 0) * hours;
       } else {
-        const price = item.card?.price ?? item.price ?? 0;
+        const price = item.card?.price ?? item.price ?? refSvc?.basePrice ?? 0;
         const count = item.quantity ?? item.serviceCount ?? 1;
         basePrice += Number(price) * Number(count);
       }
