@@ -41,14 +41,13 @@ const SettlementManagement = () => {
   const navTabs = [
     { path: '/admin/settlements/pending', tabKey: 'pending', label: 'Pending Settlements', icon: FiClock },
     { path: '/admin/settlements/withdrawals', tabKey: 'withdrawals', label: 'Withdrawal Requests', icon: FiArrowUpRight },
-    { path: '/admin/settlements/vendors', tabKey: 'vendors', label: 'Vendors with Due', icon: FiUsers },
     { path: '/admin/settlements/history', tabKey: 'history', label: 'Settlement History', icon: FiTrendingUp },
   ];
 
   // Determine active tab from URL
   useEffect(() => {
     const path = location.pathname.split('/').pop();
-    if (['pending', 'vendors', 'history', 'withdrawals'].includes(path)) {
+    if (['pending', 'history', 'withdrawals'].includes(path)) {
       setActiveTab(path);
     } else {
       setActiveTab('pending');
@@ -112,23 +111,6 @@ const SettlementManagement = () => {
     setActiveModal('reject_settlement');
   };
 
-  const openBlockVendor = (vendor) => {
-    setSelectedItem(vendor);
-    setModalInput('');
-    setActiveModal('block_vendor');
-  };
-
-  const openUnblockVendor = (vendor) => {
-    setSelectedItem(vendor);
-    setActiveModal('unblock_vendor');
-  };
-
-  const openUpdateLimit = (vendor) => {
-    setSelectedItem(vendor);
-    setModalInput(vendor.cashLimit || 10000);
-    setActiveModal('update_limit');
-  };
-
   const openApproveWithdrawal = (item) => {
     setSelectedItem(item);
     setModalInput('');
@@ -178,56 +160,6 @@ const SettlementManagement = () => {
       }
     } catch (error) {
       toast.error('Failed to reject settlement');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleBlockVendor = async () => {
-    if (!modalInput.trim()) return toast.error('Blocking reason is required');
-    try {
-      setActionLoading(true);
-      const res = await adminSettlementService.blockVendor(selectedItem._id, modalInput);
-      if (res.success) {
-        toast.success('Vendor blocked');
-        loadData();
-        closeModals();
-      }
-    } catch (error) {
-      toast.error('Failed to block vendor');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUpdateLimitSubmit = async () => {
-    if (!modalInput || isNaN(modalInput)) return toast.error('Valid limit required');
-    try {
-      setActionLoading(true);
-      const res = await adminSettlementService.updateCashLimit(selectedItem._id, parseInt(modalInput));
-      if (res.success) {
-        toast.success('Limit updated');
-        loadData();
-        closeModals();
-      }
-    } catch (error) {
-      toast.error('Failed to update limit');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUnblockVendorSubmit = async () => {
-    try {
-      setActionLoading(true);
-      const res = await adminSettlementService.unblockVendor(selectedItem._id);
-      if (res.success) {
-        toast.success('Vendor unblocked');
-        loadData();
-        closeModals();
-      }
-    } catch (error) {
-      toast.error('Failed to unblock vendor');
     } finally {
       setActionLoading(false);
     }
@@ -362,46 +294,6 @@ const SettlementManagement = () => {
           border: 'border-gray-100'
         }
       ];
-    } else if (activeTab === 'vendors') {
-      const totalVendors = vendors.length;
-      const totalDue = vendors.reduce((sum, v) => sum + (v.amountDue || 0), 0);
-      const blockedCount = vendors.filter(v => v.isBlocked).length;
-      const totalLimit = vendors.reduce((sum, v) => sum + (v.cashLimit || 0), 0);
-
-      cards = [
-        {
-          title: 'Total Due from Vendors',
-          value: `₹${totalDue.toLocaleString('en-IN')}`,
-          icon: FiDollarSign,
-          color: 'text-red-600',
-          bg: 'bg-red-50',
-          border: 'border-gray-100'
-        },
-        {
-          title: 'Vendors with Dues',
-          value: totalVendors,
-          icon: FiUsers,
-          color: 'text-blue-600',
-          bg: 'bg-blue-50',
-          border: 'border-gray-100'
-        },
-        {
-          title: 'Blocked Vendors',
-          value: blockedCount,
-          icon: FiAlertCircle,
-          color: 'text-orange-600',
-          bg: 'bg-orange-50',
-          border: 'border-gray-100'
-        },
-        {
-          title: 'Total Cash Limit',
-          value: `₹${(totalLimit / 100000).toFixed(1)}L`,
-          icon: FiCheck,
-          color: 'text-indigo-600',
-          bg: 'bg-indigo-50',
-          border: 'border-gray-100'
-        }
-      ];
     } else if (activeTab === 'history') {
       const totalTxns = history.length;
       const totalSettled = history.reduce((sum, h) => h.status === 'approved' ? sum + (h.amount || 0) : 0, 0);
@@ -443,37 +335,39 @@ const SettlementManagement = () => {
         }
       ];
     } else {
+      const pendingCount = pendingSettlements.length;
+      const pendingAmount = pendingSettlements.reduce((sum, s) => sum + (s.amount || 0), 0);
       cards = [
         {
-          title: 'Total Due to Admin',
-          value: `₹${(dashboard?.totalDueToAdmin || 0).toLocaleString('en-IN')}`,
+          title: 'Total Pending Settlements',
+          value: `₹${pendingAmount.toLocaleString('en-IN')}`,
           icon: FiDollarSign,
-          color: 'text-red-600',
-          bg: 'bg-red-50',
-          border: 'border-gray-100'
-        },
-        {
-          title: 'Pending Settlements',
-          value: dashboard?.pendingSettlements?.count || pendingSettlements.length || 0,
-          icon: FiClock,
           color: 'text-orange-600',
           bg: 'bg-orange-50',
           border: 'border-gray-100'
         },
         {
-          title: "Today's Collection",
-          value: `₹${(dashboard?.todayCashCollected?.amount || 0).toLocaleString('en-IN')}`,
-          icon: FiTrendingUp,
+          title: 'Pending Requests',
+          value: pendingCount,
+          icon: FiClock,
           color: 'text-blue-600',
           bg: 'bg-blue-50',
           border: 'border-gray-100'
         },
         {
-          title: 'Weekly Collection',
-          value: `₹${(dashboard?.weeklySettlements?.amount || 0).toLocaleString('en-IN')}`,
+          title: 'Settled to Vendors',
+          value: `₹${(dashboard?.totalSettled || 0).toLocaleString('en-IN')}`,
           icon: FiCheckCircle,
           color: 'text-emerald-600',
           bg: 'bg-emerald-50',
+          border: 'border-gray-100'
+        },
+        {
+          title: 'Active Vendors',
+          value: dashboard?.activeVendors || 'All Online',
+          icon: FiUsers,
+          color: 'text-purple-600',
+          bg: 'bg-purple-50',
           border: 'border-gray-100'
         }
       ];
@@ -613,98 +507,6 @@ const SettlementManagement = () => {
             </div>
           </div>
         ))}
-      </div>
-    )
-  );
-
-  const renderVendorsList = () => (
-    filteredVendors.length === 0 ? (
-      <div className="text-center py-16">
-        <FiCheckCircle className="w-10 h-10 mx-auto mb-2 text-emerald-400" />
-        <p className="text-gray-700 font-bold text-sm">All vendors are clear!</p>
-        <p className="text-xs text-gray-400 mt-0.5">No vendors currently have pending dues exceeding their limit.</p>
-      </div>
-    ) : (
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[700px]">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/75">
-              <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Vendor Details</th>
-              <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Cash Limit Status</th>
-              <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Amount Due</th>
-              <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {filteredVendors.map(vendor => (
-              <tr key={vendor._id} className="hover:bg-gray-50/70 transition-colors">
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${vendor.isBlocked ? 'bg-red-500' : 'bg-primary-600'}`}>
-                      {vendor.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="font-bold text-gray-900 text-xs">{vendor.name}</p>
-                      <p className="text-[10px] text-gray-400">{vendor.businessName} • {vendor.phone}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 text-right">
-                  <div className="flex flex-col items-end">
-                    <p className="text-xs font-semibold text-gray-700 mb-1">
-                      ₹{Math.abs(vendor.dues || vendor.amountDue || 0).toLocaleString('en-IN')} <span className="text-gray-400">/</span> ₹{(vendor.cashLimit || 10000).toLocaleString('en-IN')}
-                    </p>
-                    <div className="w-28 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${vendor.isBlocked ? 'bg-red-500' : 'bg-primary-600'}`}
-                        style={{ width: `${Math.min(((vendor.amountDue || 0) / (vendor.cashLimit || 10000)) * 100, 100)}%` }}
-                      />
-                    </div>
-                    {vendor.isBlocked && <span className="text-[9px] text-red-600 font-bold mt-0.5 uppercase tracking-wide">Blocked</span>}
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 text-right">
-                  <span className="font-extrabold text-red-600 text-sm">
-                    ₹{(vendor.amountDue || 0).toLocaleString('en-IN')}
-                  </span>
-                </td>
-                <td className="px-4 py-3.5 text-right">
-                  <div className="flex justify-end gap-1.5">
-                    <button
-                      onClick={() => navigate(`/admin/settlements/vendor/${vendor._id}`)}
-                      className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="View Ledger"
-                    >
-                      <FiEye className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => openUpdateLimit(vendor)}
-                      className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Update Cash Limit"
-                    >
-                      <FiDollarSign className="w-4 h-4" />
-                    </button>
-                    {vendor.isBlocked ? (
-                      <button
-                        onClick={() => openUnblockVendor(vendor)}
-                        className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-amber-200 transition-colors"
-                      >
-                        Unblock
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => openBlockVendor(vendor)}
-                        className="px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-red-100 transition-colors"
-                      >
-                        Block
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     )
   );
@@ -1015,7 +817,6 @@ const SettlementManagement = () => {
         ) : (
           <div className="p-4">
             {activeTab === 'pending' && renderPendingSettlements()}
-            {activeTab === 'vendors' && renderVendorsList()}
             {activeTab === 'history' && renderHistoryList()}
             {activeTab === 'withdrawals' && renderWithdrawalsList()}
           </div>
@@ -1073,92 +874,6 @@ const SettlementManagement = () => {
               className="bg-red-600 hover:bg-red-700 text-white text-xs"
             >
               Reject Settlement
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Block Vendor Modal */}
-      <Modal
-        isOpen={activeModal === 'block_vendor'}
-        onClose={closeModals}
-        title="Block Vendor"
-        size="sm"
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-gray-600">
-            Blocking <span className="font-bold">{selectedItem?.name}</span> will prevent them from accepting new cash jobs.
-          </p>
-          <textarea
-            value={modalInput}
-            onChange={(e) => setModalInput(e.target.value)}
-            placeholder="Reason for blocking..."
-            className="w-full p-2.5 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
-            rows={3}
-          />
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="ghost" onClick={closeModals}>Cancel</Button>
-            <Button
-              onClick={handleBlockVendor}
-              isLoading={actionLoading}
-              className="bg-red-600 hover:bg-red-700 text-white text-xs"
-            >
-              Block Vendor
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Unblock Vendor Modal */}
-      <Modal
-        isOpen={activeModal === 'unblock_vendor'}
-        onClose={closeModals}
-        title="Unblock Vendor"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-xs text-gray-600">
-            Are you sure you want to unblock <span className="font-bold text-gray-900">{selectedItem?.name}</span>?
-          </p>
-          <div className="flex justify-end gap-2 mt-6">
-            <Button variant="ghost" onClick={closeModals}>Cancel</Button>
-            <Button
-              onClick={handleUnblockVendorSubmit}
-              isLoading={actionLoading}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-            >
-              Unblock Vendor
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Update Cash Limit Modal */}
-      <Modal
-        isOpen={activeModal === 'update_limit'}
-        onClose={closeModals}
-        title="Update Cash Limit"
-        size="sm"
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-gray-600">
-            Set maximum allowed cash dues limit for <span className="font-bold text-gray-900">{selectedItem?.name}</span>:
-          </p>
-          <input
-            type="number"
-            value={modalInput}
-            onChange={(e) => setModalInput(e.target.value)}
-            className="w-full p-2.5 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none"
-            placeholder="e.g., 10000"
-          />
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="ghost" onClick={closeModals}>Cancel</Button>
-            <Button
-              onClick={handleUpdateLimitSubmit}
-              isLoading={actionLoading}
-              className="bg-primary-600 hover:bg-primary-700 text-white text-xs"
-            >
-              Save Limit
             </Button>
           </div>
         </div>

@@ -127,7 +127,6 @@
     "children": [
       "Pending",
       "Withdrawals",
-      "Vendors with Due",
       "History"
     ]
   },
