@@ -12,6 +12,7 @@ import { useCity } from '../../../../context/CityContext';
 import { toast } from 'react-hot-toast';
 import { registerFCMToken } from '../../../../services/pushNotificationService';
 import { motion } from 'framer-motion';
+import { FiMapPin, FiBell } from 'react-icons/fi';
 
 import PromoCarousel from './components/PromoCarousel';
 import TopHeroBanner from './components/TopHeroBanner';
@@ -578,20 +579,40 @@ const Home = () => {
             booking may not go through from this exact location yet. */}
         {zoneStatus && !zoneStatus.inZone && (
           <motion.div
-            variants={itemVariants}
-            className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="px-5 py-4 flex flex-col items-center text-center"
           >
-            <p className="text-xs sm:text-sm text-amber-800 font-medium">
-              Services are coming soon in this location.
-              {zoneStatus.nearestZone?.name && (
-                <span className="text-amber-600"> Nearest service area: {zoneStatus.nearestZone.name} ({zoneStatus.nearestZone.distanceKm}km away).</span>
-              )}
+            <div className="w-11 h-11 rounded-full flex items-center justify-center mb-2"
+              style={{ background: 'linear-gradient(135deg, #FFF7FA 0%, #FCEBF3 100%)' }}
+            >
+              <FiMapPin className="w-5 h-5 text-[#720C3E]" />
+            </div>
+
+            <h2 className="text-base sm:text-lg font-extrabold tracking-tight leading-tight">
+              <span className="text-slate-300">WE ARE</span>{' '}
+              <span className="text-[#720C3E]">COMING SOON</span>
+            </h2>
+
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-1 max-w-xs">
+              We're currently live in select areas and expanding quickly. Get notified when we are near you!
             </p>
+
+            <button
+              onClick={() => toast.success("We'll notify you as soon as we launch in your area!")}
+              className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs sm:text-sm font-bold shadow-md transition-transform active:scale-95"
+              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+            >
+              <FiBell className="w-3.5 h-3.5" />
+              Notify me!
+            </button>
+
             <button
               onClick={() => setIsAddressModalOpen(true)}
-              className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors"
+              className="mt-2 text-xs sm:text-sm font-bold text-[#720C3E] underline underline-offset-2"
             >
-              Change Zone
+              Change location
             </button>
           </motion.div>
         )}
