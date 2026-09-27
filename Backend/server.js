@@ -165,6 +165,7 @@ app.get('/api/test/redis', async (req, res) => {
 // API Routes
 
 app.use('/api/public/cities', require('./routes/public-routes/city.routes.js'));
+app.use('/api/public/zones', require('./routes/public-routes/zone.routes.js'));
 
 
 // User routes
@@ -193,6 +194,7 @@ app.use('/api/vendors/catalog', require('./routes/vendor-routes/catalog.routes')
 // Admin routes
 app.use('/api/admin/auth', require('./routes/admin-routes/adminAuth.routes'));
 app.use('/api/admin', require('./routes/admin-routes/cityManagement.routes.js'));
+app.use('/api/admin', require('./routes/admin-routes/zoneManagement.routes.js'));
 app.use('/api/admin', require('./routes/admin-routes/dashboard.routes'));
 app.use('/api/admin', require('./routes/admin-routes/userManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/vendorManagement.routes'));

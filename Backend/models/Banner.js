@@ -30,13 +30,12 @@ const bannerSchema = new mongoose.Schema({
     enum: ['top', 'middle', 'bottom', 'footer'],
     default: 'top'
   },
-  // City association - if null, shown in all cities
-  cityId: {
+  // Zone association - empty/missing means shown in every active zone
+  zoneIds: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'City',
-    default: null,
+    ref: 'Zone',
     index: true
-  },
+  }],
   // Action/Click redirection configuration
   targetType: {
     type: String,
@@ -94,6 +93,6 @@ const bannerSchema = new mongoose.Schema({
 });
 
 // Index for fast query on active banners sorted by order
-bannerSchema.index({ isActive: 1, bannerType: 1, cityId: 1, order: 1 });
+bannerSchema.index({ isActive: 1, bannerType: 1, order: 1 });
 
 module.exports = mongoose.model('Banner', bannerSchema);

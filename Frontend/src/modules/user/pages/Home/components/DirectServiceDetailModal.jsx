@@ -2,8 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { FiX, FiStar, FiClock, FiCheck, FiShield, FiCheckCircle, FiShare2, FiArrowLeft } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../../../../../context/CartContext';
+import { zoneService } from '../../../../../services/zoneService';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+
+const HARD_BLOCK_REASONS = [
+  'OUT_OF_SERVICE_ZONE',
+  'ZONE_INACTIVE',
+  'SERVICE_NOT_AVAILABLE_IN_ZONE',
+  'INVALID_LOCATION',
+  'SERVICE_NOT_FOUND'
+];
 
 const toAssetUrl = (url) => {
   if (!url) return '';
@@ -17,6 +26,11 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const [addingToCart, setAddingToCart] = useState(false);
+  // true until proven otherwise - only hides the Book button for hard-block
+  // reasons (out of zone / zone inactive / service not offered here).
+  // Vendor availability is not one of these - those bookings still succeed
+  // and get parked for admin assignment.
+  const [canBook, setCanBook] = useState(true);
 
   useEffect(() => {
     if (isOpen) {
@@ -29,6 +43,26 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen || !service) return;
+    const serviceId = service.id || service._id;
+    const lat = parseFloat(localStorage.getItem('userLat'));
+    const lng = parseFloat(localStorage.getItem('userLng'));
+    if (!serviceId || Number.isNaN(lat) || Number.isNaN(lng)) return;
+
+    let cancelled = false;
+    zoneService.checkServiceability(serviceId, lat, lng)
+      .then(res => {
+        if (cancelled || !res?.success) return;
+        setCanBook(!(res.reason && HARD_BLOCK_REASONS.includes(res.reason)));
+      })
+      .catch(() => {
+        // silent - fail open, checkout's own validation is the backstop
+      });
+
+    return () => { cancelled = true; };
+  }, [isOpen, service]);
+
   if (!isOpen || !service) return null;
 
   const displayPrice = service.price || service.basePrice || 0;
@@ -36,6 +70,10 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
   const inclusions = service.inclusions || [];
 
   const handleBookNow = async () => {
+    if (!canBook) {
+      toast.error('This service is not available at your location yet.');
+      return;
+    }
     try {
       setAddingToCart(true);
       const cartItemData = {
@@ -181,14 +219,21 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
                 </div>
               </div>
 
-              {/* Quick Book Button */}
-              <button
-                onClick={handleBookNow}
-                disabled={addingToCart}
-                className="px-6 py-2.5 bg-[#E6F4EA] hover:bg-[#d4edd9] text-[#137333] border border-[#137333]/20 rounded-xl text-sm font-extrabold uppercase tracking-wide transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                {addingToCart ? 'Booking...' : 'Book'}
-              </button>
+              {/* Quick Book Button - hidden when this service isn't
+                  bookable at the user's resolved zone */}
+              {canBook ? (
+                <button
+                  onClick={handleBookNow}
+                  disabled={addingToCart}
+                  className="px-6 py-2.5 bg-[#E6F4EA] hover:bg-[#d4edd9] text-[#137333] border border-[#137333]/20 rounded-xl text-sm font-extrabold uppercase tracking-wide transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  {addingToCart ? 'Booking...' : 'Book'}
+                </button>
+              ) : (
+                <span className="px-4 py-2.5 bg-slate-100 text-slate-400 rounded-xl text-xs font-bold uppercase tracking-wide">
+                  Not in your area
+                </span>
+              )}
             </div>
 
             {/* Description & Tagline */}
@@ -283,13 +328,19 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
               </div>
             </div>
 
-            <button
-              onClick={handleBookNow}
-              disabled={addingToCart}
-              className="flex-1 py-3 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
-            >
-              {addingToCart ? 'Adding to Cart...' : 'Book Service Now'}
-            </button>
+            {canBook ? (
+              <button
+                onClick={handleBookNow}
+                disabled={addingToCart}
+                className="flex-1 py-3 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+              >
+                {addingToCart ? 'Adding to Cart...' : 'Book Service Now'}
+              </button>
+            ) : (
+              <div className="flex-1 py-3 px-6 bg-slate-100 text-slate-500 font-bold text-sm rounded-xl text-center">
+                Not available in your area
+              </div>
+            )}
           </div>
         </motion.div>
       </div>

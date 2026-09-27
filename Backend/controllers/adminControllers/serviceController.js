@@ -9,18 +9,21 @@ const { SERVICE_STATUS } = require('../../utils/constants');
  */
 const getAllServices = async (req, res) => {
   try {
-    const { status, brandId, categoryId, cityId, search } = req.query;
+    const { status, brandId, categoryId, zoneId, search } = req.query;
 
     const query = {};
     if (status) query.status = status;
     if (brandId) query.brandId = brandId;
     if (categoryId) query.categoryId = categoryId;
-    if (cityId) {
+    if (zoneId) {
+      // A service with an empty zoneIds[] is available in every active
+      // zone by design (see checkServiceAvailabilityInZone) - the filter
+      // must include those "global" services alongside ones explicitly
+      // assigned to this zone, not just the explicit matches.
       query.$or = [
-        { cityId: cityId },
-        { cityIds: cityId },
-        { cityIds: { $size: 0 } },
-        { cityIds: { $exists: false } }
+        { zoneIds: zoneId },
+        { zoneIds: { $size: 0 } },
+        { zoneIds: { $exists: false } }
       ];
     }
     if (search) {
@@ -30,7 +33,7 @@ const getAllServices = async (req, res) => {
     const services = await Service.find(query)
       .populate('brandId', 'title')
       .populate('categoryId', 'title')
-      .populate('cityId', 'name')
+      .populate('zoneIds', 'name')
       .sort({ displayOrder: 1, createdAt: -1 });
 
     res.status(200).json({
@@ -56,7 +59,7 @@ const getServiceById = async (req, res) => {
     const service = await Service.findById(req.params.id)
       .populate('brandId', 'title')
       .populate('categoryId', 'title')
-      .populate('cityId', 'name');
+      .populate('zoneIds', 'name');
 
     if (!service) {
       return res.status(404).json({
@@ -126,8 +129,7 @@ const createService = async (req, res) => {
       howItWorksTitle,
       howItWorks,
       faqs,
-      cityIds,
-      cityId,
+      zoneIds,
       description,
       status,
       iconUrl
@@ -228,8 +230,7 @@ const createService = async (req, res) => {
       howItWorksTitle: howItWorksTitle ? howItWorksTitle.trim() : null,
       howItWorks: Array.isArray(howItWorks) ? howItWorks : [],
       faqs: Array.isArray(faqs) ? faqs : [],
-      cityIds: Array.isArray(cityIds) ? cityIds : (cityId ? [cityId] : []),
-      cityId: cityId || (Array.isArray(cityIds) && cityIds.length > 0 ? cityIds[0] : null),
+      zoneIds: Array.isArray(zoneIds) ? zoneIds : [],
       description: description ? description.trim() : '',
       status: status || SERVICE_STATUS.ACTIVE,
       iconUrl: iconUrl || null
@@ -359,8 +360,7 @@ const updateService = async (req, res) => {
     if (updates.howItWorksTitle !== undefined) service.howItWorksTitle = updates.howItWorksTitle;
     if (updates.howItWorks !== undefined) service.howItWorks = updates.howItWorks;
     if (updates.faqs !== undefined) service.faqs = updates.faqs;
-    if (updates.cityIds !== undefined) service.cityIds = updates.cityIds;
-    if (updates.cityId !== undefined) service.cityId = updates.cityId;
+    if (updates.zoneIds !== undefined) service.zoneIds = updates.zoneIds;
     if (updates.description !== undefined) service.description = updates.description;
     if (updates.status !== undefined) service.status = updates.status;
     if (updates.iconUrl !== undefined) service.iconUrl = updates.iconUrl;

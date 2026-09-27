@@ -50,7 +50,23 @@ const BOOKING_STATUS = {
   WORK_DONE: 'work_done',
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
-  REJECTED: 'rejected'
+  REJECTED: 'rejected',
+  NO_VENDORS: 'no_vendors', // Wave search exhausted with nobody accepting
+  PENDING_ADMIN: 'pending_admin' // Zone/radius matching could not find a dispatchable vendor
+};
+
+// Reasons a booking could not be auto-matched to a vendor (diagnostics + admin UI)
+const MATCH_FAILURE_REASONS = {
+  OUT_OF_SERVICE_ZONE: 'OUT_OF_SERVICE_ZONE',
+  ZONE_INACTIVE: 'ZONE_INACTIVE',
+  SERVICE_NOT_AVAILABLE_IN_ZONE: 'SERVICE_NOT_AVAILABLE_IN_ZONE',
+  NO_ZONE_VENDOR: 'NO_ZONE_VENDOR',
+  NO_SERVICE_VENDOR: 'NO_SERVICE_VENDOR',
+  NO_VENDOR_WITHIN_RADIUS: 'NO_VENDOR_WITHIN_RADIUS',
+  ALL_VENDORS_OFFLINE: 'ALL_VENDORS_OFFLINE',
+  ALL_VENDORS_BUSY: 'ALL_VENDORS_BUSY',
+  NO_AVAILABLE_VENDOR: 'NO_AVAILABLE_VENDOR',
+  INVALID_LOCATION: 'INVALID_LOCATION'
 };
 
 // Payment Status
@@ -86,5 +102,6 @@ module.exports = {
   BOOKING_STATUS,
   PAYMENT_STATUS,
   SERVICE_STATUS,
-  BILL_STATUS
+  BILL_STATUS,
+  MATCH_FAILURE_REASONS
 };

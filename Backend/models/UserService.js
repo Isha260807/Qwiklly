@@ -197,6 +197,21 @@ const userServiceSchema = new mongoose.Schema({
     ref: 'City',
     index: true
   },
+  // If empty, service is available in every active zone. If non-empty, the
+  // resolved booking zone MUST be in this list or booking fails with
+  // SERVICE_NOT_AVAILABLE_IN_ZONE.
+  zoneIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Zone',
+    index: true
+  }],
+  // Per-service override of the global vendor-matching radius (km).
+  // Falls back to Settings.searchRadius when not set.
+  serviceRadiusKm: {
+    type: Number,
+    default: null,
+    min: 1
+  },
   displayOrder: {
     type: Number,
     default: 0

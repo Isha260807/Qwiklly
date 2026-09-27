@@ -70,6 +70,7 @@ const _buildVendorQuery = (filters = {}) => {
   delete queryFilters.checkCashLimit;
   delete queryFilters.service;
   delete queryFilters.city;
+  delete queryFilters.vendorIds;
 
   const baseQuery = {
     approvalStatus: VENDOR_STATUS.APPROVED,
@@ -79,6 +80,13 @@ const _buildVendorQuery = (filters = {}) => {
 
   if (filters.city) {
     baseQuery['address.city'] = { $regex: new RegExp(filters.city, 'i') };
+  }
+
+  // Zone-scoped matching: restrict to vendors already resolved as assigned
+  // to the booking's zone (see zoneService/vendorMatchService). This is
+  // applied BEFORE radius filtering below, never instead of it.
+  if (filters.vendorIds) {
+    baseQuery._id = { $in: filters.vendorIds };
   }
 
   if (serviceCategory) {

@@ -413,7 +413,7 @@ const getPublicHomeContent = async (req, res) => {
  */
 const getPublicHomeData = async (req, res) => {
   try {
-    const { cityId } = req.query;
+    const { cityId, zoneId } = req.query;
 
     const serviceQuery = { status: 'active' };
     if (cityId) {
@@ -425,10 +425,14 @@ const getPublicHomeData = async (req, res) => {
       ];
     }
 
-    // Query banners
+    // Banners are zone-based - empty/missing zoneIds means shown everywhere
     const bannerQuery = { isActive: true };
-    if (cityId) {
-      bannerQuery.$or = [{ cityId: cityId }, { cityId: null }];
+    if (zoneId) {
+      bannerQuery.$or = [
+        { zoneIds: zoneId },
+        { zoneIds: { $size: 0 } },
+        { zoneIds: { $exists: false } }
+      ];
     }
 
     // Fetch all in parallel
@@ -578,16 +582,21 @@ const getPublicHomeData = async (req, res) => {
  */
 const getPublicBanners = async (req, res) => {
   try {
-    const { cityId, bannerType, position } = req.query;
+    const { zoneId, bannerType, position } = req.query;
     const query = { isActive: true };
 
     if (bannerType && bannerType !== 'all') query.bannerType = bannerType;
     if (position && position !== 'all') query.position = position;
 
-    if (cityId) {
-      query.$or = [{ cityId: cityId }, { cityId: null }];
+    // Empty/missing zoneIds means the banner is shown in every zone
+    if (zoneId) {
+      query.$or = [
+        { zoneIds: zoneId },
+        { zoneIds: { $size: 0 } },
+        { zoneIds: { $exists: false } }
+      ];
     } else {
-      query.cityId = null;
+      query.$or = [{ zoneIds: { $size: 0 } }, { zoneIds: { $exists: false } }];
     }
 
     const banners = await Banner.find(query)

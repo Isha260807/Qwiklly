@@ -18,6 +18,46 @@ import { userAuthService } from '../../../../services/authService';
 import { useCart } from '../../../../context/CartContext';
 import LiveBookingCard from '../../components/booking/LiveBookingCard';
 
+// Zone/serviceability errors from the backend (see MATCH_FAILURE_REASONS in
+// Backend/utils/constants.js) carry a `code` + friendly `message` - surface
+// that message directly instead of a generic failure toast when present.
+const SERVICEABILITY_CODES = [
+  'OUT_OF_SERVICE_ZONE',
+  'ZONE_INACTIVE',
+  'SERVICE_NOT_AVAILABLE_IN_ZONE',
+  'INVALID_LOCATION'
+];
+
+// The Home page's currently-browsed location (GPS auto-detect or manually
+// picked pin) is what the zone "coming soon" banner and the Book button's
+// serviceability check were validated against. If Checkout instead defaults
+// to a separately-stored saved profile address (which may be older/less
+// precise, or simply a different address than the one just browsed), the
+// zone check at booking time can disagree with what the user already saw
+// on Home - producing a confusing "not available here" right after Home
+// showed everything as bookable. Prefer the Home location whenever it has
+// real coordinates, so both checks are always looking at the same point.
+const getBrowsingLocation = () => {
+  const lat = parseFloat(localStorage.getItem('userLat'));
+  const lng = parseFloat(localStorage.getItem('userLng'));
+  const savedAddress = localStorage.getItem('currentAddress');
+  if (Number.isNaN(lat) || Number.isNaN(lng) || !savedAddress || savedAddress === 'Select Location') {
+    return null;
+  }
+  return { address: savedAddress, lat, lng, type: 'home' };
+};
+
+const getServiceabilityErrorMessage = (error) => {
+  const data = error?.response?.data;
+  if (data && SERVICEABILITY_CODES.includes(data.code)) {
+    if (data.nearestZone?.name) {
+      return `${data.message} Nearest service area: ${data.nearestZone.name} (${data.nearestZone.distanceKm}km away).`;
+    }
+    return data.message;
+  }
+  return null;
+};
+
 const toAssetUrl = (url) => {
   if (!url) return '';
   const clean = url.replace('/api/upload', '/upload');
@@ -154,7 +194,11 @@ const Checkout = () => {
               });
             }
 
-            if (response.user?.addresses?.length > 0) {
+            const browsingLocation = getBrowsingLocation();
+            if (browsingLocation) {
+              setAddress(browsingLocation.address);
+              setAddressDetails(browsingLocation);
+            } else if (response.user?.addresses?.length > 0) {
               const defaultAddr = response.user.addresses.find(a => a.isDefault) || response.user.addresses[0];
               setAddress(defaultAddr.addressLine1);
               setHouseNumber(defaultAddr.addressLine2 || '');
@@ -188,8 +232,14 @@ const Checkout = () => {
               });
             }
 
-            // Set Addresses
-            if (response.user?.addresses?.length > 0) {
+            // Set Addresses - prefer the location currently browsed on Home
+            // (same coordinates the zone/serviceability checks already used)
+            // over a possibly older/different saved profile address.
+            const browsingLocation = getBrowsingLocation();
+            if (browsingLocation) {
+              setAddress(browsingLocation.address);
+              setAddressDetails(browsingLocation);
+            } else if (response.user?.addresses?.length > 0) {
               const defaultAddr = response.user.addresses.find(a => a.isDefault) || response.user.addresses[0];
               setAddress(defaultAddr.addressLine1);
               setHouseNumber(defaultAddr.addressLine2 || '');
@@ -447,6 +497,13 @@ const Checkout = () => {
             estimatedTime: '15-30 min'
           });
           setSearchingVendors(false); // Finished search
+        } else if (response.data.status === 'cancelled') {
+          // Zone/service/radius matching found zero candidate vendors - the
+          // booking was auto-cancelled server-side, so don't show the
+          // searching modal for it.
+          setShowVendorModal(false);
+          setSearchingVendors(false);
+          toast.error(response.data.cancellationReason || 'No professionals available right now in your area. Booking has been cancelled.');
         } else {
           // Normal flow: Entered pooling/searching
           setCurrentStep('waiting'); // Waiting for vendor acceptance
@@ -454,7 +511,7 @@ const Checkout = () => {
         }
       }
     } catch (error) {
-      toast.error('Failed to initiate booking request. Please try again.');
+      toast.error(getServiceabilityErrorMessage(error) || 'Failed to initiate booking request. Please try again.');
       setShowVendorModal(false);
       setSearchingVendors(false);
     }
@@ -650,17 +707,26 @@ const Checkout = () => {
       const booking = bookingResponse.data;
       setBookingRequest(booking);
 
-      if (amountToPay === 0) {
-        toast.success('Booking confirmed under membership plan!');
-      } else {
-        toast.success('Booking request sent! You can pay once a professional accepts.');
-      }
-
       try {
         if (category) await removeCategoryGlobal(category);
         else await clearCartGlobal();
         setCartItems([]);
       } catch (e) { }
+
+      if (booking.status === 'cancelled') {
+        // Zone/service/radius matching found zero candidate vendors - the
+        // booking was auto-cancelled server-side, so don't show the
+        // searching modal for it.
+        toast.error(booking.cancellationReason || 'No professionals available right now in your area. Booking has been cancelled.');
+        setSearchingVendors(false);
+        return;
+      }
+
+      if (amountToPay === 0) {
+        toast.success('Booking confirmed under membership plan!');
+      } else {
+        toast.success('Booking request sent! You can pay once a professional accepts.');
+      }
 
       // Payment (for paid bookings) now happens after a vendor accepts, not at creation time.
       setShowVendorModal(true);
@@ -669,7 +735,7 @@ const Checkout = () => {
     } catch (error) {
       toast.dismiss();
       console.error('Booking flow error:', error);
-      toast.error('Something went wrong. Please try again.');
+      toast.error(getServiceabilityErrorMessage(error) || 'Something went wrong. Please try again.');
       setSearchingVendors(false);
     }
   };

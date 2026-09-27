@@ -9,9 +9,13 @@ import {
 import { toast } from 'react-hot-toast';
 import { adminBookingService } from '../../../../services/adminBookingService';
 
+const NOT_YET_ASSIGNABLE_STATUSES = ['COMPLETED', 'CANCELLED', 'REJECTED'];
+
 const statusBadgeConfig = {
   SEARCHING: { bg: 'bg-amber-100 text-amber-800 border-amber-200', label: 'Searching Partner', icon: FiLoader },
   PENDING: { bg: 'bg-yellow-100 text-yellow-800 border-yellow-200', label: 'Pending', icon: FiClock },
+  PENDING_ADMIN: { bg: 'bg-orange-100 text-orange-800 border-orange-200', label: 'Needs Manual Assignment', icon: FiAlertCircle },
+  NO_VENDORS: { bg: 'bg-red-100 text-red-800 border-red-200', label: 'No Vendors Found', icon: FiAlertCircle },
   ACCEPTED: { bg: 'bg-blue-100 text-blue-800 border-blue-200', label: 'Accepted by Partner', icon: FiCheckCircle },
   ASSIGNED: { bg: 'bg-indigo-100 text-indigo-800 border-indigo-200', label: 'Partner Assigned', icon: FiCheckCircle },
   VISITED: { bg: 'bg-cyan-100 text-cyan-800 border-cyan-200', label: 'Partner Visited', icon: FiMapPin },
@@ -31,6 +35,9 @@ const BookingDetails = () => {
   const [cancelling, setCancelling] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const [eligibleVendors, setEligibleVendors] = useState(null);
+  const [loadingEligible, setLoadingEligible] = useState(false);
+  const [assigningVendorId, setAssigningVendorId] = useState(null);
 
   const fetchBooking = async () => {
     try {
@@ -76,6 +83,40 @@ const BookingDetails = () => {
       toast.error(err?.message || 'Failed to cancel booking');
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleLoadEligibleVendors = async () => {
+    try {
+      setLoadingEligible(true);
+      const res = await adminBookingService.getEligibleVendors(id);
+      if (res.success) {
+        setEligibleVendors(res);
+      } else {
+        toast.error(res.message || 'Failed to load eligible vendors');
+      }
+    } catch (err) {
+      toast.error(err?.message || 'Failed to load eligible vendors');
+    } finally {
+      setLoadingEligible(false);
+    }
+  };
+
+  const handleAssignVendor = async (vendorId) => {
+    try {
+      setAssigningVendorId(vendorId);
+      const res = await adminBookingService.assignVendor(id, vendorId);
+      if (res.success) {
+        toast.success('Vendor assigned successfully');
+        setEligibleVendors(null);
+        fetchBooking();
+      } else {
+        toast.error(res.message || 'Failed to assign vendor');
+      }
+    } catch (err) {
+      toast.error(err?.message || 'Failed to assign vendor');
+    } finally {
+      setAssigningVendorId(null);
     }
   };
 
@@ -341,9 +382,67 @@ const BookingDetails = () => {
                 </div>
               </div>
             ) : (
-              <div className="p-4 bg-amber-50 rounded-xl text-xs text-amber-800 flex items-center gap-2.5">
-                <FiAlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>No partner is currently assigned to this booking. Matching engine broadcasts to nearest vendors.</span>
+              <div className="space-y-3">
+                <div className="p-4 bg-amber-50 rounded-xl text-xs text-amber-800 flex items-center gap-2.5">
+                  <FiAlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>
+                    No partner is currently assigned to this booking.
+                    {normalizedStatus === 'PENDING_ADMIN'
+                      ? ' Zone/service/radius matching found no automatic candidates - assign one manually below.'
+                      : ' Matching engine is still broadcasting to nearest vendors.'}
+                  </span>
+                </div>
+
+                {!NOT_YET_ASSIGNABLE_STATUSES.includes(normalizedStatus) && (
+                  <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold text-gray-800">Manually Assign Vendor</h4>
+                      <button
+                        onClick={handleLoadEligibleVendors}
+                        disabled={loadingEligible}
+                        className="text-xs font-semibold text-primary-600 hover:text-primary-700 disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        <FiRefreshCw className={`w-3.5 h-3.5 ${loadingEligible ? 'animate-spin' : ''}`} />
+                        {eligibleVendors ? 'Refresh' : 'Find Eligible Vendors'}
+                      </button>
+                    </div>
+
+                    {eligibleVendors && (
+                      <>
+                        <p className="text-[11px] text-gray-500">
+                          Zone: <span className="font-semibold text-gray-700">{eligibleVendors.zone?.name}</span> · Radius: {eligibleVendors.radiusKm}km
+                          {eligibleVendors.reason && (
+                            <span className="ml-2 text-amber-600 font-semibold">({eligibleVendors.reason.replace(/_/g, ' ')})</span>
+                          )}
+                        </p>
+
+                        {eligibleVendors.vendors.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic">No vendors qualify by zone + service + radius. Try assigning a vendor manually from Vendor Management, or expand this vendor's zones/radius.</p>
+                        ) : (
+                          <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {eligibleVendors.vendors.map(v => (
+                              <div key={v.id} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-gray-800 truncate">{v.businessName || v.name}</p>
+                                  <p className="text-[11px] text-gray-500">
+                                    {v.distance?.toFixed(1)}km away · {v.isOnline ? 'Online' : 'Offline'} · {v.availability || 'UNKNOWN'}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => handleAssignVendor(v.id)}
+                                  disabled={assigningVendorId === v.id}
+                                  className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-[11px] font-bold rounded-lg disabled:opacity-50 shrink-0 ml-2"
+                                >
+                                  {assigningVendorId === v.id ? 'Assigning...' : 'Assign'}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

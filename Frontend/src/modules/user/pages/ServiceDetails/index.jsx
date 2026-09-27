@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../../../../context/CartContext';
 import { useCity } from '../../../../context/CityContext';
 import { publicCatalogService, serviceService } from '../../../../services/catalogService';
+import { zoneService } from '../../../../services/zoneService';
 import { toast } from 'react-hot-toast';
 import LogoLoader from '../../../../components/common/LogoLoader';
 
@@ -114,6 +115,12 @@ const ServiceDetails = () => {
   const [loading, setLoading] = useState(!location.state?.service);
   const [addingToCart, setAddingToCart] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
+  // true until proven otherwise - only hides the Book button for the
+  // hard-block reasons the backend also refuses at booking creation
+  // (out of zone / zone inactive / service not offered here). Vendor
+  // availability (offline/busy/no-one-in-radius) is NOT one of these -
+  // those bookings still go through and get parked for admin assignment.
+  const [canBook, setCanBook] = useState(true);
 
   const isDurationBased = service?.pricingType === 'DURATION' || service?.pricingType === 'HOURLY';
   const pricePer30Minutes = Number(service?.pricePer30Minutes ?? service?.durationPricing?.pricePer30Minutes ?? (service?.hourlyRate ? Math.round(service.hourlyRate / 2) : (service?.basePrice || 0)));
@@ -169,6 +176,38 @@ const ServiceDetails = () => {
     fetchServiceData();
   }, [id, currentCity]);
 
+  // Zone-level serviceability check for this exact service at the user's
+  // last known location - mirrors the hard-block reasons the backend
+  // enforces at booking creation (see HARD_BLOCK_REASONS in
+  // userBookingController.js). Vendor-availability reasons are excluded on
+  // purpose: those bookings still succeed server-side (parked pending_admin).
+  useEffect(() => {
+    const lat = parseFloat(localStorage.getItem('userLat'));
+    const lng = parseFloat(localStorage.getItem('userLng'));
+    if (!id || Number.isNaN(lat) || Number.isNaN(lng)) return;
+
+    const HARD_BLOCK_REASONS = [
+      'OUT_OF_SERVICE_ZONE',
+      'ZONE_INACTIVE',
+      'SERVICE_NOT_AVAILABLE_IN_ZONE',
+      'INVALID_LOCATION',
+      'SERVICE_NOT_FOUND'
+    ];
+
+    let cancelled = false;
+    zoneService.checkServiceability(id, lat, lng)
+      .then(res => {
+        if (cancelled || !res?.success) return;
+        const blocked = res.reason && HARD_BLOCK_REASONS.includes(res.reason);
+        setCanBook(!blocked);
+      })
+      .catch(() => {
+        // silent - fail open, let checkout's own validation be the backstop
+      });
+
+    return () => { cancelled = true; };
+  }, [id]);
+
   if (loading && !service) {
     return <LogoLoader />;
   }
@@ -213,6 +252,10 @@ const ServiceDetails = () => {
   const faqs = service.faqs && service.faqs.length > 0 ? service.faqs : defaultFaqs;
 
   const handleBookNow = async () => {
+    if (!canBook) {
+      toast.error('This service is not available at your location yet.');
+      return;
+    }
     try {
       setAddingToCart(true);
       const cartItemData = {
@@ -380,14 +423,22 @@ const ServiceDetails = () => {
               </div>
             </div>
 
-            {/* Brand Theme BOOK Button */}
-            <button
-              onClick={handleBookNow}
-              disabled={addingToCart}
-              className="px-5 py-2 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#4D082A] hover:to-[#720C3E] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-sm shadow-[#720C3E]/20 cursor-pointer disabled:opacity-50 shrink-0"
-            >
-              {addingToCart ? 'Booking...' : 'BOOK'}
-            </button>
+            {/* Brand Theme BOOK Button - hidden when this service isn't
+                bookable at the user's resolved zone (see the serviceability
+                check in the useEffect above) */}
+            {canBook ? (
+              <button
+                onClick={handleBookNow}
+                disabled={addingToCart}
+                className="px-5 py-2 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#4D082A] hover:to-[#720C3E] text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-sm shadow-[#720C3E]/20 cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                {addingToCart ? 'Booking...' : 'BOOK'}
+              </button>
+            ) : (
+              <span className="px-3 py-2 bg-slate-100 text-slate-400 rounded-xl text-[10px] font-bold uppercase tracking-wider shrink-0">
+                Not in your area
+              </span>
+            )}
           </div>
         </div>
 
@@ -676,13 +727,19 @@ const ServiceDetails = () => {
             </div>
           </div>
 
-          <button
-            onClick={handleBookNow}
-            disabled={addingToCart}
-            className="flex-1 max-w-xs py-3 px-6 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#4D082A] hover:to-[#720C3E] text-white font-extrabold text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-md shadow-[#720C3E]/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50 text-center"
-          >
-            {addingToCart ? 'Booking...' : 'Book Service Now'}
-          </button>
+          {canBook ? (
+            <button
+              onClick={handleBookNow}
+              disabled={addingToCart}
+              className="flex-1 max-w-xs py-3 px-6 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#4D082A] hover:to-[#720C3E] text-white font-extrabold text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-md shadow-[#720C3E]/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50 text-center"
+            >
+              {addingToCart ? 'Booking...' : 'Book Service Now'}
+            </button>
+          ) : (
+            <div className="flex-1 max-w-xs py-3 px-6 bg-slate-100 text-slate-500 font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl text-center">
+              Not available in your area
+            </div>
+          )}
         </div>
       </div>
     </div>

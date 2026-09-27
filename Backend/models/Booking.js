@@ -4,6 +4,7 @@ require('./User');
 require('./Vendor');
 require('./UserService');
 require('./Category');
+require('./Zone');
 
 /**
  * Booking Model
@@ -70,6 +71,25 @@ const bookingSchema = new mongoose.Schema({
     ref: 'Category',
     required: false,
     index: true
+  },
+  // Zone resolved server-side from the booking address coordinates.
+  // This is a permanent record of WHERE this booking was made - it never
+  // changes even if the user later edits/replaces their saved address.
+  zoneId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Zone',
+    default: null,
+    index: true
+  },
+  zoneName: {
+    type: String,
+    default: null
+  },
+  // Diagnostic reason set when zone/radius/availability matching could not
+  // dispatch a vendor automatically (see MATCH_FAILURE_REASONS in constants.js)
+  matchFailureReason: {
+    type: String,
+    default: null
   },
   serviceName: {
     type: String,

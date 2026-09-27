@@ -109,45 +109,66 @@ const createBooking = async (req, res) => {
     // Check for Pending Penalty
     const pendingPenalty = user.wallet?.penalty || 0;
 
-    // --- MOVE VENDOR SEARCH UP HERE ---
-    // Find nearby vendors using location service
-    const { findNearbyVendors, geocodeAddress } = require('../../services/locationService');
+    // --- ZONE -> SERVICE -> RADIUS SERVICEABILITY CHECK ---
+    // Backend is the sole source of truth for zone resolution: any zoneId
+    // sent by the client is ignored, and the zone is always re-derived from
+    // the booking's own coordinates.
+    const { geocodeAddress } = require('../../services/locationService');
+    const { checkBookingServiceability } = require('../../services/serviceabilityService');
+    const { MATCH_FAILURE_REASONS } = require('../../utils/constants');
 
-    // ... (Vendor Search Logic Omitted/Unchanged - keeping context)
-    // Determine booking location (prioritize frontend coordinates)
     let bookingLocation;
-    if (address.lat && address.lng) {
+    if (typeof address.lat === 'number' && typeof address.lng === 'number') {
       bookingLocation = { lat: address.lat, lng: address.lng };
-      console.log('Using provided coordinates for vendor search:', bookingLocation);
     } else {
       bookingLocation = await geocodeAddress(
         `${address.addressLine1}, ${address.city}, ${address.state} ${address.pincode}`
       );
-      console.log('Geocoded address for vendor search:', bookingLocation);
     }
 
-    // Find vendors within 10km radius who offer this exact service
-    const bookedServiceTitle = service?.title || (category ? category.title : '');
-    const vendorFilters = {
-      ...(bookedServiceTitle ? { service: bookedServiceTitle } : {}),
-      checkCashLimit: false,
-      city: address.city
-    };
+    if (!bookingLocation || typeof bookingLocation.lat !== 'number' || typeof bookingLocation.lng !== 'number') {
+      return res.status(400).json({
+        success: false,
+        code: MATCH_FAILURE_REASONS.INVALID_LOCATION,
+        message: 'We could not determine your booking location. Please re-select your address.'
+      });
+    }
 
-    console.log(`[LocationService] Searching vendors with: center=${JSON.stringify(bookingLocation)}, radius=10km, filters=${JSON.stringify(vendorFilters)}`);
-    let nearbyVendors = await findNearbyVendors(bookingLocation, 10, vendorFilters);
-
-    // Deduplicate nearbyVendors by _id to prevent duplicate notifications
-    const uniqueVendorIds = new Set();
-    nearbyVendors = nearbyVendors.filter(vendor => {
-      const idStr = vendor._id.toString();
-      if (uniqueVendorIds.has(idStr)) return false;
-      uniqueVendorIds.add(idStr);
-      return true;
+    const serviceability = await checkBookingServiceability({
+      serviceId,
+      lat: bookingLocation.lat,
+      lng: bookingLocation.lng
     });
 
-    console.log(`[CreateBooking] Found ${nearbyVendors.length} nearby vendors for booking`);
-    // --- END VENDOR SEARCH BLOCK ---
+    // Hard-block reasons: the location/service itself is not bookable here,
+    // regardless of vendor availability - no booking should be created.
+    const HARD_BLOCK_REASONS = [
+      MATCH_FAILURE_REASONS.OUT_OF_SERVICE_ZONE,
+      MATCH_FAILURE_REASONS.ZONE_INACTIVE,
+      MATCH_FAILURE_REASONS.SERVICE_NOT_AVAILABLE_IN_ZONE,
+      MATCH_FAILURE_REASONS.INVALID_LOCATION,
+      'SERVICE_NOT_FOUND'
+    ];
+
+    if (!serviceability.zone || HARD_BLOCK_REASONS.includes(serviceability.reason)) {
+      return res.status(400).json({
+        success: false,
+        code: serviceability.reason || MATCH_FAILURE_REASONS.OUT_OF_SERVICE_ZONE,
+        message: serviceability.reason === MATCH_FAILURE_REASONS.ZONE_INACTIVE
+          ? 'Services are currently paused in this area.'
+          : serviceability.reason === MATCH_FAILURE_REASONS.SERVICE_NOT_AVAILABLE_IN_ZONE
+            ? 'This service is not available in your area yet.'
+            : 'Sorry, services are not currently available at this location.',
+        nearestZone: serviceability.nearestZone || null
+      });
+    }
+
+    const resolvedZone = serviceability.zone;
+    const nearbyVendors = serviceability.vendors; // zone + service + radius scoped candidates
+    const matchFailureReason = nearbyVendors.length === 0 ? serviceability.reason : null;
+
+    console.log(`[CreateBooking] Zone=${resolvedZone.name} (${resolvedZone._id}), radius=${serviceability.radiusKm}km, candidates=${nearbyVendors.length}, reason=${matchFailureReason}`);
+    // --- END SERVICEABILITY BLOCK ---
 
     // -------------------------------------------------------------------------
     // CENTRALIZED PRICING CALCULATION LOGIC
@@ -187,7 +208,19 @@ const createBooking = async (req, res) => {
     let instantBookingChargesCalculated = pricing.instantBookingCharges || 0;
     let finalAmount = pricing.finalAmount;
 
-    let bookingStatus = BOOKING_STATUS.SEARCHING;
+    // Zero zone+service+radius candidates is treated as a dead end, not a
+    // "wait for admin" case - the booking is created (for the user's
+    // history/audit trail) but immediately auto-cancelled with a clear
+    // reason, rather than being parked for manual assignment.
+    let bookingStatus = matchFailureReason ? BOOKING_STATUS.CANCELLED : BOOKING_STATUS.SEARCHING;
+    const NO_VENDOR_CANCELLATION_MESSAGES = {
+      NO_ZONE_VENDOR: 'No service providers are currently registered in your area.',
+      NO_SERVICE_VENDOR: 'No service providers in your area currently offer this service.',
+      NO_VENDOR_WITHIN_RADIUS: 'No service providers are currently close enough to reach your location.'
+    };
+    const cancellationReason = matchFailureReason
+      ? (NO_VENDOR_CANCELLATION_MESSAGES[matchFailureReason] || 'No service providers are currently available for this booking.')
+      : null;
     let bookingPaymentStatus = pricing.isFreeUnderPlan
       ? (finalAmount > 0 ? PAYMENT_STATUS.PENDING : PAYMENT_STATUS.PLAN_COVERED)
       : PAYMENT_STATUS.PENDING;
@@ -285,6 +318,9 @@ const createBooking = async (req, res) => {
       vendorId: null, // Will be assigned when vendor accepts
       serviceId,
       categoryId: finalCategory?._id || categoryId,
+      zoneId: resolvedZone._id,
+      zoneName: resolvedZone.name,
+      matchFailureReason,
       serviceName: service.title,
       serviceCategory: reqServiceCategory || finalCategory?.title || service.category || 'General',
       categoryIcon: reqCategoryIcon || categoryIcon,
@@ -328,11 +364,18 @@ const createBooking = async (req, res) => {
       paymentMethod: paymentMethod || null,
       status: bookingStatus,
       paymentStatus: bookingPaymentStatus,
-      hourlyTracking
+      hourlyTracking,
+      ...(matchFailureReason ? {
+        cancelledAt: new Date(),
+        cancelledBy: 'system',
+        cancellationReason
+      } : {})
     });
 
-    // Create Audit / Coupon Usage Record if a coupon was used
-    if (pricing.couponInfo && pricing.couponInfo.couponId) {
+    // Create Audit / Coupon Usage Record if a coupon was used - skipped when
+    // the booking was immediately auto-cancelled (no vendor available), so
+    // the coupon isn't burned on a booking that never happened.
+    if (!matchFailureReason && pricing.couponInfo && pricing.couponInfo.couponId) {
       try {
         await CouponUsage.create({
           couponId: pricing.couponInfo.couponId,
@@ -358,7 +401,9 @@ const createBooking = async (req, res) => {
     // Send immediate response to the client. All subsequent operations will run in the background.
     res.status(201).json({
       success: true,
-      message: 'Booking created successfully. We are finding vendors for you.',
+      message: matchFailureReason
+        ? cancellationReason
+        : 'Booking created successfully. We are finding vendors for you.',
       data: {
         _id: booking._id,
         bookingNumber: booking.bookingNumber,
@@ -372,6 +417,7 @@ const createBooking = async (req, res) => {
         categoryIcon: booking.categoryIcon,
         brandName: booking.brandName,
         brandIcon: booking.brandIcon,
+        cancellationReason: booking.cancellationReason || null,
       }
     });
 
@@ -387,8 +433,10 @@ const createBooking = async (req, res) => {
 
         if (!userForBackground || !bookingForBackground || !serviceForBackground) return;
 
-        // If Plus membership was added, update user status
-        if (isPlusAdded) {
+        // If Plus membership was added, update user status - skip for a
+        // booking that was immediately auto-cancelled (no vendor available),
+        // since nothing was actually delivered.
+        if (isPlusAdded && bookingForBackground.status !== BOOKING_STATUS.CANCELLED) {
           const expiryDate = new Date();
           expiryDate.setFullYear(expiryDate.getFullYear() + 1);
           userForBackground.plans = {
@@ -401,9 +449,15 @@ const createBooking = async (req, res) => {
         }
 
         // Payment now happens AFTER a vendor accepts, so vendors are dispatched
-        // immediately regardless of payment method/status.
-        console.log(`[CreateBooking] Dispatching booking ${bookingForBackground.bookingNumber} to nearby vendors.`);
-        await dispatchBookingToVendors(bookingForBackground._id);
+        // immediately regardless of payment method/status. Skip dispatch when
+        // zone/service/radius matching already found zero candidates - the
+        // booking was already auto-cancelled instead of being dispatched.
+        if (bookingForBackground.status !== BOOKING_STATUS.CANCELLED) {
+          console.log(`[CreateBooking] Dispatching booking ${bookingForBackground.bookingNumber} to nearby vendors.`);
+          await dispatchBookingToVendors(bookingForBackground._id);
+        } else {
+          console.log(`[CreateBooking] Booking ${bookingForBackground.bookingNumber} auto-cancelled (reason=${bookingForBackground.matchFailureReason}).`);
+        }
       } catch (bgErr) {
         console.error('[CreateBooking][bg] Background task failed:', bgErr);
       }
@@ -1020,7 +1074,10 @@ const dispatchBookingToVendors = async (bookingId) => {
       return;
     }
 
-    const { findNearbyVendors, geocodeAddress } = require('../../services/locationService');
+    const { geocodeAddress } = require('../../services/locationService');
+    const { findQualifiedVendors } = require('../../services/vendorMatchService');
+    const { resolveRadiusKm } = require('../../services/serviceabilityService');
+    const Zone = require('../../models/Zone');
     const bookedServiceTitle = booking.serviceName || booking.serviceId?.title || booking.serviceCategory || '';
 
     let bookingLocation = null;
@@ -1035,18 +1092,25 @@ const dispatchBookingToVendors = async (bookingId) => {
       );
     }
 
-    const vendorFilters = {
-      ...(bookedServiceTitle ? { service: bookedServiceTitle } : {}),
-      city: booking.address?.city
-    };
-
-    console.log(`[dispatchBookingToVendors] Finding nearby vendors for booking ${booking.bookingNumber} with center=${JSON.stringify(bookingLocation)}, filters=${JSON.stringify(vendorFilters)}`);
-    let nearbyVendors = await findNearbyVendors(bookingLocation, 15, vendorFilters);
-
-    if ((!nearbyVendors || nearbyVendors.length === 0) && bookedServiceTitle) {
-      // Fallback: widen the search radius, but keep the service match — a vendor should
-      // only ever receive bookings for the service they actually offer.
-      nearbyVendors = await findNearbyVendors(bookingLocation, 30, vendorFilters);
+    // Re-derive the zone-scoped candidate pool for this wave. zoneId was
+    // resolved once at booking creation and is a permanent record of where
+    // this booking is - it is reused here rather than re-resolving from
+    // coordinates, so a vendor's later zone reassignment can't retroactively
+    // change which zone an in-flight booking belongs to.
+    let nearbyVendors = [];
+    if (booking.zoneId && bookingLocation) {
+      const zone = await Zone.findById(booking.zoneId).lean();
+      if (zone) {
+        const serviceDoc = await Service.findById(booking.serviceId).select('serviceRadiusKm').lean();
+        const radiusKm = await resolveRadiusKm(serviceDoc || {});
+        const matchResult = await findQualifiedVendors({
+          zone,
+          serviceTitle: bookedServiceTitle,
+          location: bookingLocation,
+          radiusKm
+        });
+        nearbyVendors = matchResult.vendors;
+      }
     }
 
     // Deduplicate

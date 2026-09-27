@@ -6,6 +6,7 @@ import BottomNav from '../../components/layout/BottomNav';
 import SearchBar from './components/SearchBar';
 import ServiceCategories from './components/ServiceCategories';
 import { publicCatalogService } from '../../../../services/catalogService';
+import { zoneService } from '../../../../services/zoneService';
 import { useCart } from '../../../../context/CartContext';
 import { useCity } from '../../../../context/CityContext';
 import { toast } from 'react-hot-toast';
@@ -56,12 +57,19 @@ const Home = () => {
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [houseNumber, setHouseNumber] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isLocationSupported, setIsLocationSupported] = useState(true);
   const [detectedCityName, setDetectedCityName] = useState(() => {
     const saved = localStorage.getItem('currentCity');
     return (saved && !/[\u0900-\u097F]/.test(saved)) ? saved : null;
   });
-
+  const [userCoords, setUserCoords] = useState(() => {
+    const lat = parseFloat(localStorage.getItem('userLat'));
+    const lng = parseFloat(localStorage.getItem('userLng'));
+    return (!Number.isNaN(lat) && !Number.isNaN(lng)) ? { lat, lng } : null;
+  });
+  // null = not yet checked, { inZone, zoneName, nearestZone } once resolved.
+  // Browsing is never blocked by this - it only drives the informational
+  // "coming soon in this location" banner.
+  const [zoneStatus, setZoneStatus] = useState(null);
 
   const { cartCount, addToCart } = useCart();
   const { currentCity, cities, selectCity, loading: cityLoading } = useCity();
@@ -98,7 +106,6 @@ const Home = () => {
           setDetectedCityName(cityCandidate);
           localStorage.setItem('currentCity', cityCandidate);
         }
-        setIsLocationSupported(false);
       }
     }
   }, [address, cities, detectedCityName]);
@@ -114,7 +121,6 @@ const Home = () => {
     );
 
     if (matchedCity) {
-      setIsLocationSupported(true);
       const matchedId = matchedCity._id || matchedCity.id;
       const currentId = currentCity?._id || currentCity?.id;
 
@@ -125,11 +131,30 @@ const Home = () => {
           window.location.reload();
         }, 500);
       }
-    } else {
-      setIsLocationSupported(false);
-      if (currentCity) selectCity(null);
     }
+    // No matching City record is no longer treated as "unserviceable" - the
+    // catalog still renders for every location. Zone-based booking
+    // eligibility is enforced server-side at checkout instead (see
+    // serviceabilityService.checkBookingServiceability on the backend).
   }, [detectedCityName, cities, currentCity, cityLoading]);
+
+  // Resolve the actual serviceable zone for the "coming soon" banner. This
+  // is informational only - it never hides or blocks the catalog, it just
+  // lets the user know before they try to book.
+  useEffect(() => {
+    if (!userCoords) return;
+    let cancelled = false;
+
+    zoneService.resolve(userCoords.lat, userCoords.lng)
+      .then(res => {
+        if (!cancelled && res?.success) setZoneStatus(res.zoneStatus);
+      })
+      .catch(() => {
+        // silent - banner just stays hidden if the check fails
+      });
+
+    return () => { cancelled = true; };
+  }, [userCoords]);
 
 
   const handleAddressSave = (savedHouseNumber, locationObj) => {
@@ -141,6 +166,12 @@ const Home = () => {
     if (fullAddr) {
       setAddress(fullAddr);
       localStorage.setItem('currentAddress', fullAddr);
+
+      if (typeof locationObj?.lat === 'number' && typeof locationObj?.lng === 'number') {
+        setUserCoords({ lat: locationObj.lat, lng: locationObj.lng });
+        localStorage.setItem('userLat', String(locationObj.lat));
+        localStorage.setItem('userLng', String(locationObj.lng));
+      }
 
       // Try to parse city from location object (Google Places)
       const components = locationObj?.components || locationObj?.address_components;
@@ -195,6 +226,9 @@ const Home = () => {
             async (position) => {
               try {
                 const { latitude, longitude } = position.coords;
+                setUserCoords({ lat: latitude, lng: longitude });
+                localStorage.setItem('userLat', String(latitude));
+                localStorage.setItem('userLng', String(longitude));
                 const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
                 const response = await fetch(
                   `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}&language=en`
@@ -300,7 +334,7 @@ const Home = () => {
         setLoading(true);
         const cityId = currentCity?._id || currentCity?.id;
 
-        const response = await publicCatalogService.getHomeData(cityId);
+        const response = await publicCatalogService.getHomeData(cityId, zoneStatus?.zoneId);
 
         if (response.success) {
           if (response.categories) {
@@ -349,7 +383,7 @@ const Home = () => {
     };
 
     fetchData();
-  }, [currentCity]);
+  }, [currentCity, zoneStatus?.zoneId]);
   // Open category modal from navigation state (e.g. from Cart 'Add Services')
   useEffect(() => {
     if (!loading && categories.length > 0 && (location.state?.openCategoryId || location.state?.openCategoryName)) {
@@ -540,33 +574,31 @@ const Home = () => {
           />
         </motion.div>
 
+        {/* Informational only - never blocks browsing, just flags that
+            booking may not go through from this exact location yet. */}
+        {zoneStatus && !zoneStatus.inZone && (
+          <motion.div
+            variants={itemVariants}
+            className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap"
+          >
+            <p className="text-xs sm:text-sm text-amber-800 font-medium">
+              Services are coming soon in this location.
+              {zoneStatus.nearestZone?.name && (
+                <span className="text-amber-600"> Nearest service area: {zoneStatus.nearestZone.name} ({zoneStatus.nearestZone.distanceKm}km away).</span>
+              )}
+            </p>
+            <button
+              onClick={() => setIsAddressModalOpen(true)}
+              className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors"
+            >
+              Change Zone
+            </button>
+          </motion.div>
+        )}
+
         <main className="pt-2 sm:pt-3 space-y-4 sm:space-y-6 pb-24 max-w-screen-xl mx-auto w-full">
-          {!isLocationSupported ? (
-            <div className="flex flex-col items-center justify-center pt-10 pb-10 px-6 text-center min-h-[50vh]">
-              <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6">
-                <svg className="w-12 h-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3l18 18" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">
-                Not service available in your city
-              </h2>
-              <p className="text-gray-500 max-w-xs mx-auto mb-8 font-medium">
-                Please fast! We are coming soon.
-              </p>
-              <button
-                onClick={() => setIsAddressModalOpen(true)}
-                className="px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold shadow-md hover:bg-primary-700 transition-all font-bold"
-                style={{ backgroundColor: '#2874f0' }}
-              >
-                Change Location
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* Top Hero Banner Carousel */}
+          <>
+            {/* Top Hero Banner Carousel */}
               {banners.filter(b => b.bannerType === 'top' || b.bannerType === 'hero' || (!b.bannerType && b.bannerType !== 'footer' && b.bannerType !== 'bottom')).length > 0 && (
                 <motion.section variants={itemVariants} className="relative z-0">
                   <TopHeroBanner
@@ -814,8 +846,7 @@ const Home = () => {
                   ))}
                 </motion.section>
               )}
-            </>
-          )}
+          </>
         </main>
       </motion.div>
 

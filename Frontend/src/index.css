@@ -546,3 +546,11 @@ html {
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
 }
+
+/* Google Places Autocomplete dropdown (.pac-container) is appended directly
+   to <body> with a low default z-index, so it renders invisibly behind any
+   modal that uses a high z-index (e.g. the address/location pickers at
+   z-[999999]). Force it above everything so suggestions are always visible. */
+.pac-container {
+  z-index: 9999999 !important;
+}

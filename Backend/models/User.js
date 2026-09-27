@@ -52,6 +52,14 @@ const userSchema = new mongoose.Schema({
     state: String,
     pincode: String,
     landmark: String,
+    lat: {
+      type: Number,
+      default: null
+    },
+    lng: {
+      type: Number,
+      default: null
+    },
     isDefault: {
       type: Boolean,
       default: false

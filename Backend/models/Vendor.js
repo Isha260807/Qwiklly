@@ -43,6 +43,13 @@ const vendorSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  // Zones this vendor is allowed to serve (source of truth for zone-based matching).
+  // Empty array + no legacy address.city match = vendor is not assigned anywhere yet.
+  zoneIds: {
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Zone' }],
+    default: [],
+    index: true
+  },
   skills: {
     type: [String],
     default: []

@@ -1,6 +1,12 @@
 const Booking = require('../../models/Booking');
+const Vendor = require('../../models/Vendor');
+const Zone = require('../../models/Zone');
+const Service = require('../../models/UserService');
 const { validationResult } = require('express-validator');
-const { BOOKING_STATUS } = require('../../utils/constants');
+const { BOOKING_STATUS, VENDOR_STATUS } = require('../../utils/constants');
+const { calculateDistance } = require('../../services/locationService');
+const { resolveRadiusKm } = require('../../services/serviceabilityService');
+const { findQualifiedVendors, findServiceVendorsInZone } = require('../../services/vendorMatchService');
 
 /**
  * Get all bookings with filters and search
@@ -13,6 +19,7 @@ const getAllBookings = async (req, res) => {
       userId,
       vendorId,
       workerId,
+      zoneId,
       startDate,
       endDate,
       search,
@@ -23,10 +30,12 @@ const getAllBookings = async (req, res) => {
     // Build query
     const query = {};
 
+    if (zoneId) query.zoneId = zoneId;
+
     if (status && status !== 'ALL_STATUS' && status !== 'ALL') {
       const s = status.toLowerCase();
       if (s === 'pending') {
-        query.status = { $in: ['pending', 'searching', 'requested', 'awaiting_payment'] };
+        query.status = { $in: ['pending', 'searching', 'requested', 'awaiting_payment', 'pending_admin'] };
       } else if (s === 'confirmed') {
         query.status = { $in: ['confirmed', 'accepted', 'assigned'] };
       } else if (s === 'in_progress') {
@@ -97,6 +106,7 @@ const getAllBookings = async (req, res) => {
       .populate('vendorId', 'name businessName phone')
       .populate('serviceId', 'title iconUrl')
       .populate('categoryId', 'title slug')
+      .populate('zoneId', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -352,10 +362,184 @@ const getBookingAnalytics = async (req, res) => {
   }
 };
 
+/**
+ * Zone -> service -> radius candidate list for a specific booking, using
+ * the SAME pipeline booking creation and wave dispatch use
+ * (vendorMatchService.findQualifiedVendors). Lets an admin see exactly who
+ * is eligible before manually assigning a vendor to a PENDING_ADMIN booking.
+ */
+const getEligibleVendorsForBooking = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id).lean();
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    if (!booking.zoneId) {
+      return res.status(400).json({ success: false, message: 'Booking has no resolved zone to match vendors against' });
+    }
+
+    const zone = await Zone.findById(booking.zoneId).lean();
+    if (!zone) {
+      return res.status(404).json({ success: false, message: 'Zone referenced by this booking no longer exists' });
+    }
+
+    const serviceDoc = await Service.findById(booking.serviceId).select('serviceRadiusKm').lean();
+    const radiusKm = await resolveRadiusKm(serviceDoc || {});
+
+    if (typeof booking.address?.lat !== 'number' || typeof booking.address?.lng !== 'number') {
+      return res.status(400).json({ success: false, message: 'Booking has no valid coordinates to match vendors against' });
+    }
+
+    const { vendors, reason, debug } = await findQualifiedVendors({
+      zone,
+      serviceTitle: booking.serviceName || booking.serviceCategory,
+      location: { lat: booking.address.lat, lng: booking.address.lng },
+      radiusKm
+    });
+
+    res.status(200).json({
+      success: true,
+      zone: { id: zone._id, name: zone.name },
+      radiusKm,
+      reason,
+      debug,
+      vendors: vendors.map(v => ({
+        id: v._id,
+        name: v.name,
+        businessName: v.businessName,
+        phone: v.phone,
+        distance: v.distance,
+        isOnline: v.isOnline,
+        availability: v.availability,
+        rating: v.rating
+      }))
+    });
+  } catch (error) {
+    console.error('Get eligible vendors error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch eligible vendors' });
+  }
+};
+
+/**
+ * Manually assign a vendor to a booking (typically one parked as
+ * PENDING_ADMIN because automatic zone/service/radius matching found no
+ * candidates). Re-validates zone/service/radius/approval/active/conflict
+ * server-side - never trusts that the admin's UI list is still accurate.
+ */
+const assignVendorToBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { vendorId } = req.body;
+
+    if (!vendorId) {
+      return res.status(400).json({ success: false, message: 'vendorId is required' });
+    }
+
+    const booking = await Booking.findById(id);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    if ([BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED].includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot assign a vendor to a ${booking.status} booking` });
+    }
+    if (!booking.zoneId) {
+      return res.status(400).json({ success: false, message: 'Booking has no resolved zone' });
+    }
+
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+
+    // 1. Zone assignment
+    const vendorZoneIds = (vendor.zoneIds || []).map(z => z.toString());
+    if (!vendorZoneIds.includes(booking.zoneId.toString())) {
+      return res.status(400).json({ success: false, code: 'VENDOR_NOT_IN_ZONE', message: 'Vendor is not assigned to this booking\'s zone' });
+    }
+
+    // 2. Service offered
+    const bookedServiceTitle = booking.serviceName || booking.serviceCategory || '';
+    if (bookedServiceTitle) {
+      const offering = await findServiceVendorsInZone([vendor._id.toString()], bookedServiceTitle);
+      if (offering.length === 0) {
+        return res.status(400).json({ success: false, code: 'VENDOR_SERVICE_MISMATCH', message: `Vendor does not offer "${bookedServiceTitle}"` });
+      }
+    }
+
+    // 3. Approval + active
+    if (vendor.approvalStatus !== VENDOR_STATUS.APPROVED) {
+      return res.status(400).json({ success: false, code: 'VENDOR_NOT_APPROVED', message: 'Vendor is not approved' });
+    }
+    if (!vendor.isActive) {
+      return res.status(400).json({ success: false, code: 'VENDOR_INACTIVE', message: 'Vendor is not active' });
+    }
+
+    // 4. Radius (user booking location -> vendor location)
+    if (typeof booking.address?.lat === 'number' && typeof booking.address?.lng === 'number') {
+      const vLat = vendor.geoLocation?.coordinates?.[1] || vendor.location?.lat || vendor.address?.lat;
+      const vLng = vendor.geoLocation?.coordinates?.[0] || vendor.location?.lng || vendor.address?.lng;
+      if (typeof vLat === 'number' && typeof vLng === 'number') {
+        const serviceDoc = await Service.findById(booking.serviceId).select('serviceRadiusKm').lean();
+        const radiusKm = await resolveRadiusKm(serviceDoc || {});
+        const effectiveRadius = Math.min(radiusKm, vendor.settings?.serviceRange || radiusKm);
+        const distance = calculateDistance(
+          { lat: booking.address.lat, lng: booking.address.lng },
+          { lat: vLat, lng: vLng }
+        );
+        if (distance > effectiveRadius) {
+          return res.status(400).json({
+            success: false,
+            code: 'VENDOR_OUTSIDE_RADIUS',
+            message: `Vendor is ${distance.toFixed(1)}km away, outside the ${effectiveRadius}km matching radius`
+          });
+        }
+      }
+    }
+
+    // 5. Booking conflict - same vendor, same scheduled date, already committed elsewhere
+    const conflict = await Booking.findOne({
+      _id: { $ne: booking._id },
+      vendorId: vendor._id,
+      scheduledDate: booking.scheduledDate,
+      status: { $in: ['confirmed', 'accepted', 'assigned', 'journey_started', 'visited', 'in_progress'] }
+    });
+    if (conflict) {
+      return res.status(400).json({ success: false, code: 'VENDOR_BOOKING_CONFLICT', message: `Vendor already has booking ${conflict.bookingNumber} on this date` });
+    }
+
+    booking.vendorId = vendor._id;
+    booking.status = BOOKING_STATUS.ASSIGNED;
+    booking.matchFailureReason = null;
+    booking.assignedAt = new Date();
+    await booking.save();
+
+    try {
+      const { createNotification } = require('../notificationControllers/notificationController');
+      await createNotification({
+        vendorId: vendor._id,
+        type: 'booking_request',
+        title: 'New Booking Assigned',
+        message: `An admin assigned booking ${booking.bookingNumber} (${booking.serviceName}) to you`,
+        relatedId: booking._id,
+        relatedType: 'booking'
+      });
+    } catch (notifyErr) {
+      console.error('Assign vendor notification error:', notifyErr);
+    }
+
+    res.status(200).json({ success: true, message: 'Vendor assigned successfully', data: booking });
+  } catch (error) {
+    console.error('Assign vendor to booking error:', error);
+    res.status(500).json({ success: false, message: 'Failed to assign vendor' });
+  }
+};
+
 module.exports = {
   getAllBookings,
   getBookingById,
   cancelBooking,
-  getBookingAnalytics
+  getBookingAnalytics,
+  getEligibleVendorsForBooking,
+  assignVendorToBooking
 };
 

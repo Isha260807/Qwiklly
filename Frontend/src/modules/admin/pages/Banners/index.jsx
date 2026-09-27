@@ -57,12 +57,12 @@ const BannersPage = () => {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [cityFilter, setCityFilter] = useState('all');
+  const [zoneFilter, setZoneFilter] = useState('all');
 
   // Metadata options
   const [categories, setCategories] = useState([]);
   const [services, setServices] = useState([]);
-  const [cities, setCities] = useState([]);
+  const [zones, setZones] = useState([]);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -79,7 +79,7 @@ const BannersPage = () => {
     imageUrl: '',
     bannerType: 'top',
     position: 'top',
-    cityId: '',
+    zoneIds: [],
     targetType: 'none',
     targetCategoryId: '',
     targetServiceId: '',
@@ -99,7 +99,7 @@ const BannersPage = () => {
       if (search.trim()) params.search = search.trim();
       if (typeFilter !== 'all') params.bannerType = typeFilter;
       if (statusFilter !== 'all') params.isActive = statusFilter === 'active';
-      if (cityFilter !== 'all') params.cityId = cityFilter;
+      if (zoneFilter !== 'all') params.zoneId = zoneFilter;
 
       const response = await bannerService.getAllBanners(params);
       if (response.success) {
@@ -125,14 +125,14 @@ const BannersPage = () => {
     }
   };
 
-  // Fetch dropdown options (categories, services, cities)
+  // Fetch dropdown options (categories, services, zones)
   useEffect(() => {
     const fetchDropdownOptions = async () => {
       try {
-        const [catsRes, svcsRes, citiesRes] = await Promise.allSettled([
+        const [catsRes, svcsRes, zonesRes] = await Promise.allSettled([
           categoryService.getAll(),
           serviceService.getAll(),
-          api.get('/public/cities')
+          api.get('/admin/zones')
         ]);
 
         if (catsRes.status === 'fulfilled' && catsRes.value?.success) {
@@ -151,8 +151,8 @@ const BannersPage = () => {
             console.error('Fallback services fetch error:', pubErr);
           }
         }
-        if (citiesRes.status === 'fulfilled' && citiesRes.value?.data?.success) {
-          setCities(citiesRes.value.data.cities || []);
+        if (zonesRes.status === 'fulfilled' && zonesRes.value?.data?.success) {
+          setZones(zonesRes.value.data.zones || []);
         }
       } catch (err) {
         console.error('Error loading dropdown options:', err);
@@ -164,7 +164,7 @@ const BannersPage = () => {
 
   useEffect(() => {
     fetchBanners();
-  }, [search, typeFilter, statusFilter, cityFilter]);
+  }, [search, typeFilter, statusFilter, zoneFilter]);
 
   useEffect(() => {
     fetchStats();
@@ -186,7 +186,7 @@ const BannersPage = () => {
       imageUrl: '',
       bannerType: 'top',
       position: 'top',
-      cityId: '',
+      zoneIds: [],
       targetType: 'none',
       targetCategoryId: '',
       targetServiceId: '',
@@ -215,7 +215,7 @@ const BannersPage = () => {
 
     const targetServiceIdStr = getCleanId(banner.targetServiceId);
     const targetCategoryIdStr = getCleanId(banner.targetCategoryId);
-    const cityIdStr = getCleanId(banner.cityId);
+    const zoneIdsArr = (banner.zoneIds || []).map(z => getCleanId(z));
 
     setFormData({
       title: banner.title || '',
@@ -223,7 +223,7 @@ const BannersPage = () => {
       imageUrl: banner.imageUrl || '',
       bannerType: banner.bannerType === 'footer' || banner.bannerType === 'bottom' ? 'footer' : 'top',
       position: banner.position || 'top',
-      cityId: cityIdStr,
+      zoneIds: zoneIdsArr,
       targetType: banner.targetType || (targetServiceIdStr ? 'service' : 'none'),
       targetCategoryId: targetCategoryIdStr,
       targetServiceId: targetServiceIdStr,
@@ -297,7 +297,7 @@ const BannersPage = () => {
       setSaving(true);
       const payload = {
         ...formData,
-        cityId: formData.cityId ? formData.cityId.toString() : null,
+        zoneIds: Array.isArray(formData.zoneIds) ? formData.zoneIds : [],
         targetCategoryId: formData.targetType === 'category' && formData.targetCategoryId ? formData.targetCategoryId.toString() : null,
         targetServiceId: formData.targetType === 'service' && formData.targetServiceId ? formData.targetServiceId.toString() : null,
         targetUrl: formData.targetType === 'url' ? formData.targetUrl.trim() : ''
@@ -519,16 +519,16 @@ const BannersPage = () => {
             <option value="inactive">Inactive Only</option>
           </select>
 
-          {/* City Filter */}
+          {/* Zone Filter */}
           <select
-            value={cityFilter}
-            onChange={(e) => setCityFilter(e.target.value)}
+            value={zoneFilter}
+            onChange={(e) => setZoneFilter(e.target.value)}
             className="bg-gray-50 border border-gray-200 text-gray-700 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:bg-white focus:border-[#720C3E]"
           >
-            <option value="all">All Cities</option>
-            <option value="null">Global (All Cities)</option>
-            {cities.map(c => (
-              <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
+            <option value="all">All Zones</option>
+            <option value="null">Global (All Zones)</option>
+            {zones.map(z => (
+              <option key={z._id || z.id} value={z._id || z.id}>{z.name}</option>
             ))}
           </select>
 
@@ -643,7 +643,7 @@ const BannersPage = () => {
                     </span>
                     <span className="flex items-center gap-1 text-[11px] bg-black/50 px-2 py-0.5 rounded backdrop-blur-sm">
                       <FiMapPin className="text-amber-300 text-[10px]" />
-                      {banner.cityId?.name || 'All Cities'}
+                      {banner.zoneIds?.length > 0 ? banner.zoneIds.map(z => z.name).join(', ') : 'All Zones'}
                     </span>
                   </div>
                 </div>
@@ -779,7 +779,7 @@ const BannersPage = () => {
                           : 'None'}
                       </td>
                       <td className="px-4 py-2.5 text-[11px] text-gray-500">
-                        {banner.cityId?.name || 'All Cities'}
+                        {banner.zoneIds?.length > 0 ? banner.zoneIds.map(z => z.name).join(', ') : 'All Zones'}
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-1 text-xs font-semibold">
@@ -1006,18 +1006,33 @@ const BannersPage = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Target City
+                      Target Zones
                     </label>
-                    <select
-                      value={formData.cityId}
-                      onChange={(e) => setFormData(prev => ({ ...prev, cityId: e.target.value }))}
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-800 focus:outline-none focus:bg-white focus:border-[#720C3E]"
-                    >
-                      <option value="">Global (All Cities)</option>
-                      {cities.map(c => (
-                        <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
-                      ))}
-                    </select>
+                    {zones.length === 0 ? (
+                      <p className="text-[11px] text-gray-400 px-1">No zones configured yet - banner will show everywhere.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-1.5 max-h-28 overflow-y-auto bg-gray-50 border border-gray-200 rounded-lg p-2">
+                        {zones.map(z => {
+                          const zId = (z._id || z.id).toString();
+                          const checked = formData.zoneIds.includes(zId);
+                          return (
+                            <label key={zId} className="flex items-center gap-1.5 text-[11px] text-gray-700 bg-white rounded-md px-2 py-1 border border-gray-200 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => setFormData(prev => ({
+                                  ...prev,
+                                  zoneIds: checked ? prev.zoneIds.filter(id => id !== zId) : [...prev.zoneIds, zId]
+                                }))}
+                                className="w-3.5 h-3.5 text-[#720C3E] rounded focus:ring-[#720C3E]"
+                              />
+                              <span className="truncate">{z.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <p className="text-[10px] text-gray-400 mt-1">Leave all unchecked to show this banner in every zone.</p>
                   </div>
                 </div>
 
@@ -1064,8 +1079,19 @@ const BannersPage = () => {
                         <option value="">-- Choose Service to Redirect --</option>
                         {services.map(s => {
                           const sId = (s._id || s.id)?.toString();
+                          // A service with no zoneIds is available everywhere.
+                          // Once the banner is scoped to specific zones, only
+                          // services that overlap those zones make sense to
+                          // redirect to - others are shown (for visibility)
+                          // but disabled rather than hidden.
+                          const svcZoneIds = (s.zoneIds || []).map(z => (z._id || z.id || z).toString());
+                          const availableHere = formData.zoneIds.length === 0
+                            || svcZoneIds.length === 0
+                            || svcZoneIds.some(id => formData.zoneIds.includes(id));
                           return (
-                            <option key={sId} value={sId}>{s.title}</option>
+                            <option key={sId} value={sId} disabled={!availableHere}>
+                              {s.title}{!availableHere ? ' (not available in selected zone)' : ''}
+                            </option>
                           );
                         })}
                       </select>

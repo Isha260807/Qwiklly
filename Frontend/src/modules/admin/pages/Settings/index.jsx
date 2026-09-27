@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiClock, FiCheck, FiSlash, FiCalendar } from 'react-icons/fi';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus } from '../../services/settingsService';
 import { cityService } from '../../services/cityService';
-import CityManagement from '../Cities';
+import ZoneManagement from '../Zones';
 import { toast } from 'react-hot-toast';
 
 const AdminSettings = () => {
@@ -577,15 +577,15 @@ const AdminSettings = () => {
         </div>
       )}
 
-      {/* City Management Card - Super Admin Only */}
+      {/* Zone Management Card - Super Admin Only */}
       {isSuperAdmin && (
-        <div onClick={() => setActiveView('cities')}
+        <div onClick={() => setActiveView('zones')}
           className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-teal-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-teal-100 transition-colors">
-            <FiMapPin className="w-6 h-6 text-teal-600" />
+          <div className="w-12 h-12 bg-rose-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-rose-100 transition-colors">
+            <FiMapPin className="w-6 h-6 text-rose-600" />
           </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">City Management</h3>
-          <p className="text-sm text-gray-500">Manage operational cities and default location</p>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Zone Management</h3>
+          <p className="text-sm text-gray-500">Draw serviceable-area polygons and control zone status</p>
         </div>
       )}
 
@@ -995,11 +995,11 @@ const AdminSettings = () => {
           )
         }
 
-        {/* City Management View */}
+        {/* Zone Management View */}
         {
-          activeView === 'cities' && (
-            <motion.div key="cities" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-              <CityManagement />
+          activeView === 'zones' && (
+            <motion.div key="zones" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+              <ZoneManagement />
             </motion.div>
           )
         }

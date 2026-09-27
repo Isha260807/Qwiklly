@@ -18,6 +18,7 @@ import { toast } from "react-hot-toast";
 import Modal from "../components/Modal";
 import { toAssetUrl } from "../utils";
 import { serviceService } from "../../../../../services/catalogService";
+import { zoneService } from "../../../../../services/zoneService";
 
 const initialServiceForm = {
   title: "",
@@ -41,12 +42,15 @@ const initialServiceForm = {
   gstPercentage: 18,
   rating: 4.9,
   ratingCount: "237.6k",
-  status: "active"
+  status: "active",
+  zoneIds: []
 };
 
-const ServicesPage = ({ selectedCity }) => {
+const ServicesPage = () => {
   const navigate = useNavigate();
   const [services, setServices] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [zoneFilter, setZoneFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -59,12 +63,21 @@ const ServicesPage = ({ selectedCity }) => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [serviceToDelete, setServiceToDelete] = useState(null);
 
+  const fetchZones = async () => {
+    try {
+      const res = await zoneService.getAll();
+      if (res.success) setZones(res.zones);
+    } catch (error) {
+      // silent - zone assignment section just stays empty
+    }
+  };
+
   // Fetch Services from API
   const fetchServices = async () => {
     try {
       setLoading(true);
       const params = {};
-      if (selectedCity) params.cityId = selectedCity;
+      if (zoneFilter) params.zoneId = zoneFilter;
       if (searchTerm) params.search = searchTerm;
 
       const res = await serviceService.getAll(params);
@@ -82,8 +95,12 @@ const ServicesPage = ({ selectedCity }) => {
   };
 
   useEffect(() => {
+    fetchZones();
+  }, []);
+
+  useEffect(() => {
     fetchServices();
-  }, [selectedCity]);
+  }, [zoneFilter]);
 
   // Debounced search
   useEffect(() => {
@@ -140,9 +157,19 @@ const ServicesPage = ({ selectedCity }) => {
       gstPercentage: service.gstPercentage ?? 18,
       rating: service.rating ?? 4.9,
       ratingCount: service.ratingCount || "237.6k",
-      status: service.status || "active"
+      status: service.status || "active",
+      zoneIds: (service.zoneIds || []).map(z => (typeof z === "object" ? z._id : z))
     });
     setIsModalOpen(true);
+  };
+
+  const toggleFormZone = (zoneId) => {
+    setFormData(prev => ({
+      ...prev,
+      zoneIds: prev.zoneIds.includes(zoneId)
+        ? prev.zoneIds.filter(id => id !== zoneId)
+        : [...prev.zoneIds, zoneId]
+    }));
   };
 
   // Image Upload Handler
@@ -237,8 +264,7 @@ const ServicesPage = ({ selectedCity }) => {
         rating: Number(formData.rating) || 4.9,
         ratingCount: formData.ratingCount || "237.6k",
         status: formData.status || "active",
-        cityId: selectedCity || null,
-        cityIds: selectedCity ? [selectedCity] : []
+        zoneIds: formData.zoneIds || []
       };
 
       if (editingServiceId) {
@@ -325,6 +351,16 @@ const ServicesPage = ({ selectedCity }) => {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Zone Filter */}
+          <select
+            value={zoneFilter}
+            onChange={(e) => setZoneFilter(e.target.value)}
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+          >
+            <option value="">All Zones</option>
+            {zones.map(z => <option key={z._id} value={z._id}>{z.name}</option>)}
+          </select>
+
           {/* Search Box */}
           <div className="relative">
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
@@ -767,6 +803,33 @@ const ServicesPage = ({ selectedCity }) => {
                 <option value="inactive">Inactive</option>
               </select>
             </div>
+          </div>
+
+          {/* Zone Assignment */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Zones
+            </label>
+            <p className="text-[10px] text-slate-400 mb-2">
+              Select where this service is bookable. Leave empty to make it available in every active zone.
+            </p>
+            {zones.length === 0 ? (
+              <p className="text-xs text-slate-400">No zones configured yet. Add zones under Settings &gt; Zone Management.</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-36 overflow-y-auto">
+                {zones.map(zone => (
+                  <label key={zone._id} className="flex items-center gap-2 text-xs bg-white rounded-lg px-2 py-1.5 border border-slate-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.zoneIds.includes(zone._id)}
+                      onChange={() => toggleFormZone(zone._id)}
+                      className="w-3.5 h-3.5 text-[#720C3E] rounded focus:ring-[#720C3E]"
+                    />
+                    <span className="truncate">{zone.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Thumbnail Upload */}

@@ -511,6 +511,55 @@ const deleteVendor = async (req, res) => {
   }
 };
 
+/**
+ * Assign zones to a vendor (source of truth for zone-based vendor matching).
+ * Replaces the vendor's entire zoneIds[] set with the provided list.
+ */
+const assignVendorZones = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { zoneIds } = req.body;
+
+    if (!Array.isArray(zoneIds)) {
+      return res.status(400).json({
+        success: false,
+        message: 'zoneIds must be an array of zone ids'
+      });
+    }
+
+    const Zone = require('../../models/Zone');
+    const validZones = await Zone.find({ _id: { $in: zoneIds } }).select('_id');
+    if (validZones.length !== zoneIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'One or more zoneIds do not exist'
+      });
+    }
+
+    const vendor = await Vendor.findByIdAndUpdate(
+      id,
+      { zoneIds },
+      { new: true, runValidators: true }
+    ).select('-password').populate('zoneIds', 'name');
+
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Vendor zones updated successfully',
+      vendor
+    });
+  } catch (error) {
+    console.error('Assign vendor zones error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update vendor zones'
+    });
+  }
+};
+
 module.exports = {
   getAllVendors,
   getVendorDetails,
@@ -522,6 +571,7 @@ module.exports = {
   getAllVendorBookings,
   getVendorPaymentsSummary,
   toggleVendorStatus,
-  deleteVendor
+  deleteVendor,
+  assignVendorZones
 };
 

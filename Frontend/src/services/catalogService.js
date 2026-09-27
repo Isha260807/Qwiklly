@@ -126,7 +126,7 @@ export const serviceService = {
     const queryParams = new URLSearchParams();
     if (params.status) queryParams.append('status', params.status);
     if (params.brandId) queryParams.append('brandId', params.brandId);
-    if (params.cityId) queryParams.append('cityId', params.cityId);
+    if (params.zoneId) queryParams.append('zoneId', params.zoneId);
     if (params.search) queryParams.append('search', params.search);
 
     const response = await api.get(`/admin/services${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
@@ -326,12 +326,15 @@ export const publicCatalogService = {
   },
 
   // Get consolidated home data (cached for 2 minutes)
-  getHomeData: async (cityId) => {
-    const cacheKey = `public:homeData:${cityId || 'default'}`;
+  getHomeData: async (cityId, zoneId) => {
+    const cacheKey = `public:homeData:${cityId || 'default'}:${zoneId || 'none'}`;
     const cached = apiCache.get(cacheKey);
     if (cached) return cached;
 
-    const query = cityId ? `?cityId=${cityId}` : '';
+    const params = new URLSearchParams();
+    if (cityId) params.set('cityId', cityId);
+    if (zoneId) params.set('zoneId', zoneId);
+    const query = params.toString() ? `?${params.toString()}` : '';
     const response = await api.get(`/public/home-data${query}`);
     if (response.data.success) {
       apiCache.set(cacheKey, response.data, 120); // 2 minutes

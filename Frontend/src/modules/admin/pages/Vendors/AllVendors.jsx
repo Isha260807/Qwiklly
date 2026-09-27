@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast';
 import CardShell from '../UserCategories/components/CardShell';
 import Modal from '../UserCategories/components/Modal';
 import adminVendorService from '../../../../services/adminVendorService';
+import { zoneService } from '../../../../services/zoneService';
 
 const AllVendors = () => {
   const [vendors, setVendors] = useState([]);
@@ -14,11 +15,24 @@ const AllVendors = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [zones, setZones] = useState([]);
+  const [selectedZoneIds, setSelectedZoneIds] = useState([]);
+  const [savingZones, setSavingZones] = useState(false);
 
   // Load vendors from backend
   useEffect(() => {
     loadVendors();
+    loadZones();
   }, []);
+
+  const loadZones = async () => {
+    try {
+      const response = await zoneService.getAll();
+      if (response.success) setZones(response.zones);
+    } catch (error) {
+      // silent - zone assignment section just stays empty
+    }
+  };
 
   const loadVendors = async () => {
     try {
@@ -44,7 +58,8 @@ const AllVendors = () => {
           },
           bankDetails: vendor.bankDetails || {},
           createdAt: vendor.createdAt,
-          isActive: vendor.isActive
+          isActive: vendor.isActive,
+          zoneIds: (vendor.zoneIds || []).map(z => (typeof z === 'object' ? z._id : z))
         }));
         setVendors(transformedVendors);
       } else {
@@ -155,7 +170,33 @@ const AllVendors = () => {
 
   const handleViewDetails = (vendor) => {
     setSelectedVendor(vendor);
+    setSelectedZoneIds(vendor.zoneIds || []);
     setIsViewModalOpen(true);
+  };
+
+  const toggleZoneSelection = (zoneId) => {
+    setSelectedZoneIds(prev =>
+      prev.includes(zoneId) ? prev.filter(id => id !== zoneId) : [...prev, zoneId]
+    );
+  };
+
+  const handleSaveVendorZones = async () => {
+    if (!selectedVendor) return;
+    try {
+      setSavingZones(true);
+      const response = await zoneService.assignVendorZones(selectedVendor.id, selectedZoneIds);
+      if (response.success) {
+        setVendors(prev => prev.map(v => v.id === selectedVendor.id ? { ...v, zoneIds: selectedZoneIds } : v));
+        setSelectedVendor(prev => prev ? { ...prev, zoneIds: selectedZoneIds } : prev);
+        toast.success('Vendor zones updated successfully');
+      } else {
+        toast.error(response.message || 'Failed to update vendor zones');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update vendor zones');
+    } finally {
+      setSavingZones(false);
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -424,6 +465,41 @@ const AllVendors = () => {
                   {selectedVendor.isActive ? 'Active' : 'Inactive'}
                 </div>
               </div>
+            </div>
+
+            {/* Zone Assignment - controls which zones this vendor receives bookings from */}
+            <div className="bg-rose-50/60 rounded-xl p-4 border border-rose-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-gray-900">Zone Assignment</h4>
+                  <p className="text-[10px] text-gray-500">Vendor only receives bookings from selected zones</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveVendorZones}
+                  disabled={savingZones}
+                  className="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-medium hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {savingZones ? 'Saving...' : 'Save Zones'}
+                </button>
+              </div>
+              {zones.length === 0 ? (
+                <p className="text-xs text-gray-400">No zones configured yet. Add zones under Settings &gt; Zone Management.</p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+                  {zones.map(zone => (
+                    <label key={zone._id} className="flex items-center gap-2 text-xs bg-white rounded-lg px-2 py-1.5 border border-gray-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedZoneIds.includes(zone._id)}
+                        onChange={() => toggleZoneSelection(zone._id)}
+                        className="w-3.5 h-3.5 text-rose-600 rounded focus:ring-rose-500"
+                      />
+                      <span className="truncate">{zone.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Bank & UPI Details for Manual Payouts */}
