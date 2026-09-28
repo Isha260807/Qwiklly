@@ -8,15 +8,15 @@
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-// Firebase configuration - Production values
+// Firebase configuration - Must match the app's Firebase config (qwiklly-ef8e3)
 const firebaseConfig = {
-  apiKey: 'AIzaSyB0p9BwQh6P4U6RpNI783Mf2yLV96ZFemo',
-  authDomain: 'homster-notifications.firebaseapp.com',
-  projectId: 'homster-notifications',
-  storageBucket: 'homster-notifications.firebasestorage.app',
-  messagingSenderId: '330091938710',
-  appId: '1:330091938710:web:b58aa8c0830445b1fa53b7',
-  measurementId: 'G-E493PBZLED'
+  apiKey: 'AIzaSyCUBJH4tLlB9Mq4dnYKjxp_1_b8gQbLbpE',
+  authDomain: 'qwiklly-ef8e3.firebaseapp.com',
+  projectId: 'qwiklly-ef8e3',
+  storageBucket: 'qwiklly-ef8e3.firebasestorage.app',
+  messagingSenderId: '24437145469',
+  appId: '1:24437145469:web:ec5d0cabcc9abfdacb9614',
+  measurementId: 'G-KC325GL3EE'
 };
 
 // Initialize Firebase
@@ -148,6 +148,15 @@ messaging.onBackgroundMessage((payload) => {
         { action: 'rate', title: '⭐ Rate Now' }
       ];
       break;
+
+    case 'test':
+      notificationTitle = data.title || notification.title || '🔔 Test Notification';
+      notificationBody = data.body || notification.body || 'Push notifications are working properly!';
+      vibrate = [200, 100, 200];
+      actions = [
+        { action: 'view', title: 'Open App' }
+      ];
+      break;
   }
 
   const notificationOptions = {
@@ -177,13 +186,14 @@ messaging.onBackgroundMessage((payload) => {
   };
 
   // Show the notification ONLY if app is not in foreground (to avoid duplicate with in-app socket toast)
+  // Exception: Test notifications are always shown so user can immediately verify push delivery!
   return self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     .then(function (clientList) {
       const isVisible = clientList.some(function (client) {
         return client.visibilityState === 'visible';
       });
 
-      if (isVisible) {
+      if (isVisible && notificationType !== 'test' && data.type !== 'test') {
         console.log('[SW] 🚫 App is visible, skipping system notification to avoid duplicate');
         return;
       }
