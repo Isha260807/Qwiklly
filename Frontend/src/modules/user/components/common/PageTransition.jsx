@@ -19,6 +19,7 @@ const PageTransition = ({ children }) => {
       const timeout = setTimeout(() => {
         setDisplayLocation(location);
         setIsTransitioning(false);
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
       }, 100); // Very quick transition (100ms)
 
       return () => clearTimeout(timeout);

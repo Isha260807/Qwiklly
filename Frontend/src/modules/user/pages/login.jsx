@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { FiCheckCircle, FiChevronLeft, FiGift } from 'react-icons/fi';
+import { FiCheckCircle, FiChevronLeft, FiGift, FiShield, FiZap, FiStar, FiClock } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { userAuthService } from '../../../services/authService';
 import LogoLoader from '../../../components/common/LogoLoader';
@@ -30,7 +30,6 @@ import row3_3 from '../../../assets/images/login/row3_3.jpg';
 import row3_4 from '../../../assets/images/login/row3_4.jpg';
 import row3_5 from '../../../assets/images/login/row3_5.jpg';
 
-// Curated high quality on-demand home service photos for 3 marquee rows
 const ROW_1_IMAGES = [
   { url: row1_1, alt: 'Kitchen Counter Cleaning' },
   { url: row1_2, alt: 'Bathroom Deep Clean' },
@@ -133,11 +132,12 @@ const Login = () => {
 
   // OTP inputs handling
   const handleOtpChange = (index, value) => {
-    if (value && !/^\d+$/.test(value)) return;
+    const cleanValue = value.replace(/\D/g, '');
+    if (!cleanValue && value !== '') return;
 
-    if (value.length > 1) {
-      if (index === 0 && value.length === 6) {
-        const chars = value.split('');
+    if (cleanValue.length > 1) {
+      if (index === 0 && cleanValue.length === 6) {
+        const chars = cleanValue.split('');
         setOtp(chars);
         otpInputRefs.current[5]?.focus();
         return;
@@ -146,10 +146,10 @@ const Login = () => {
     }
 
     const newOtp = [...otp];
-    newOtp[index] = value;
+    newOtp[index] = cleanValue;
     setOtp(newOtp);
 
-    if (value && index < 5) {
+    if (cleanValue && index < 5) {
       otpInputRefs.current[index + 1]?.focus();
     }
   };
@@ -215,23 +215,21 @@ const Login = () => {
 
   // Helper render for Marquee Row
   const renderMarqueeRow = (images, animationClass) => {
-    // Duplicate array twice for seamless 50% loop
     const loopedImages = [...images, ...images];
     return (
-      <div className="overflow-hidden w-full flex items-center py-1">
+      <div className="overflow-hidden w-full flex items-center py-0.5 sm:py-1">
         <div className={animationClass}>
           {loopedImages.map((img, idx) => (
             <div
               key={`${idx}-${img.alt}`}
-              className="flex-shrink-0 mx-1 sm:mx-1.5 rounded-2xl overflow-hidden shadow-xs border-[1.5px] border-white/90 bg-[#F5E6ED] transition-transform duration-300 hover:scale-105"
+              className="flex-shrink-0 mx-1 sm:mx-1.5 rounded-xl sm:rounded-2xl overflow-hidden shadow-xs border-[1.5px] border-white/90 bg-[#F5E6ED] transition-transform duration-300 hover:scale-105"
             >
               <img
                 src={img.url}
                 alt={img.alt}
                 loading="eager"
                 decoding="async"
-                fetchPriority="high"
-                className="w-28 h-20 sm:w-32 sm:h-22 object-cover rounded-2xl contrast-[1.08] saturate-[1.10] brightness-[1.03]"
+                className="w-24 h-16 xs:w-28 xs:h-18 sm:w-32 sm:h-22 object-cover rounded-xl sm:rounded-2xl contrast-[1.08] saturate-[1.10] brightness-[1.03]"
                 style={{ imageRendering: '-webkit-optimize-contrast' }}
               />
             </div>
@@ -242,73 +240,81 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FFF7FA] flex justify-center items-center sm:py-8 sm:px-4">
-      {/* Main Container Phone Frame / Card */}
-      <div className="w-full max-w-md min-h-screen sm:min-h-[780px] bg-white sm:rounded-3xl sm:shadow-2xl sm:border sm:border-[#E8D9DF] flex flex-col justify-between overflow-hidden relative select-none">
+    <div className="min-h-[100dvh] bg-[#FFF7FA] flex justify-center items-center p-0 sm:p-6 lg:p-10">
+      {/* Main Container: Mobile phone layout on small screens, Spacious 2-Column Split Portal on Laptops/Desktops */}
+      <div className="w-full max-w-md lg:max-w-4xl min-h-[100dvh] sm:min-h-0 bg-white sm:rounded-3xl sm:shadow-2xl sm:border sm:border-[#E8D9DF] flex flex-col lg:grid lg:grid-cols-12 overflow-hidden relative select-none">
 
-        {/* ================= 1. HEADER SECTION ================= */}
-        <div className="bg-gradient-to-br from-[#C2457C] via-[#AB2D65] to-[#8C1B4E] text-white pt-7 pb-8 px-6 rounded-b-[40px] shadow-lg shadow-[#AB2D65]/25 relative z-20">
-          {/* Top Row: Skip login button */}
-          <div className="flex justify-end items-center mb-1">
+        {/* ================= LEFT SECTION (BANNER + MARQUEE ON DESKTOP) ================= */}
+        <div className="lg:col-span-6 bg-gradient-to-br from-[#720C3E] via-[#8C1B4E] to-[#AB2D65] text-white flex flex-col justify-between relative overflow-hidden rounded-b-[32px] sm:rounded-b-[40px] lg:rounded-none lg:rounded-l-3xl p-5 sm:p-7 lg:p-9 shadow-lg lg:shadow-none">
+          {/* Top Row */}
+          <div className="flex justify-between items-center mb-2">
+            <span className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-xs font-bold tracking-wide backdrop-blur-md border border-white/20">
+              <FiZap className="w-3.5 h-3.5 text-amber-300" /> Fast & Verified
+            </span>
             <button
               onClick={() => navigate('/user/location')}
-              className="bg-white/20 hover:bg-white/35 active:scale-95 text-white font-semibold text-xs px-3.5 py-1.5 rounded-full transition-all duration-200 backdrop-blur-md cursor-pointer border border-white/40 shadow-xs"
+              className="ml-auto bg-white/20 hover:bg-white/35 active:scale-95 text-white font-semibold text-[11px] sm:text-xs px-3.5 py-1.5 rounded-full transition-all duration-200 backdrop-blur-md cursor-pointer border border-white/30 shadow-xs"
             >
               Skip login
             </button>
           </div>
 
           {/* Brand Name & Tagline */}
-          <div className="text-center">
-            <h1
-              className="text-3xl sm:text-4xl font-black tracking-tight !text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)] font-sans"
-              style={{ color: '#ffffff' }}
-            >
+          <div className="text-center lg:text-left my-2 lg:my-6">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white drop-shadow-sm font-sans">
               Qwiklly
             </h1>
-            <p
-              className="text-sm sm:text-base font-semibold mt-2 leading-snug max-w-[280px] mx-auto drop-shadow-xs !text-white"
-              style={{ color: '#ffffff' }}
-            >
-              Get professional service providers in minutes!
+            <p className="text-xs sm:text-sm lg:text-base font-semibold mt-1.5 leading-snug max-w-[280px] lg:max-w-sm mx-auto lg:mx-0 text-white/95">
+              Get verified professional service providers at your doorstep in minutes!
             </p>
+          </div>
+
+          {/* Animated 3-Row Image Marquee */}
+          <div className="relative pt-2 pb-1 overflow-hidden flex flex-col gap-1 sm:gap-1.5 my-2">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-[#720C3E]/40 to-transparent z-10 lg:hidden" />
+            {renderMarqueeRow(ROW_1_IMAGES, 'animate-marquee-left')}
+            {renderMarqueeRow(ROW_2_IMAGES, 'animate-marquee-right')}
+            <div className="hidden sm:block">
+              {renderMarqueeRow(ROW_3_IMAGES, 'animate-marquee-left')}
+            </div>
+          </div>
+
+          {/* Desktop Value Props */}
+          <div className="hidden lg:grid grid-cols-3 gap-2 pt-4 border-t border-white/20 text-center text-[11px] font-bold text-white/90">
+            <div className="flex flex-col items-center gap-1">
+              <FiShield className="w-4 h-4 text-amber-300" />
+              <span>100% Verified</span>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <FiClock className="w-4 h-4 text-amber-300" />
+              <span>Instant Arrival</span>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <FiStar className="w-4 h-4 text-amber-300" />
+              <span>Top Rated</span>
+            </div>
           </div>
         </div>
 
-        {/* ================= 2. ANIMATED 3-ROW IMAGE MARQUEE ================= */}
-        <div className="relative pt-3 pb-2 overflow-hidden flex flex-col gap-2">
-          {/* Top Soft Blend Gradient */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-[#FFF7FA] to-transparent z-10" />
-
-          {/* Row 1: Right to Left */}
-          {renderMarqueeRow(ROW_1_IMAGES, 'animate-marquee-left')}
-
-          {/* Row 2: Left to Right */}
-          {renderMarqueeRow(ROW_2_IMAGES, 'animate-marquee-right')}
-
-          {/* Row 3: Right to Left */}
-          {renderMarqueeRow(ROW_3_IMAGES, 'animate-marquee-left')}
-        </div>
-
-        {/* ================= 3. BOTTOM LOGIN / SIGNUP CARD ================= */}
-        <div className="px-6 pb-8 pt-2 relative z-20 bg-white -mt-6">
-          {/* Soft White Gradient Shadow Veil Rising from Top of Card */}
-          <div className="pointer-events-none absolute -top-20 inset-x-0 h-20 bg-gradient-to-t from-white via-white/80 to-transparent" />
-
+        {/* ================= RIGHT SECTION (LOGIN / OTP FORM) ================= */}
+        <div className="lg:col-span-6 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 flex flex-col justify-center relative z-20 bg-white">
           {step === 'phone' ? (
             /* PHONE ENTRY STEP */
-            <form onSubmit={handlePhoneSubmit} className="space-y-4 relative z-10">
-              <div className="text-left mb-3">
-                <h2 className="text-2xl sm:text-3xl font-black text-[#24151D] tracking-tight">
+            <form onSubmit={handlePhoneSubmit} className="space-y-4 max-w-sm mx-auto w-full">
+              <div className="text-left mb-2">
+                <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-[#24151D] tracking-tight">
                   Log in or Sign up
                 </h2>
+                <p className="text-xs text-[#6F5A64] mt-1">
+                  Enter your mobile number to get started
+                </p>
               </div>
 
               {/* Mobile Input Field */}
               <div className="relative">
-                <div className="flex items-center bg-white border-2 border-[#E8D9DF] focus-within:border-[#720C3E] rounded-2xl shadow-sm overflow-hidden transition-all duration-300">
-                  <div className="px-4 py-3.5 bg-transparent border-r border-[#E8D9DF] text-[#24151D] font-bold text-base flex items-center gap-1.5">
-                    <span className="text-[#24151D]">+91</span>
+                <div className="flex items-center bg-white border-2 border-[#E8D9DF] focus-within:border-[#720C3E] rounded-xl sm:rounded-2xl shadow-xs overflow-hidden transition-all duration-200">
+                  <div className="px-3.5 sm:px-4 py-3 sm:py-3.5 bg-gray-50/50 border-r border-[#E8D9DF] text-[#24151D] font-bold text-sm sm:text-base flex items-center shrink-0">
+                    <span>+91</span>
                   </div>
                   <input
                     ref={phoneInputRef}
@@ -317,7 +323,7 @@ const Login = () => {
                     autoComplete="tel"
                     id="phone"
                     maxLength={10}
-                    className="w-full px-4 py-3.5 text-base font-semibold text-[#24151D] placeholder:text-[#6F5A64]/45 focus:outline-none bg-transparent"
+                    className="w-full px-3.5 sm:px-4 py-3 sm:py-3.5 text-sm sm:text-base font-semibold text-[#24151D] placeholder:text-[#6F5A64]/45 focus:outline-none bg-transparent"
                     placeholder="Enter mobile number"
                     value={phoneNumber}
                     onChange={(e) => {
@@ -332,22 +338,22 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={isLoading || phoneNumber.length < 10}
-                className={`w-full py-3.5 px-4 rounded-2xl text-base font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md ${
+                className={`w-full py-3 sm:py-3.5 px-4 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-md ${
                   phoneNumber.length === 10 && !isLoading
-                    ? 'bg-[#720C3E] hover:bg-[#4D082A] text-white shadow-[#720C3E]/25 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
-                    : 'bg-[#6F5A64]/20 text-[#6F5A64]/60 cursor-not-allowed shadow-none'
+                    ? 'bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:opacity-95 text-white shadow-[#720C3E]/20 active:scale-[0.99] cursor-pointer'
+                    : 'bg-[#6F5A64]/15 text-[#6F5A64]/50 cursor-not-allowed shadow-none'
                 }`}
               >
                 {isLoading ? (
-                  <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
+                  <LogoLoader fullScreen={false} inline={true} size="w-5 h-5" />
                 ) : (
                   <span>Continue</span>
                 )}
               </button>
 
               {/* Referral Code Checkbox */}
-              <div className="pt-1">
-                <label className="flex items-center justify-center gap-2 text-xs font-semibold text-[#24151D] cursor-pointer hover:text-[#720C3E] transition-colors">
+              <div className="pt-0.5">
+                <label className="flex items-center justify-center lg:justify-start gap-2 text-xs font-semibold text-[#24151D] cursor-pointer hover:text-[#720C3E] transition-colors">
                   <input
                     type="checkbox"
                     checked={hasReferral}
@@ -359,9 +365,9 @@ const Login = () => {
 
                 {/* Optional Referral Code Slide-In */}
                 {hasReferral && (
-                  <div className="mt-2.5 animate-fade-in">
-                    <div className="flex items-center bg-white border border-[#E8D9DF] focus-within:border-[#720C3E] rounded-xl px-3 py-2 shadow-xs">
-                      <FiGift className="text-[#720C3E] mr-2" />
+                  <div className="mt-2 animate-fade-in">
+                    <div className="flex items-center bg-white border border-[#E8D9DF] focus-within:border-[#720C3E] rounded-xl px-3 py-2 shadow-2xs">
+                      <FiGift className="text-[#720C3E] mr-2 shrink-0" />
                       <input
                         type="text"
                         placeholder="Enter referral code"
@@ -375,7 +381,7 @@ const Login = () => {
               </div>
 
               {/* Terms and Privacy Policy */}
-              <p className="text-[11px] text-center text-[#6F5A64] pt-2 leading-relaxed">
+              <p className="text-[10px] sm:text-[11px] text-center lg:text-left text-[#6F5A64] pt-1 leading-relaxed">
                 By continuing, you agree to our{' '}
                 <Link to="/terms" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
                   Terms of Service
@@ -388,18 +394,18 @@ const Login = () => {
             </form>
           ) : (
             /* OTP VERIFICATION STEP */
-            <form onSubmit={handleOtpSubmit} className="space-y-4 animate-fade-in">
-              <div className="text-left mb-2">
-                <h2 className="text-2xl font-black text-[#24151D] tracking-tight">
+            <form onSubmit={handleOtpSubmit} className="space-y-4 max-w-sm mx-auto w-full animate-fade-in">
+              <div className="text-left mb-1">
+                <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-[#24151D] tracking-tight">
                   Verify OTP
                 </h2>
-                <p className="text-xs text-[#6F5A64] mt-0.5">
-                  Enter 6-digit code sent to <strong className="text-[#24151D]">+91 {phoneNumber}</strong>
+                <p className="text-xs sm:text-sm text-[#6F5A64] mt-1">
+                  Enter 6-digit code sent to <strong className="text-[#24151D] font-bold">+91 {phoneNumber}</strong>
                 </p>
               </div>
 
-              {/* 6 Digit Inputs */}
-              <div className="flex justify-between gap-1.5 sm:gap-2 py-2">
+              {/* 6 Digit Adaptive Inputs (Grid on all screens) */}
+              <div className="grid grid-cols-6 gap-1.5 sm:gap-2.5 py-1.5 w-full">
                 {otp.map((digit, index) => (
                   <input
                     key={index}
@@ -411,13 +417,13 @@ const Login = () => {
                     value={digit}
                     onChange={(e) => handleOtpChange(index, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                    className="w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black border-2 border-[#E8D9DF] rounded-2xl focus:border-[#720C3E] focus:ring-2 focus:ring-[#720C3E]/20 bg-white text-[#24151D] transition-all duration-200 shadow-sm"
+                    className="w-full h-11 sm:h-13 aspect-square text-center text-lg sm:text-xl font-black border-2 border-[#E8D9DF] rounded-xl sm:rounded-2xl focus:border-[#720C3E] focus:ring-2 focus:ring-[#720C3E]/20 bg-white text-[#24151D] transition-all duration-200 shadow-2xs"
                   />
                 ))}
               </div>
 
               {/* Resend & Change Phone Number Links */}
-              <div className="flex items-center justify-between text-xs font-semibold pt-1">
+              <div className="flex items-center justify-between text-xs sm:text-sm font-semibold pt-0.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -428,7 +434,7 @@ const Login = () => {
                   }}
                   className="flex items-center text-[#6F5A64] hover:text-[#720C3E] transition-colors cursor-pointer"
                 >
-                  <FiChevronLeft className="mr-0.5 text-sm" /> Change Number
+                  <FiChevronLeft className="mr-0.5 text-base" /> Change Number
                 </button>
 
                 <button
@@ -450,7 +456,7 @@ const Login = () => {
                     }
                   }}
                   disabled={isLoading || resendTimer > 0}
-                  className="text-[#720C3E] hover:text-[#4D082A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  className="text-[#720C3E] hover:text-[#4D082A] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {resendTimer > 0
                     ? `Resend in ${Math.floor(resendTimer / 60)}:${String(resendTimer % 60).padStart(2, '0')}`
@@ -462,14 +468,14 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={isLoading || otp.join('').length !== 6}
-                className={`w-full py-3.5 px-4 rounded-2xl text-base font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md ${
+                className={`w-full py-3 sm:py-3.5 px-4 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-md ${
                   otp.join('').length === 6 && !isLoading
-                    ? 'bg-[#720C3E] hover:bg-[#4D082A] text-white shadow-[#720C3E]/25 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] cursor-pointer'
-                    : 'bg-[#6F5A64]/20 text-[#6F5A64]/60 cursor-not-allowed shadow-none'
+                    ? 'bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:opacity-95 text-white shadow-[#720C3E]/20 active:scale-[0.99] cursor-pointer'
+                    : 'bg-[#6F5A64]/15 text-[#6F5A64]/50 cursor-not-allowed shadow-none'
                 }`}
               >
                 {isLoading ? (
-                  <LogoLoader fullScreen={false} inline={true} size="w-6 h-6" />
+                  <LogoLoader fullScreen={false} inline={true} size="w-5 h-5" />
                 ) : (
                   <span>Verify & Continue</span>
                 )}

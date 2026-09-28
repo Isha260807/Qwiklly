@@ -7,7 +7,7 @@ import { SocketProvider } from './context/SocketContext';
 import { CartProvider } from './context/CartContext';
 import { CityProvider } from './context/CityContext';
 import { initializePushNotifications, setupForegroundNotificationHandler } from './services/pushNotificationService';
-import { LocationPermissionChecker } from './components/common';
+import { LocationPermissionChecker, ScrollToTop } from './components/common';
 
 function App() {
   // Initialize push notifications on app load
@@ -41,6 +41,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <SocketProvider>
         <CityProvider>
           <CartProvider>

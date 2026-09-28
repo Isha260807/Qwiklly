@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
@@ -155,10 +155,13 @@ const Account = () => {
   }
 
   return (
-    <div className="relative bg-transparent">
+    <div className="relative bg-transparent min-h-screen">
       {/* Background provided globally by UserRoutes */}
 
-      <div className="relative z-10 max-w-lg mx-auto">
+      {/* =========================================================================
+          MOBILE LAYOUT (< md / < 768px) - 100% UNCHANGED & IDENTICAL
+      ========================================================================= */}
+      <div className="md:hidden max-w-lg mx-auto pb-16">
         {/* Theme Gradient Header */}
         <header 
           className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
@@ -361,6 +364,358 @@ const Account = () => {
             <p className="text-[10px] font-medium text-gray-400">Version 7.6.27 R547</p>
           </div>
         </main>
+      </div>
+
+      {/* =========================================================================
+          TABLET & DESKTOP LAYOUT (>= md / >= 768px) - 2-COLUMN PREMIUM DASHBOARD
+      ========================================================================= */}
+      <div className="hidden md:block pb-16">
+        {/* Top Header Bar */}
+        <div className="border-b border-slate-200/80 bg-white/80 backdrop-blur-md sticky top-0 z-30 shadow-2xs">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate(-1)}
+                className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-all active:scale-95 cursor-pointer shadow-2xs"
+                title="Go Back"
+              >
+                <FiArrowLeft className="text-lg" />
+              </button>
+              <div>
+                <nav className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+                  <span className="hover:text-slate-600 cursor-pointer" onClick={() => navigate('/user')}>Home</span>
+                  <span>/</span>
+                  <span className="text-[#720C3E] font-bold">My Account</span>
+                </nav>
+                <h1 className="text-xl font-black text-slate-900 tracking-tight leading-none mt-1">
+                  Account & Settings
+                </h1>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/user/update-profile')}
+                className="px-4 py-2 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#4D082A] hover:to-[#720C3E] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-xs transition-all active:scale-95 cursor-pointer"
+              >
+                <FiEdit3 className="text-sm" />
+                <span>Edit Profile</span>
+              </button>
+
+              <NotificationBell 
+                className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-all active:scale-95 relative shrink-0 cursor-pointer"
+                iconClassName="w-5 h-5 text-slate-700 stroke-[2]"
+                dotClassName="absolute top-2 right-2 w-2 h-2 bg-[#FF2D55] rounded-full ring-2 ring-white shadow-xs"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 2-Column Responsive Dashboard Body */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+          <div className="grid grid-cols-12 gap-6 lg:gap-8 items-start">
+            
+            {/* Left Column: Profile Card & Quick Actions (md:col-span-5 lg:col-span-4) */}
+            <div className="col-span-12 md:col-span-5 lg:col-span-4 space-y-6">
+              {/* Profile Summary Card */}
+              <div className="bg-white rounded-3xl p-6 border border-[#E8D9DF]/80 shadow-sm relative overflow-hidden">
+                <div 
+                  className="absolute top-0 left-0 right-0 h-24 pointer-events-none"
+                  style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+                />
+
+                <div className="relative pt-6 flex flex-col items-center text-center">
+                  {/* Profile Avatar */}
+                  <div className="relative mb-3.5">
+                    <div className="w-20 h-20 rounded-2xl overflow-hidden ring-4 ring-white shadow-md border border-slate-100 bg-white">
+                      {userProfile.profilePhoto ? (
+                        <img
+                          src={userProfile.profilePhoto}
+                          alt={userProfile.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="w-full h-full flex items-center justify-center text-white font-black text-2xl"
+                          style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+                        >
+                          {getInitials()}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => navigate('/user/update-profile')}
+                      className="absolute -bottom-1 -right-1 p-1.5 bg-slate-900 hover:bg-black text-white rounded-lg border-2 border-white shadow-sm transition-transform active:scale-95 cursor-pointer"
+                      title="Change profile photo"
+                    >
+                      <FiEdit3 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <h2 className="text-lg font-black text-slate-900 tracking-tight leading-tight">
+                    {userProfile.name}
+                  </h2>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    {userProfile.phone ? formatPhoneNumber(userProfile.phone) : 'No phone linked'}
+                  </p>
+                  {userProfile.email && (
+                    <p className="text-xs text-slate-400 font-normal truncate max-w-full mt-0.5">
+                      {userProfile.email}
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-2 mt-3.5">
+                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-[10px] font-bold rounded-lg flex items-center gap-1">
+                      <FiShield className="text-xs" /> Verified Customer
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => navigate('/user/update-profile')}
+                    className="w-full mt-5 py-2.5 bg-[#FFF7FA] hover:bg-[#FCEBF3] text-[#720C3E] border border-[#E8D9DF] font-bold text-xs rounded-xl transition-all cursor-pointer"
+                  >
+                    Manage Account Info
+                  </button>
+                </div>
+              </div>
+
+              {/* Active Plan Card (if active) */}
+              {userProfile.plans && userProfile.plans.isActive && (
+                <div
+                  onClick={() => navigate('/user/my-plan')}
+                  className="relative overflow-hidden rounded-3xl p-5 text-white cursor-pointer group shadow-md transition-transform hover:-translate-y-0.5"
+                  style={{
+                    background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)'
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <FiShield className="w-4 h-4 text-white/90" />
+                        <span className="text-[10px] font-black uppercase tracking-wider text-white/90">Active Membership</span>
+                      </div>
+                      <h3 className="text-lg font-black tracking-tight">{userProfile.plans.name}</h3>
+                      <p className="text-xs text-white/80 mt-1">
+                        Valid till {new Date(userProfile.plans.expiry).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-xs">
+                      <FiZap className="w-6 h-6 text-yellow-300" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Actions Grid (Balance & Rewards) */}
+              <div className="grid grid-cols-2 gap-3.5">
+                <button
+                  onClick={() => navigate('/user/wallet')}
+                  className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#E8D9DF] transition-all text-left active:scale-[0.99] cursor-pointer group"
+                >
+                  <div
+                    className="w-10 h-10 rounded-2xl flex items-center justify-center mb-3 transition-colors"
+                    style={{ backgroundColor: `${themeColors.primary || '#720C3E'}15`, color: themeColors.primary || '#720C3E' }}
+                  >
+                    <MdAccountBalanceWallet className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Wallet Balance</span>
+                  <p className={`text-base font-black mt-0.5 ${userProfile.walletBalance < 0 ? 'text-red-500' : 'text-slate-900'}`}>
+                    ₹{Math.abs(userProfile.walletBalance || 0).toLocaleString('en-IN')}
+                    {userProfile.walletBalance < 0 && <span className="text-[10px] font-normal ml-1 block text-red-500">(Penalty)</span>}
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => navigate('/user/rewards')}
+                  className="bg-[#181E27] p-4 rounded-3xl shadow-sm hover:shadow-md hover:bg-[#222933] transition-all text-left relative overflow-hidden active:scale-[0.99] cursor-pointer group"
+                >
+                  <div className="w-10 h-10 bg-white/10 text-yellow-400 rounded-2xl flex items-center justify-center mb-3">
+                    <FiGift className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  </div>
+                  <span className="text-[10px] text-white/70 font-bold uppercase tracking-wider block">Rewards</span>
+                  <p className="text-xs font-bold text-white mt-0.5">Refer & Earn</p>
+                </button>
+              </div>
+
+              {/* Logout Button */}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full py-3.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200/80 active:scale-[0.99] text-xs font-bold uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 shadow-2xs transition-all cursor-pointer"
+              >
+                <FiLogOut className="w-4 h-4" />
+                <span>Log out from Account</span>
+              </button>
+
+              <div className="text-center pt-2">
+                <p className="text-[11px] font-medium text-slate-400">Qwiklly User App • Version 7.6.27 R547</p>
+              </div>
+            </div>
+
+            {/* Right Column: Menu Sections (md:col-span-7 lg:col-span-8 space-y-6) */}
+            <div className="col-span-12 md:col-span-7 lg:col-span-8 space-y-6">
+              
+              {/* Section 1: Orders & Subscriptions */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Orders & Subscriptions</h3>
+                    <p className="text-xs text-slate-400 font-medium">Track service appointments, plans, and history</p>
+                  </div>
+                  <span className="px-2.5 py-1 bg-[#FFF7FA] text-[#720C3E] border border-[#E8D9DF] text-[10px] font-bold rounded-lg uppercase tracking-wider">
+                    Activity
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
+                  <div
+                    onClick={() => navigate('/user/my-bookings')}
+                    className="p-4 bg-slate-50 hover:bg-[#FFF7FA] hover:border-[#E8D9DF] rounded-2xl border border-slate-100 transition-all cursor-pointer group flex flex-col justify-between min-h-[110px]"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="w-9 h-9 rounded-xl bg-white text-[#720C3E] shadow-2xs flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <FiClipboard className="text-base" />
+                      </div>
+                      <FiChevronRight className="text-slate-300 group-hover:text-[#720C3E] transition-colors" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 mt-2">My Bookings</h4>
+                      <p className="text-[11px] text-slate-500 line-clamp-1">View active & past orders</p>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => navigate('/user/my-plan')}
+                    className="p-4 bg-slate-50 hover:bg-[#FFF7FA] hover:border-[#E8D9DF] rounded-2xl border border-slate-100 transition-all cursor-pointer group flex flex-col justify-between min-h-[110px]"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="w-9 h-9 rounded-xl bg-white text-[#720C3E] shadow-2xs flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <FiFileText className="text-base" />
+                      </div>
+                      <FiChevronRight className="text-slate-300 group-hover:text-[#720C3E] transition-colors" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 mt-2">My Plans</h4>
+                      <p className="text-[11px] text-slate-500 line-clamp-1">Subscriptions & packages</p>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => navigate('/user/my-rating')}
+                    className="p-4 bg-slate-50 hover:bg-[#FFF7FA] hover:border-[#E8D9DF] rounded-2xl border border-slate-100 transition-all cursor-pointer group flex flex-col justify-between min-h-[110px]"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="w-9 h-9 rounded-xl bg-white text-[#720C3E] shadow-2xs flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <FiStar className="text-base" />
+                      </div>
+                      <FiChevronRight className="text-slate-300 group-hover:text-[#720C3E] transition-colors" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 mt-2">My Ratings</h4>
+                      <p className="text-[11px] text-slate-500 line-clamp-1">Reviews & feedback</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Account Preferences & Settings */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Preferences & Security</h3>
+                    <p className="text-xs text-slate-400 font-medium">Manage addresses, app settings, and payments</p>
+                  </div>
+                  <span className="px-2.5 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg uppercase tracking-wider">
+                    Settings
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                  <div
+                    onClick={() => navigate('/user/manage-addresses')}
+                    className="p-4 bg-slate-50 hover:bg-[#FFF7FA] hover:border-[#E8D9DF] rounded-2xl border border-slate-100 transition-all cursor-pointer group flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-white text-[#720C3E] shadow-2xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <FiMapPin className="text-lg" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">Manage Addresses</h4>
+                        <p className="text-[11px] text-slate-500">Saved home, work & other delivery locations</p>
+                      </div>
+                    </div>
+                    <FiChevronRight className="text-slate-300 group-hover:text-[#720C3E] transition-colors shrink-0" />
+                  </div>
+
+                  <div
+                    onClick={() => navigate('/user/settings')}
+                    className="p-4 bg-slate-50 hover:bg-[#FFF7FA] hover:border-[#E8D9DF] rounded-2xl border border-slate-100 transition-all cursor-pointer group flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-white text-[#720C3E] shadow-2xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <FiSettings className="text-lg" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">App Settings</h4>
+                        <p className="text-[11px] text-slate-500">Notifications, security & permissions</p>
+                      </div>
+                    </div>
+                    <FiChevronRight className="text-slate-300 group-hover:text-[#720C3E] transition-colors shrink-0" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Support & Information */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Support & Information</h3>
+                    <p className="text-xs text-slate-400 font-medium">Customer care, FAQs, and company info</p>
+                  </div>
+                  <span className="px-2.5 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg uppercase tracking-wider">
+                    Help
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                  <div
+                    onClick={() => navigate('/user/help-support')}
+                    className="p-4 bg-slate-50 hover:bg-[#FFF7FA] hover:border-[#E8D9DF] rounded-2xl border border-slate-100 transition-all cursor-pointer group flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-white text-[#720C3E] shadow-2xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <FiHeadphones className="text-lg" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">Help & Support</h4>
+                        <p className="text-[11px] text-slate-500">24/7 Assistance with bookings & queries</p>
+                      </div>
+                    </div>
+                    <FiChevronRight className="text-slate-300 group-hover:text-[#720C3E] transition-colors shrink-0" />
+                  </div>
+
+                  <div
+                    onClick={() => navigate('/user/about-Qwiklly')}
+                    className="p-4 bg-slate-50 hover:bg-[#FFF7FA] hover:border-[#E8D9DF] rounded-2xl border border-slate-100 transition-all cursor-pointer group flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-white text-[#720C3E] shadow-2xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <Logo className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">About Qwiklly</h4>
+                        <p className="text-[11px] text-slate-500">Our safety standards, mission & team</p>
+                      </div>
+                    </div>
+                    <FiChevronRight className="text-slate-300 group-hover:text-[#720C3E] transition-colors shrink-0" />
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
       </div>
     </div>
   );
