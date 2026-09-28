@@ -31,27 +31,27 @@ import row3_4 from '../../../assets/images/login/row3_4.jpg';
 import row3_5 from '../../../assets/images/login/row3_5.jpg';
 
 const ROW_1_IMAGES = [
-  { url: row1_1, alt: 'Kitchen Counter Cleaning' },
-  { url: row1_2, alt: 'Bathroom Deep Clean' },
-  { url: row1_3, alt: 'Floor Sweeping & Care' },
-  { url: row1_4, alt: 'Housekeeping Service' },
-  { url: row1_5, alt: 'AC Maintenance & Servicing' }
+  { url: row1_1, alt: 'Kitchen Countertop Wiping' },
+  { url: row1_2, alt: 'Toilet & Bathroom Sanitation' },
+  { url: row1_3, alt: 'Floor Sweeping with Dustpan' },
+  { url: row1_4, alt: 'Stovetop & Kitchen Backsplash Cleaning' },
+  { url: row1_5, alt: 'Bathroom Sink & Faucet Polish' }
 ];
 
 const ROW_2_IMAGES = [
-  { url: row2_1, alt: 'Utensil & Sink Cleaning' },
-  { url: row2_2, alt: 'Floor Mopping & Sanitation' },
-  { url: row2_3, alt: 'Table & Furniture Dusting' },
-  { url: row2_4, alt: 'Electrician & Switchboard Repair' },
-  { url: row2_5, alt: 'Plumbing & Pipe Repair' }
+  { url: row2_1, alt: 'Utensil & Pan Washing in Sink' },
+  { url: row2_2, alt: 'Microfiber Floor Mopping' },
+  { url: row2_3, alt: 'Living Room Table Dusting' },
+  { url: row2_4, alt: 'Sofa & Fabric Vacuum Cleaning' },
+  { url: row2_5, alt: 'Kitchen Shelves & Pantry Organization' }
 ];
 
 const ROW_3_IMAGES = [
-  { url: row3_1, alt: 'Ceiling Fan & Appliance Dusting' },
+  { url: row3_1, alt: 'Ceiling Fan Dusting & Wiping' },
   { url: row3_2, alt: 'Window Glass Spray Cleaning' },
-  { url: row3_3, alt: 'Laundry & Washing Machine Help' },
-  { url: row3_4, alt: 'Living Room Sofa & Upholstery Care' },
-  { url: row3_5, alt: 'Home Painting & Touchups' }
+  { url: row3_3, alt: 'Laundry Wash & Towel Care' },
+  { url: row3_4, alt: 'Kitchen Cooktop Surface Care' },
+  { url: row3_5, alt: 'Chrome Faucet & Basin Detailing' }
 ];
 
 const Login = () => {
@@ -241,46 +241,73 @@ const Login = () => {
 
   return (
     <div className="min-h-[100dvh] bg-[#FFF7FA] flex justify-center items-center p-0 sm:p-6 lg:p-10">
-      {/* Main Container: Mobile phone layout on small screens, Spacious 2-Column Split Portal on Laptops/Desktops */}
+      {/* Main Container */}
       <div className="w-full max-w-md lg:max-w-4xl min-h-[100dvh] sm:min-h-0 bg-white sm:rounded-3xl sm:shadow-2xl sm:border sm:border-[#E8D9DF] flex flex-col lg:grid lg:grid-cols-12 overflow-hidden relative select-none">
 
-        {/* ================= LEFT SECTION (BANNER + MARQUEE ON DESKTOP) ================= */}
-        <div className="lg:col-span-6 bg-gradient-to-br from-[#720C3E] via-[#8C1B4E] to-[#AB2D65] text-white flex flex-col justify-between relative overflow-hidden rounded-b-[32px] sm:rounded-b-[40px] lg:rounded-none lg:rounded-l-3xl p-5 sm:p-7 lg:p-9 shadow-lg lg:shadow-none">
-          {/* Top Row */}
-          <div className="flex justify-between items-center mb-2">
-            <span className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-xs font-bold tracking-wide backdrop-blur-md border border-white/20">
-              <FiZap className="w-3.5 h-3.5 text-amber-300" /> Fast & Verified
-            </span>
+        {/* ================= MOBILE / TABLET TOP HEADER (< lg) ================= */}
+        <div className="lg:hidden bg-gradient-to-br from-[#720C3E] via-[#8C1B4E] to-[#9A2459] text-white rounded-b-[36px] sm:rounded-b-[44px] px-5 pt-3 pb-6 shadow-md relative">
+          {/* Top Row / Skip Login */}
+          <div className="flex justify-end items-center mb-1">
             <button
               onClick={() => navigate('/user/location')}
-              className="ml-auto bg-white/20 hover:bg-white/35 active:scale-95 text-white font-semibold text-[11px] sm:text-xs px-3.5 py-1.5 rounded-full transition-all duration-200 backdrop-blur-md cursor-pointer border border-white/30 shadow-xs"
+              className="bg-white/20 hover:bg-white/35 active:scale-95 text-white font-semibold text-[11px] sm:text-xs px-3.5 py-1.5 rounded-full transition-all duration-200 backdrop-blur-md cursor-pointer border border-white/30 shadow-xs"
             >
               Skip login
             </button>
           </div>
 
           {/* Brand Name & Tagline */}
-          <div className="text-center lg:text-left my-2 lg:my-6">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white drop-shadow-sm font-sans">
+          <div className="text-center">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white drop-shadow-sm font-sans">
               Qwiklly
             </h1>
-            <p className="text-xs sm:text-sm lg:text-base font-semibold mt-1.5 leading-snug max-w-[280px] lg:max-w-sm mx-auto lg:mx-0 text-white/95">
-              Get verified professional service providers at your doorstep in minutes!
+            <p className="text-xs sm:text-sm font-bold mt-1 leading-snug max-w-[270px] mx-auto text-white/95">
+              Get professional house help in minutes!
+            </p>
+          </div>
+        </div>
+
+        {/* ================= MOBILE / TABLET 3-ROW IMAGE MARQUEE (< lg) ================= */}
+        <div className="lg:hidden relative pt-2.5 pb-1 overflow-hidden flex flex-col gap-1 sm:gap-1.5 my-1 bg-white">
+          {renderMarqueeRow(ROW_1_IMAGES, 'animate-marquee-left')}
+          {renderMarqueeRow(ROW_2_IMAGES, 'animate-marquee-right')}
+          {renderMarqueeRow(ROW_3_IMAGES, 'animate-marquee-left')}
+          
+          {/* Subtle smooth fade out at bottom of row 3 */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-white via-white/40 to-transparent z-10" />
+        </div>
+
+        {/* ================= DESKTOP LEFT SIDEBAR (>= lg) ================= */}
+        <div className="hidden lg:flex lg:col-span-6 bg-gradient-to-br from-[#720C3E] via-[#8C1B4E] to-[#AB2D65] text-white flex-col justify-between p-8 lg:p-9 relative overflow-hidden rounded-l-3xl">
+          <div className="flex justify-between items-center">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 text-xs font-bold tracking-wide backdrop-blur-md border border-white/20">
+              <FiZap className="w-3.5 h-3.5 text-amber-300" /> Fast & Verified
+            </span>
+            <button
+              onClick={() => navigate('/user/location')}
+              className="bg-white/20 hover:bg-white/35 active:scale-95 text-white font-semibold text-xs px-3.5 py-1.5 rounded-full transition-all duration-200 backdrop-blur-md cursor-pointer border border-white/30 shadow-xs"
+            >
+              Skip login
+            </button>
+          </div>
+
+          <div className="my-6">
+            <h1 className="text-4xl font-black tracking-tight text-white drop-shadow-sm font-sans">
+              Qwiklly
+            </h1>
+            <p className="text-base font-semibold mt-2 leading-snug max-w-sm text-white/95">
+              Get professional house help in minutes!
             </p>
           </div>
 
-          {/* Animated 3-Row Image Marquee */}
-          <div className="relative pt-2 pb-1 overflow-hidden flex flex-col gap-1 sm:gap-1.5 my-2">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-[#720C3E]/40 to-transparent z-10 lg:hidden" />
+          {/* Desktop Marquee */}
+          <div className="relative pt-2 pb-1 overflow-hidden flex flex-col gap-1.5 my-2">
             {renderMarqueeRow(ROW_1_IMAGES, 'animate-marquee-left')}
             {renderMarqueeRow(ROW_2_IMAGES, 'animate-marquee-right')}
-            <div className="hidden sm:block">
-              {renderMarqueeRow(ROW_3_IMAGES, 'animate-marquee-left')}
-            </div>
+            {renderMarqueeRow(ROW_3_IMAGES, 'animate-marquee-left')}
           </div>
 
-          {/* Desktop Value Props */}
-          <div className="hidden lg:grid grid-cols-3 gap-2 pt-4 border-t border-white/20 text-center text-[11px] font-bold text-white/90">
+          <div className="grid grid-cols-3 gap-2 pt-4 border-t border-white/20 text-center text-[11px] font-bold text-white/90">
             <div className="flex flex-col items-center gap-1">
               <FiShield className="w-4 h-4 text-amber-300" />
               <span>100% Verified</span>
@@ -296,23 +323,20 @@ const Login = () => {
           </div>
         </div>
 
-        {/* ================= RIGHT SECTION (LOGIN / OTP FORM) ================= */}
-        <div className="lg:col-span-6 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 flex flex-col justify-center relative z-20 bg-white">
+        {/* ================= FORM SECTION (LOGIN / OTP) ================= */}
+        <div className="lg:col-span-6 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-10 flex flex-col justify-center relative z-20 bg-white">
           {step === 'phone' ? (
             /* PHONE ENTRY STEP */
-            <form onSubmit={handlePhoneSubmit} className="space-y-4 max-w-sm mx-auto w-full">
-              <div className="text-left mb-2">
-                <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-[#24151D] tracking-tight">
+            <form onSubmit={handlePhoneSubmit} className="space-y-3.5 max-w-sm mx-auto w-full">
+              <div className="text-center mb-3">
+                <h2 className="text-2xl sm:text-3xl font-black text-[#24151D] tracking-tight">
                   Log in or Sign up
                 </h2>
-                <p className="text-xs text-[#6F5A64] mt-1">
-                  Enter your mobile number to get started
-                </p>
               </div>
 
               {/* Mobile Input Field */}
               <div className="relative">
-                <div className="flex items-center bg-white border-2 border-[#E8D9DF] focus-within:border-[#720C3E] rounded-xl sm:rounded-2xl shadow-xs overflow-hidden transition-all duration-200">
+                <div className="flex items-center bg-white border-2 border-[#E8D9DF] focus-within:border-[#720C3E] rounded-2xl shadow-xs overflow-hidden transition-all duration-200">
                   <div className="px-3.5 sm:px-4 py-3 sm:py-3.5 bg-gray-50/50 border-r border-[#E8D9DF] text-[#24151D] font-bold text-sm sm:text-base flex items-center shrink-0">
                     <span>+91</span>
                   </div>
@@ -338,7 +362,7 @@ const Login = () => {
               <button
                 type="submit"
                 disabled={isLoading || phoneNumber.length < 10}
-                className={`w-full py-3 sm:py-3.5 px-4 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-md ${
+                className={`w-full py-3 sm:py-3.5 px-4 rounded-2xl text-sm sm:text-base font-bold transition-all duration-200 flex items-center justify-center gap-2 shadow-md ${
                   phoneNumber.length === 10 && !isLoading
                     ? 'bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:opacity-95 text-white shadow-[#720C3E]/20 active:scale-[0.99] cursor-pointer'
                     : 'bg-[#6F5A64]/15 text-[#6F5A64]/50 cursor-not-allowed shadow-none'
@@ -353,7 +377,7 @@ const Login = () => {
 
               {/* Referral Code Checkbox */}
               <div className="pt-0.5">
-                <label className="flex items-center justify-center lg:justify-start gap-2 text-xs font-semibold text-[#24151D] cursor-pointer hover:text-[#720C3E] transition-colors">
+                <label className="flex items-center justify-center gap-2 text-xs font-semibold text-[#24151D] cursor-pointer hover:text-[#720C3E] transition-colors">
                   <input
                     type="checkbox"
                     checked={hasReferral}
@@ -381,7 +405,7 @@ const Login = () => {
               </div>
 
               {/* Terms and Privacy Policy */}
-              <p className="text-[10px] sm:text-[11px] text-center lg:text-left text-[#6F5A64] pt-1 leading-relaxed">
+              <p className="text-[10px] sm:text-[11px] text-center text-[#6F5A64] pt-1 leading-relaxed">
                 By continuing, you agree to our{' '}
                 <Link to="/terms" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
                   Terms of Service
