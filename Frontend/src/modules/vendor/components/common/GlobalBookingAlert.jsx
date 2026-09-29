@@ -19,6 +19,11 @@ export default function GlobalBookingAlert() {
       try {
         const now = Date.now();
         let pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
+        const vendorData = JSON.parse(localStorage.getItem('vendorData') || '{}');
+        if (vendorData.approvalStatus && vendorData.approvalStatus.toLowerCase() !== 'approved') {
+          setActiveAlertBookings([]);
+          return;
+        }
 
         // Every few heartbeats or if forced, sync with Server API for missed sockets
         const token = localStorage.getItem('vendorAccessToken') || sessionStorage.getItem('vendorAccessToken');

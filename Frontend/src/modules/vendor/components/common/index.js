@@ -12,3 +12,4 @@ export { default as WorkerPaymentModal } from './WorkerPaymentModal';
 export { default as OtpVerificationModal } from './OtpVerificationModal';
 export { default as ScanAndPayModal } from './ScanAndPayModal';
 export { default as WorkCompletionModal } from './WorkCompletionModal';
+export { default as VendorUnderReviewModal } from './VendorUnderReviewModal';

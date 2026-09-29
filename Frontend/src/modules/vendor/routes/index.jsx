@@ -7,6 +7,7 @@ import ProtectedRoute from '../../../components/auth/ProtectedRoute';
 import PublicRoute from '../../../components/auth/PublicRoute';
 import CashLimitModal from '../components/common/CashLimitModal'; // Import
 import GlobalBookingAlert from '../components/common/GlobalBookingAlert';
+import VendorUnderReviewModal from '../components/common/VendorUnderReviewModal';
 // import useAppNotifications from '../../../hooks/useAppNotifications.jsx'; // Handled globally
 
 // Lazy load wrapper with error handling (same as user app)
@@ -82,6 +83,13 @@ const VendorRoutes = () => {
 
   const shouldShowBottomNav = !shouldHideBottomNav;
 
+  // Only show booking alerts for fully approved vendors
+  const vendorApprovalStatus = (() => {
+    try { return (JSON.parse(localStorage.getItem('vendorData') || '{}').approvalStatus || '').toLowerCase(); }
+    catch { return ''; }
+  })();
+  const isVendorApproved = vendorApprovalStatus === 'approved';
+
   return (
     <ErrorBoundary>
       {/* Main content area - leaves space for bottom nav when needed */}
@@ -128,8 +136,11 @@ const VendorRoutes = () => {
       {/* BottomNav is OUTSIDE Suspense so it persists during page loads */}
       {shouldShowBottomNav && <BottomNav />}
 
-      {/* Global New Booking Alert Modal */}
-      {!shouldHideBottomNav && <GlobalBookingAlert />}
+      {/* Global New Booking Alert Modal — only for approved vendors */}
+      {!shouldHideBottomNav && isVendorApproved && <GlobalBookingAlert />}
+
+      {/* Vendor Profile Under Review Modal */}
+      {!shouldHideBottomNav && <VendorUnderReviewModal />}
     </ErrorBoundary>
   );
 };

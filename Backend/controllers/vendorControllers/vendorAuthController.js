@@ -25,15 +25,14 @@ const sendOTP = async (req, res) => {
     // Check existing vendor status to prevent OTP if restricted
     const existingVendor = await Vendor.findOne({ phone });
     if (existingVendor) {
-      if (existingVendor.approvalStatus === VENDOR_STATUS.PENDING) {
-        return res.status(200).json({
-          success: true,
-          message: 'Your account is currently under review. Please wait for admin approval.',
-          vendor: { adminApproval: 'pending' }
-        });
+      if (existingVendor.approvalStatus === VENDOR_STATUS.REJECTED) {
+        return res.status(403).json({ success: false, message: 'Your vendor account has been rejected. Please contact support.' });
       }
-      if (existingVendor.approvalStatus === VENDOR_STATUS.REJECTED || existingVendor.approvalStatus === VENDOR_STATUS.SUSPENDED) {
-        return res.status(403).json({ success: false, message: 'Account restricted.' });
+      if (existingVendor.approvalStatus === VENDOR_STATUS.SUSPENDED) {
+        return res.status(403).json({ success: false, message: 'Your vendor account has been suspended. Please contact support.' });
+      }
+      if (!existingVendor.isActive) {
+        return res.status(403).json({ success: false, message: 'Your vendor account has been deactivated. Please contact support.' });
       }
     }
 
@@ -103,22 +102,13 @@ const verifyLogin = async (req, res) => {
 
       // Check status checks (Login Logic)
       if (vendor.approvalStatus === VENDOR_STATUS.REJECTED) {
-        return res.status(403).json({ success: false, message: 'Account rejected.' });
+        return res.status(403).json({ success: false, message: 'Your vendor account has been rejected. Please contact support.' });
       }
       if (vendor.approvalStatus === VENDOR_STATUS.SUSPENDED) {
-        return res.status(403).json({ success: false, message: 'Account suspended.' });
+        return res.status(403).json({ success: false, message: 'Your vendor account has been suspended. Please contact support.' });
       }
       if (!vendor.isActive) {
-        return res.status(403).json({ success: false, message: 'Account deactivated.' });
-      }
-
-      // BLOCK PENDING VENDORS
-      if (vendor.approvalStatus === VENDOR_STATUS.PENDING) {
-        return res.status(200).json({
-          success: true,
-          message: 'Your account is currently under review. Please wait for admin approval.',
-          vendor: { adminApproval: 'pending' }
-        });
+        return res.status(403).json({ success: false, message: 'Your vendor account has been deactivated. Please contact support.' });
       }
 
       // SINGLE DEVICE LOGIN: Update Session ID & Clear OLD FCM tokens
@@ -227,8 +217,6 @@ const register = async (req, res) => {
       const uploadRes = await cloudinaryService.uploadFile(panUrl, { folder: 'vendors/documents' });
       if (uploadRes.success) panUrl = uploadRes.url;
     }
-    // ... (otherDocs logic simplified for brevity, assume frontend sends valid array or backend helper used?
-    // I'll keep the simplified logic here assuming loop is standard)
     if (otherUrls && otherUrls.length > 0) {
       const uploadedOthers = [];
       for (const doc of otherUrls) {
@@ -273,6 +261,15 @@ const register = async (req, res) => {
       }
     } catch (e) { console.error('Notify error', e); }
 
+    const loginSessionId = Date.now().toString();
+    await Vendor.findByIdAndUpdate(vendor._id, { loginSessionId });
+
+    const tokens = generateTokenPair({
+      userId: vendor._id,
+      role: USER_ROLES.VENDOR,
+      loginSessionId
+    });
+
     res.status(201).json({
       success: true,
       message: 'Registration successful! Pending approval.',
@@ -282,7 +279,8 @@ const register = async (req, res) => {
         email: vendor.email,
         phone: vendor.phone,
         approvalStatus: vendor.approvalStatus
-      }
+      },
+      ...tokens
     });
 
   } catch (error) {
@@ -295,7 +293,7 @@ const register = async (req, res) => {
 };
 
 /**
- * Login vendor with OTP (only if approved)
+ * Login vendor with OTP
  */
 const login = async (req, res) => {
   try {
@@ -325,14 +323,6 @@ const login = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Vendor not found. Please sign up first.'
-      });
-    }
-
-    // Check approval status
-    if (vendor.approvalStatus === VENDOR_STATUS.PENDING) {
-      return res.status(403).json({
-        success: false,
-        message: 'Your account is pending admin approval. Please wait for approval.'
       });
     }
 
@@ -380,7 +370,8 @@ const login = async (req, res) => {
         email: vendor.email,
         phone: vendor.phone,
         businessName: vendor.businessName,
-        service: vendor.service
+        service: vendor.service,
+        approvalStatus: vendor.approvalStatus
       },
       ...tokens
     });
@@ -455,11 +446,11 @@ const refreshToken = async (req, res) => {
       });
     }
 
-    // Check status
-    if (vendor.approvalStatus !== VENDOR_STATUS.APPROVED || !vendor.isActive) {
+    // Check status (only block if rejected, suspended, or inactive)
+    if (vendor.approvalStatus === VENDOR_STATUS.REJECTED || vendor.approvalStatus === VENDOR_STATUS.SUSPENDED || !vendor.isActive) {
       return res.status(403).json({
         success: false,
-        message: 'Account is not approved or is inactive'
+        message: 'Account is restricted or inactive'
       });
     }
 

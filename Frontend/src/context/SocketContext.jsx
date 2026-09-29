@@ -251,6 +251,13 @@ export const SocketProvider = ({ children }) => {
         window.dispatchEvent(new Event('vendorJobsUpdated'));
         window.dispatchEvent(new Event('vendorNotificationsUpdated'));
         window.dispatchEvent(new Event('vendorStatsUpdated'));
+
+        if (data.type === 'vendor_approved' || data.type === 'vendor_rejected') {
+          window.dispatchEvent(new CustomEvent('vendorStatusUpdated', { 
+            detail: { approvalStatus: data.type === 'vendor_approved' ? 'approved' : 'rejected' } 
+          }));
+          window.dispatchEvent(new Event('vendorDataUpdated'));
+        }
       }
       if (userType === 'user') {
         window.dispatchEvent(new Event('userBookingsUpdated'));
@@ -263,6 +270,12 @@ export const SocketProvider = ({ children }) => {
       if (userType === 'user') window.dispatchEvent(new Event('userBookingsUpdated'));
       if (userType === 'vendor') window.dispatchEvent(new Event('vendorJobsUpdated'));
       if (userType === 'worker') window.dispatchEvent(new Event('workerJobsUpdated'));
+    });
+
+    // Listen for direct vendor approval status updates
+    newSocket.on('vendor_status_updated', (data) => {
+      window.dispatchEvent(new CustomEvent('vendorStatusUpdated', { detail: data }));
+      window.dispatchEvent(new Event('vendorDataUpdated'));
     });
 
     // Listen for special Vendor Booking Requests

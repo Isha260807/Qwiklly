@@ -50,10 +50,28 @@ const authenticate = async (req, res, next) => {
         break;
       case USER_ROLES.VENDOR:
         user = await Vendor.findById(decoded.userId).select('-password').lean();
-        if (user && user.approvalStatus !== 'approved') {
+        if (!user) {
+          return res.status(401).json({
+            success: false,
+            message: 'Vendor not found. Please login again.'
+          });
+        }
+        if (user.approvalStatus === 'rejected') {
           return res.status(403).json({
             success: false,
-            message: 'Your vendor account is pending approval or has been rejected.'
+            message: 'Your vendor account has been rejected. Please contact support.'
+          });
+        }
+        if (user.approvalStatus === 'suspended') {
+          return res.status(403).json({
+            success: false,
+            message: 'Your vendor account has been suspended. Please contact support.'
+          });
+        }
+        if (!user.isActive) {
+          return res.status(403).json({
+            success: false,
+            message: 'Your vendor account has been deactivated. Please contact support.'
           });
         }
 

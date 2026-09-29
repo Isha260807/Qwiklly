@@ -67,16 +67,7 @@ const VendorLogin = () => {
     try {
       const response = await sendOTP(cleanPhone);
       if (response.success) {
-        // Speculative check: If backend sends vendor info at this stage
-        if (response.vendor?.adminApproval?.toLowerCase() === 'pending') {
-          toast.error('Your account is currently under review. Please wait for admin approval.', {
-            duration: 5000,
-            icon: '⏳'
-          });
-          return;
-        }
-
-        setOtpToken(response.token);
+        setOtpToken(response.token || 'verification-pending');
         setIsLoading(false);
         setStep('otp');
         setResendTimer(120); // Start timer
@@ -143,27 +134,19 @@ const VendorLogin = () => {
             state: { phone: phoneNumber.replace(/\D/g, ''), verificationToken: response.verificationToken }
           });
         } else {
-          // Check for admin approval status
-          if (response.vendor?.adminApproval === 'PENDING' || response.vendor?.adminApproval === 'pending') {
-            toast.error('Your account is currently under review. Please wait for admin approval.', {
-              duration: 5000,
-              icon: '⏳'
-            });
-            // Clear tokens if they were set by the service
-            localStorage.removeItem('vendorAccessToken');
-            localStorage.removeItem('vendorRefreshToken');
-            localStorage.removeItem('vendorData');
-            return;
+          const approvalStatus = response.vendor?.approvalStatus || 'approved';
+          if (approvalStatus === 'pending') {
+            toast('Logged in successfully. Your profile is under review.', { icon: '🔍', duration: 3000 });
+          } else {
+            toast.success(
+              <div className="flex flex-col">
+                <span className="font-bold">Welcome!</span>
+                <span className="text-xs">Successfully logged into your vendor account.</span>
+              </div>,
+              { icon: <FiCheckCircle className="text-green-500" /> }
+            );
           }
-
-          toast.success(
-            <div className="flex flex-col">
-              <span className="font-bold">Welcome Back!</span>
-              <span className="text-xs">Successfully logged into your vendor account.</span>
-            </div>,
-            { icon: <FiCheckCircle className="text-green-500" /> }
-          );
-          navigate('/vendor', { replace: true });
+          navigate('/vendor/dashboard', { replace: true });
         }
       } else {
         setIsLoading(false);

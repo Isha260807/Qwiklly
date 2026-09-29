@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { FiUser, FiMail, FiPhone, FiFileText, FiUpload, FiX, FiArrowRight, FiChevronLeft, FiCheckCircle, FiCamera } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
@@ -220,14 +220,28 @@ const VendorSignup = () => {
         const response = await register(registerData);
 
         if (response.success) {
-          toast.success(
-            <div className="flex flex-col">
-              <span className="font-bold">Application Submitted!</span>
-              <span className="text-xs">Your vendor account is pending admin approval.</span>
-            </div>,
-            { icon: <FiCheckCircle className="text-[#D68F35]" />, duration: 5000 }
-          );
-          navigate('/vendor/login');
+          if (response.accessToken) {
+            localStorage.setItem('vendorAccessToken', response.accessToken);
+            localStorage.setItem('vendorRefreshToken', response.refreshToken);
+            localStorage.setItem('vendorData', JSON.stringify(response.vendor));
+            toast.success(
+              <div className="flex flex-col">
+                <span className="font-bold">Application Submitted!</span>
+                <span className="text-xs">Your vendor profile is currently under review.</span>
+              </div>,
+              { icon: <FiCheckCircle className="text-[#347989]" />, duration: 5000 }
+            );
+            navigate('/vendor/dashboard', { replace: true });
+          } else {
+            toast.success(
+              <div className="flex flex-col">
+                <span className="font-bold">Application Submitted!</span>
+                <span className="text-xs">Your vendor account is pending admin approval.</span>
+              </div>,
+              { icon: <FiCheckCircle className="text-[#D68F35]" />, duration: 5000 }
+            );
+            navigate('/vendor/login');
+          }
         } else {
           toast.error(response.message || 'Registration failed');
         }

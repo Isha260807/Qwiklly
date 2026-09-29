@@ -163,6 +163,20 @@ const approveVendor = async (req, res) => {
       relatedType: 'vendor'
     });
 
+    // Emit live socket event for real-time unlock on vendor client
+    try {
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io) {
+        io.to(`vendor_${vendor._id}`).emit('vendor_status_updated', {
+          approvalStatus: VENDOR_STATUS.APPROVED,
+          vendor
+        });
+      }
+    } catch (socketErr) {
+      console.warn('Socket emit error on vendor approval:', socketErr.message);
+    }
+
     res.status(200).json({
       success: true,
       message: 'Vendor approved successfully',
@@ -216,6 +230,21 @@ const rejectVendor = async (req, res) => {
       relatedId: vendor._id,
       relatedType: 'vendor'
     });
+
+    // Emit live socket event for vendor client
+    try {
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io) {
+        io.to(`vendor_${vendor._id}`).emit('vendor_status_updated', {
+          approvalStatus: VENDOR_STATUS.REJECTED,
+          rejectedReason: vendor.rejectedReason,
+          vendor
+        });
+      }
+    } catch (socketErr) {
+      console.warn('Socket emit error on vendor rejection:', socketErr.message);
+    }
 
     res.status(200).json({
       success: true,
