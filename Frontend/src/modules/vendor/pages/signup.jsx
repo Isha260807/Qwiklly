@@ -182,7 +182,7 @@ const VendorSignup = () => {
     });
 
     if (!validationResult.success) {
-      validationResult.error.errors.forEach(err => toast.error(err.message));
+      validationResult.error.issues.forEach(err => toast.error(err.message));
       return;
     }
 

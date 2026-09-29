@@ -205,28 +205,13 @@ const register = async (req, res) => {
     let panUrl = req.body.panDocument || null;
     let otherUrls = req.body.otherDocuments || [];
 
-    if (aadharUrl && aadharUrl.startsWith('data:')) {
-      const uploadRes = await cloudinaryService.uploadFile(aadharUrl, { folder: 'vendors/documents' });
-      if (uploadRes.success) aadharUrl = uploadRes.url;
-    }
-    if (aadharBackUrl && aadharBackUrl.startsWith('data:')) {
-      const uploadRes = await cloudinaryService.uploadFile(aadharBackUrl, { folder: 'vendors/documents' });
-      if (uploadRes.success) aadharBackUrl = uploadRes.url;
-    }
-    if (panUrl && panUrl.startsWith('data:')) {
-      const uploadRes = await cloudinaryService.uploadFile(panUrl, { folder: 'vendors/documents' });
-      if (uploadRes.success) panUrl = uploadRes.url;
-    }
-    if (otherUrls && otherUrls.length > 0) {
-      const uploadedOthers = [];
-      for (const doc of otherUrls) {
-        if (doc && doc.startsWith('data:')) {
-          const up = await cloudinaryService.uploadFile(doc, { folder: 'vendors/documents/others' });
-          if (up.success) uploadedOthers.push(up.url);
-        } else uploadedOthers.push(doc);
-      }
-      otherUrls = uploadedOthers;
-    }
+    const uploadDocument = async (document, folder) => {
+      if (!document || !document.startsWith('data:')) return document;
+
+      const uploadRes = await cloudinaryService.uploadFile(document, { folder });
+      return uploadRes.success ? uploadRes.url : document;
+    };
+
 
     const vendor = await Vendor.create({
       name, email, phone,
@@ -242,8 +227,32 @@ const register = async (req, res) => {
       isPhoneVerified: true
     });
 
-    // Notify Admins
-    try {
+    // Upload documents after the response path so external storage latency cannot block registration.
+    void (async () => {
+      try {
+        const [uploadedAadharUrl, uploadedAadharBackUrl, uploadedPanUrl, uploadedOtherUrls] = await Promise.all([
+          uploadDocument(aadharUrl, 'vendors/documents'),
+          uploadDocument(aadharBackUrl, 'vendors/documents'),
+          uploadDocument(panUrl, 'vendors/documents'),
+          Promise.all((otherUrls || []).map(document => uploadDocument(document, 'vendors/documents/others')))
+        ]);
+
+        await Vendor.findByIdAndUpdate(vendor._id, {
+          $set: {
+            'aadhar.document': uploadedAadharUrl,
+            'aadhar.backDocument': uploadedAadharBackUrl,
+            'pan.document': uploadedPanUrl,
+            otherDocuments: uploadedOtherUrls
+          }
+        });
+      } catch (e) {
+        console.error('Vendor document upload error', e);
+      }
+    })();
+
+    // Notifications must not delay a completed registration response.
+    void (async () => {
+      try {
       const { createNotification } = require('../notificationControllers/notificationController');
       const Admin = require('../../models/Admin');
       const admins = await Admin.find({ isActive: true }).select('_id');
@@ -259,7 +268,10 @@ const register = async (req, res) => {
           pushData: { type: 'admin_alert', link: '/admin/vendors/all' }
         });
       }
-    } catch (e) { console.error('Notify error', e); }
+      } catch (e) {
+        console.error('Notify error', e);
+      }
+    })();
 
     const loginSessionId = Date.now().toString();
     await Vendor.findByIdAndUpdate(vendor._id, { loginSessionId });
