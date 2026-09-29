@@ -43,7 +43,8 @@ const Dashboard = memo(() => {
     name: 'Vendor Name',
     businessName: 'Business Name',
     photo: null,
-    service: []
+    service: [],
+    payoutAdded: false
   });
   const [recentJobs, setRecentJobs] = useState([]);
   const [pendingBookings, setPendingBookings] = useState([]);
@@ -205,7 +206,8 @@ const Dashboard = memo(() => {
       name: profile.name || 'Vendor Name',
       businessName: profile.businessName || 'Business Name',
       photo: profile.profilePhoto || null,
-      service: profile.service || []
+      service: profile.service || [],
+      payoutAdded: !!(profile.bankAccount?.accountNumber || profile.upiId || profile.payoutDetails?.upiId || profile.payoutDetails?.accountNumber)
     });
   }, []);
 
@@ -460,30 +462,41 @@ const Dashboard = memo(() => {
 
       <main className="pt-2">
 
-        {/* Incomplete Profile Prompt */}
-        {(!vendorProfile.service || vendorProfile.service.length === 0) && (
-          <div className="px-4 pt-2 -mb-2">
-            <div
-              onClick={() => navigate('/vendor/profile')}
-              className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r shadow-sm cursor-pointer hover:bg-orange-100 transition-colors"
-            >
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <FiClock className="h-5 w-5 text-orange-500" />
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm font-bold text-orange-700">Profile Incomplete</p>
-                  <p className="text-sm text-orange-600">
-                    Add services to your profile to start receiving bookings.
-                  </p>
-                </div>
-                <div className="ml-auto">
-                  <FiArrowRight className="h-4 w-4 text-orange-500" />
-                </div>
+        {/* Incomplete Profile Banner (Unified) */}
+        {((!vendorProfile.service || vendorProfile.service.length === 0) || !vendorProfile.payoutAdded) && (() => {
+          const noServices = !vendorProfile.service || vendorProfile.service.length === 0;
+          const noPayout = !vendorProfile.payoutAdded;
+          
+          let title = "Profile Incomplete";
+          let message = "Add services to start receiving bookings and also add bank details.";
+          let targetPath = '/vendor/profile';
+
+          if (noServices && !noPayout) {
+            title = "Profile Incomplete";
+            message = "Add services to start receiving bookings.";
+            targetPath = '/vendor/profile';
+          } else if (!noServices && noPayout) {
+            title = "Profile Incomplete";
+            message = "Add bank details to receive payouts.";
+            targetPath = '/vendor/profile/payout';
+          }
+
+          return (
+            <div className="px-4 pt-2 -mb-2">
+              <div
+                onClick={() => navigate(targetPath)}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer transition-all active:opacity-80"
+                style={{ background: 'rgba(114,12,62,0.06)', border: '1px solid rgba(114,12,62,0.18)' }}
+              >
+                <FiClock className="h-4 w-4 flex-shrink-0" style={{ color: '#720C3E' }} />
+                <p className="text-xs font-semibold flex-1" style={{ color: '#4D082A' }}>
+                  {title} — <span className="font-normal">{message}</span>
+                </p>
+                <FiArrowRight className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#720C3E' }} />
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Stats Cards - Optimized Component */}
         <StatsCards stats={stats} />
