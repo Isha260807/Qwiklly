@@ -7,8 +7,7 @@ import {
   FiMapPin, 
   FiShield, 
   FiCheckCircle, 
-  FiHeart,
-  FiExternalLink
+  FiHeart
 } from 'react-icons/fi';
 import { FaWhatsapp, FaInstagram, FaLinkedin, FaFacebook } from 'react-icons/fa';
 
@@ -126,12 +125,6 @@ const Footer = () => {
               </li>
               <li>
                 <Link to="/contact#faqs" className="hover:text-[#E8A0B8] transition-colors">Frequently Asked Questions</Link>
-              </li>
-              <li>
-                <Link to="/user/login" className="hover:text-[#E8A0B8] transition-colors font-semibold text-white flex items-center gap-1">
-                  <span>Customer App (Web)</span>
-                  <FiExternalLink className="w-3 h-3 text-[#E8A0B8]" />
-                </Link>
               </li>
               <li>
                 <Link to="/user/login" className="hover:text-[#E8A0B8] transition-colors">User Login</Link>
