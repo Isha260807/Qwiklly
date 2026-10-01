@@ -41,6 +41,14 @@ const zoneSchema = new mongoose.Schema({
     default: true,
     index: true
   },
+  isComingSoon: {
+    type: Boolean,
+    default: false
+  },
+  isOrderingPaused: {
+    type: Boolean,
+    default: false
+  },
   displayOrder: {
     type: Number,
     default: 0

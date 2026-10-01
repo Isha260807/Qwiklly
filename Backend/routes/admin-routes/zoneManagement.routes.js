@@ -8,7 +8,9 @@ const {
   createZone,
   updateZone,
   deleteZone,
-  toggleZoneStatus
+  toggleZoneStatus,
+  toggleComingSoon,
+  togglePauseOrdering
 } = require('../../controllers/adminControllers/zoneController');
 
 router.use(authenticate);
@@ -20,5 +22,7 @@ router.post('/zones', createZone);
 router.put('/zones/:id', updateZone);
 router.delete('/zones/:id', deleteZone);
 router.patch('/zones/:id/status', toggleZoneStatus);
+router.patch('/zones/:id/coming-soon', toggleComingSoon);
+router.patch('/zones/:id/pause-ordering', togglePauseOrdering);
 
 module.exports = router;

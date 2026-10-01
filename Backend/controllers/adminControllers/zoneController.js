@@ -31,9 +31,107 @@ exports.getAllZones = catchAsync(async (req, res) => {
   if (isActive !== undefined) query.isActive = isActive === 'true';
   if (search) query.name = { $regex: search, $options: 'i' };
 
-  const zones = await Zone.find(query).sort({ displayOrder: 1, createdAt: -1 });
+  const zones = await Zone.find(query).sort({ displayOrder: 1, createdAt: -1 }).lean();
+  const zoneIdList = zones.map(z => z._id);
+  const activeZoneIdList = zones.filter(z => z.isActive).map(z => z._id);
 
-  res.status(200).json({ success: true, count: zones.length, zones });
+  // Aggregate vendor stats and service stats per zone
+  const [vendorStats, allUserServices, totalOnlineVendors] = await Promise.all([
+    Vendor.aggregate([
+      {
+        $match: {
+          isActive: true,
+          approvalStatus: 'approved',
+          zoneIds: { $in: zoneIdList }
+        }
+      },
+      { $unwind: '$zoneIds' },
+      {
+        $group: {
+          _id: '$zoneIds',
+          totalPartners: { $sum: 1 },
+          onlineVendors: {
+            $sum: { $cond: [{ $eq: ['$isOnline', true] }, 1, 0] }
+          },
+          vendorServices: { $addToSet: '$service' }
+        }
+      }
+    ]),
+    UserService.find({}).select('title iconUrl basePrice categoryId status zoneIds').lean(),
+    Vendor.countDocuments({
+      isActive: true,
+      approvalStatus: 'approved',
+      isOnline: true,
+      zoneIds: { $in: activeZoneIdList }
+    })
+  ]);
+
+  const serviceByTitle = new Map();
+  allUserServices.forEach(s => {
+    if (s.title) serviceByTitle.set(s.title.toLowerCase().trim(), s);
+  });
+
+  const enrichedZones = zones.map(z => {
+    const zIdStr = z._id.toString();
+    const ring = z.coordinates?.coordinates?.[0] || [];
+    const pointsCount = ring.length > 0 ? (ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] ? ring.length - 1 : ring.length) : 0;
+
+    const vStat = vendorStats.find(s => s._id.toString() === zIdStr);
+    const vServices = (vStat?.vendorServices || []).flat().filter(Boolean);
+
+    const directUserServices = allUserServices.filter(s =>
+      (s.zoneIds || []).some(id => id.toString() === zIdStr)
+    );
+
+    const serviceMap = new Map();
+
+    // Direct services assigned to this zone
+    directUserServices.forEach(s => {
+      serviceMap.set(s.title.toLowerCase().trim(), {
+        _id: s._id,
+        title: s.title,
+        iconUrl: s.iconUrl || null,
+        basePrice: s.basePrice || 0,
+        status: s.status || 'active'
+      });
+    });
+
+    // Vendor provided services
+    vServices.forEach(vName => {
+      const key = vName.toLowerCase().trim();
+      if (!serviceMap.has(key)) {
+        const matched = serviceByTitle.get(key);
+        serviceMap.set(key, {
+          _id: matched?._id || null,
+          title: matched?.title || vName,
+          iconUrl: matched?.iconUrl || null,
+          basePrice: matched?.basePrice || 0,
+          status: matched?.status || 'active'
+        });
+      }
+    });
+
+    const services = Array.from(serviceMap.values());
+
+    return {
+      ...z,
+      stats: {
+        totalPartners: vStat?.totalPartners || 0,
+        onlineVendors: vStat?.onlineVendors || 0,
+        pointsCount: pointsCount,
+        servicesCount: services.length,
+        services: services
+      }
+    };
+  });
+
+  res.status(200).json({
+    success: true,
+    count: enrichedZones.length,
+    zones: enrichedZones,
+    totalOnlineVendors,
+    activeCount: enrichedZones.filter(z => z.isActive).length
+  });
 });
 
 /**
@@ -60,7 +158,7 @@ exports.getZone = catchAsync(async (req, res) => {
  * wider zone), so we only surface it; smallest-zone-wins still applies.
  */
 exports.createZone = catchAsync(async (req, res) => {
-  const { name, coordinates, isActive, displayOrder } = req.body;
+  const { name, coordinates, isActive, isComingSoon, isOrderingPaused, displayOrder } = req.body;
 
   const polygonError = validatePolygon(coordinates);
   if (polygonError) {
@@ -70,8 +168,10 @@ exports.createZone = catchAsync(async (req, res) => {
   const zone = await Zone.create({
     name,
     coordinates,
-    isActive,
-    displayOrder,
+    isActive: isActive !== undefined ? isActive : true,
+    isComingSoon: !!isComingSoon,
+    isOrderingPaused: !!isOrderingPaused,
+    displayOrder: displayOrder || 0,
     createdBy: req.user.id
   });
 
@@ -106,7 +206,7 @@ exports.updateZone = catchAsync(async (req, res) => {
     }
   }
 
-  const allowedFields = ['name', 'coordinates', 'isActive', 'displayOrder'];
+  const allowedFields = ['name', 'coordinates', 'isActive', 'isComingSoon', 'isOrderingPaused', 'displayOrder'];
   allowedFields.forEach(field => {
     if (req.body[field] !== undefined) zone[field] = req.body[field];
   });
@@ -154,6 +254,40 @@ exports.toggleZoneStatus = catchAsync(async (req, res) => {
   res.status(200).json({
     success: true,
     message: `Zone ${zone.isActive ? 'activated' : 'deactivated'} successfully`,
+    zone
+  });
+});
+
+/**
+ * @route PATCH /api/admin/zones/:id/coming-soon
+ */
+exports.toggleComingSoon = catchAsync(async (req, res) => {
+  const zone = await Zone.findById(req.params.id);
+  if (!zone) {
+    return res.status(404).json({ success: false, message: 'Zone not found' });
+  }
+  zone.isComingSoon = !zone.isComingSoon;
+  await zone.save();
+  res.status(200).json({
+    success: true,
+    message: `Zone marked as ${zone.isComingSoon ? 'Coming Soon' : 'Standard'}`,
+    zone
+  });
+});
+
+/**
+ * @route PATCH /api/admin/zones/:id/pause-ordering
+ */
+exports.togglePauseOrdering = catchAsync(async (req, res) => {
+  const zone = await Zone.findById(req.params.id);
+  if (!zone) {
+    return res.status(404).json({ success: false, message: 'Zone not found' });
+  }
+  zone.isOrderingPaused = !zone.isOrderingPaused;
+  await zone.save();
+  res.status(200).json({
+    success: true,
+    message: `Ordering ${zone.isOrderingPaused ? 'paused' : 'resumed'} for ${zone.name}`,
     zone
   });
 });

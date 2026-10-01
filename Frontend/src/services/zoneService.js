@@ -55,6 +55,11 @@ export const zoneService = {
     return response.data;
   },
 
+  togglePauseOrdering: async (id) => {
+    const response = await api.patch(`/admin/zones/${id}/pause-ordering`);
+    return response.data;
+  },
+
   // Admin: assign zones to a vendor
   assignVendorZones: async (vendorId, zoneIds) => {
     const response = await api.patch(`/admin/vendors/${vendorId}/zones`, { zoneIds });
