@@ -36,27 +36,12 @@ exports.getAllZones = catchAsync(async (req, res) => {
   const activeZoneIdList = zones.filter(z => z.isActive).map(z => z._id);
 
   // Aggregate vendor stats and service stats per zone
-  const [vendorStats, allUserServices, totalOnlineVendors] = await Promise.all([
-    Vendor.aggregate([
-      {
-        $match: {
-          isActive: true,
-          approvalStatus: 'approved',
-          zoneIds: { $in: zoneIdList }
-        }
-      },
-      { $unwind: '$zoneIds' },
-      {
-        $group: {
-          _id: '$zoneIds',
-          totalPartners: { $sum: 1 },
-          onlineVendors: {
-            $sum: { $cond: [{ $eq: ['$isOnline', true] }, 1, 0] }
-          },
-          vendorServices: { $addToSet: '$service' }
-        }
-      }
-    ]),
+  const [vendorsInZones, allUserServices, totalOnlineVendors] = await Promise.all([
+    Vendor.find({
+      isActive: true,
+      approvalStatus: 'approved',
+      zoneIds: { $in: zoneIdList }
+    }).select('name phone service isOnline availability zoneIds profilePhoto').lean(),
     UserService.find({}).select('title iconUrl basePrice categoryId status zoneIds').lean(),
     Vendor.countDocuments({
       isActive: true,
@@ -76,8 +61,13 @@ exports.getAllZones = catchAsync(async (req, res) => {
     const ring = z.coordinates?.coordinates?.[0] || [];
     const pointsCount = ring.length > 0 ? (ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] ? ring.length - 1 : ring.length) : 0;
 
-    const vStat = vendorStats.find(s => s._id.toString() === zIdStr);
-    const vServices = (vStat?.vendorServices || []).flat().filter(Boolean);
+    const zoneVendors = vendorsInZones.filter(v =>
+      (v.zoneIds || []).some(id => id.toString() === zIdStr)
+    );
+    const totalPartners = zoneVendors.length;
+    const onlineVendors = zoneVendors.filter(v => v.isOnline).length;
+
+    const vServices = zoneVendors.map(v => v.service || []).flat().filter(Boolean);
 
     const directUserServices = allUserServices.filter(s =>
       (s.zoneIds || []).some(id => id.toString() === zIdStr)
@@ -116,11 +106,12 @@ exports.getAllZones = catchAsync(async (req, res) => {
     return {
       ...z,
       stats: {
-        totalPartners: vStat?.totalPartners || 0,
-        onlineVendors: vStat?.onlineVendors || 0,
-        pointsCount: pointsCount,
+        totalPartners,
+        onlineVendors,
+        pointsCount,
         servicesCount: services.length,
-        services: services
+        services,
+        vendors: zoneVendors
       }
     };
   });

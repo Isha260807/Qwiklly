@@ -65,6 +65,11 @@ const ZoneManagement = () => {
   const [selectedZoneServices, setSelectedZoneServices] = useState(null);
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
 
+  // Zone Partners View Modal state
+  const [selectedZoneVendors, setSelectedZoneVendors] = useState(null);
+  const [vendorSearchQuery, setVendorSearchQuery] = useState('');
+  const [vendorFilterTab, setVendorFilterTab] = useState('all'); // 'all' | 'online' | 'offline'
+
   // Map state
   const [map, setMap] = useState(null);
   const [autocomplete, setAutocomplete] = useState(null);
@@ -281,6 +286,26 @@ const ZoneManagement = () => {
       (s.title || '').toLowerCase().includes(q)
     );
   }, [selectedZoneServices, serviceSearchQuery]);
+
+  // Filtered zone vendors for the modal
+  const filteredZoneVendors = useMemo(() => {
+    if (!selectedZoneVendors?.vendors) return [];
+    let list = selectedZoneVendors.vendors;
+    if (vendorFilterTab === 'online') {
+      list = list.filter((v) => v.isOnline);
+    } else if (vendorFilterTab === 'offline') {
+      list = list.filter((v) => !v.isOnline);
+    }
+    if (vendorSearchQuery.trim()) {
+      const q = vendorSearchQuery.toLowerCase().trim();
+      list = list.filter((v) =>
+        (v.name || '').toLowerCase().includes(q) ||
+        (v.phone || '').includes(q) ||
+        (Array.isArray(v.service) ? v.service.join(' ') : (v.service || '')).toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [selectedZoneVendors, vendorFilterTab, vendorSearchQuery]);
 
   // -------------------------------------------------------------
   // RENDER: Form Page View (When Add or Edit is active)
@@ -662,17 +687,49 @@ const ZoneManagement = () => {
 
                   {/* 2x2 Stats Grid */}
                   <div className="grid grid-cols-2 gap-2.5 my-4">
-                    {/* Total Partners */}
-                    <div className="bg-[#EEF2FF] rounded-xl p-3">
-                      <div className="text-[11px] font-semibold text-indigo-500">Total Partners</div>
+                    {/* Total Partners (Clickable to view all zone vendors) */}
+                    <div
+                      onClick={() => {
+                        setSelectedZoneVendors({
+                          zoneName: zone.name,
+                          vendors: zone.stats?.vendors || [],
+                          filter: 'all'
+                        });
+                        setVendorSearchQuery('');
+                      }}
+                      className="bg-[#EEF2FF] hover:bg-indigo-100/70 border border-transparent hover:border-indigo-200/80 rounded-xl p-3 cursor-pointer transition-all duration-150 group/ptn"
+                      title="Click to view all partners in this zone"
+                    >
+                      <div className="text-[11px] font-semibold text-indigo-500 group-hover/ptn:text-indigo-700 flex items-center justify-between">
+                        <span>Total Partners</span>
+                        <span className="text-[10px] text-indigo-500 opacity-0 group-hover/ptn:opacity-100 font-medium transition-opacity">
+                          View →
+                        </span>
+                      </div>
                       <div className="text-sm font-bold text-indigo-800 mt-0.5">{partnersCount} Partners</div>
                     </div>
 
-                    {/* Online Now */}
-                    <div className="bg-[#ECFDF5] rounded-xl p-3">
-                      <div className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Online Now
+                    {/* Online Now (Clickable to view online zone vendors) */}
+                    <div
+                      onClick={() => {
+                        setSelectedZoneVendors({
+                          zoneName: zone.name,
+                          vendors: zone.stats?.vendors || [],
+                          filter: 'online'
+                        });
+                        setVendorSearchQuery('');
+                      }}
+                      className="bg-[#ECFDF5] hover:bg-emerald-100/70 border border-transparent hover:border-emerald-200/80 rounded-xl p-3 cursor-pointer transition-all duration-150 group/onl"
+                      title="Click to view online partners in this zone"
+                    >
+                      <div className="text-[11px] font-semibold text-emerald-600 group-hover/onl:text-emerald-700 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Online Now
+                        </span>
+                        <span className="text-[10px] text-emerald-600 opacity-0 group-hover/onl:opacity-100 font-medium transition-opacity">
+                          View →
+                        </span>
                       </div>
                       <div className="text-sm font-bold text-emerald-800 mt-0.5">{onlineCount} Online</div>
                     </div>
@@ -874,6 +931,161 @@ const ZoneManagement = () => {
               </span>
               <button
                 onClick={() => setSelectedZoneServices(null)}
+                className="px-4 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-100 transition-colors cursor-pointer shadow-2xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* Zone Partners Details Modal (With Online/Offline Status)  */}
+      {/* ========================================================= */}
+      {selectedZoneVendors && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100 flex flex-col max-h-[85vh] animate-scaleUp">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                  <FiLayers className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">
+                    {selectedZoneVendors.zoneName} — Partners
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    {selectedZoneVendors.vendors.length} total partners assigned to this zone
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedZoneVendors(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <HiX className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Filter Tabs & Search Bar */}
+            <div className="px-6 pt-4 pb-2 space-y-2.5 border-b border-gray-100 bg-gray-50/50">
+              {/* Filter Tabs */}
+              <div className="flex items-center gap-2">
+                {[
+                  { id: 'all', label: `All (${selectedZoneVendors.vendors.length})` },
+                  {
+                    id: 'online',
+                    label: `Online (${selectedZoneVendors.vendors.filter((v) => v.isOnline).length})`,
+                    isOnline: true
+                  },
+                  {
+                    id: 'offline',
+                    label: `Offline (${selectedZoneVendors.vendors.filter((v) => !v.isOnline).length})`
+                  }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setVendorFilterTab(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      vendorFilterTab === tab.id
+                        ? 'bg-[#9E2A2B] text-white shadow-xs'
+                        : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    {tab.isOnline && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    )}
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative pb-1">
+                <HiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  value={vendorSearchQuery}
+                  onChange={(e) => setVendorSearchQuery(e.target.value)}
+                  placeholder="Search partner by name, phone, service..."
+                  className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all shadow-2xs"
+                />
+              </div>
+            </div>
+
+            {/* Partners List Content */}
+            <div className="p-6 overflow-y-auto space-y-3 flex-1">
+              {filteredZoneVendors.length > 0 ? (
+                filteredZoneVendors.map((vendor, index) => (
+                  <div
+                    key={vendor._id || index}
+                    className="flex items-center justify-between p-3.5 rounded-xl border border-gray-100 bg-white hover:border-indigo-100 hover:shadow-2xs transition-all"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {vendor.profilePhoto ? (
+                        <img
+                          src={vendor.profilePhoto}
+                          alt={vendor.name}
+                          className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center shrink-0">
+                          {vendor.name ? vendor.name.substring(0, 2).toUpperCase() : 'VP'}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-gray-900 truncate">{vendor.name}</h4>
+                        <p className="text-[11px] text-gray-500">{vendor.phone}</p>
+                        <p className="text-[10px] text-indigo-600 font-medium truncate mt-0.5">
+                          {Array.isArray(vendor.service)
+                            ? vendor.service.join(', ')
+                            : (vendor.service || 'No services specified')}
+                        </p>
+                      </div>
+                    </div>
+
+                    {vendor.isOnline ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#DCFCE7] text-[#16A34A] border border-[#BBF7D0] shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse"></span>
+                        Online
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-500 border border-gray-200 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                        Offline
+                      </span>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-10">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mx-auto mb-2.5">
+                    <FiLayers className="w-6 h-6" />
+                  </div>
+                  <p className="text-sm font-semibold text-gray-700">
+                    {vendorSearchQuery
+                      ? 'No matching partners found'
+                      : vendorFilterTab === 'online'
+                      ? 'No online partners in this zone right now'
+                      : 'No partners assigned to this zone yet'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Partners assigned to this zone will appear here with live duty status.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-xs text-gray-500">
+                Showing <strong>{filteredZoneVendors.length}</strong> partners
+              </span>
+              <button
+                onClick={() => setSelectedZoneVendors(null)}
                 className="px-4 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-100 transition-colors cursor-pointer shadow-2xs"
               >
                 Close

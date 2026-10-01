@@ -48,6 +48,9 @@ const AllVendors = () => {
           businessName: vendor.businessName,
           service: vendor.service,
           approvalStatus: vendor.approvalStatus,
+          isOnline: Boolean(vendor.isOnline),
+          availability: vendor.availability || (vendor.isOnline ? 'AVAILABLE' : 'OFFLINE'),
+          lastSeenAt: vendor.lastSeenAt,
           aadhar: vendor.aadhar?.number,
           pan: vendor.pan?.number,
           documents: {
@@ -85,7 +88,14 @@ const AllVendors = () => {
         ? vendor.service.join(' ')
         : (vendor.service || '');
 
-      const matchesStatus = filterStatus === 'all' || vendor.approvalStatus === filterStatus;
+      let matchesStatus = true;
+      if (filterStatus === 'online') {
+        matchesStatus = vendor.isOnline;
+      } else if (filterStatus === 'offline') {
+        matchesStatus = !vendor.isOnline;
+      } else if (filterStatus !== 'all') {
+        matchesStatus = vendor.approvalStatus === filterStatus;
+      }
 
       const matchesSearch =
         vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -213,6 +223,8 @@ const AllVendors = () => {
     );
   };
 
+  const onlineCount = vendors.filter(v => v.isOnline).length;
+  const offlineCount = vendors.filter(v => !v.isOnline).length;
   const pendingCount = vendors.filter(v => v.approvalStatus === 'pending').length;
   const approvedCount = vendors.filter(v => v.approvalStatus === 'approved').length;
   const rejectedCount = vendors.filter(v => v.approvalStatus === 'rejected').length;
@@ -222,19 +234,35 @@ const AllVendors = () => {
       <CardShell
         icon={FiFilter}
         title="Vendor Management"
-        subtitle="Manage and verify platform vendors"
+        subtitle="Manage and verify platform vendors with real-time online status"
       >
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
-            <div className="text-[10px] font-bold text-yellow-700 uppercase tracking-wider mb-1">Pending</div>
-            <div className="text-xl font-bold text-yellow-900">{pendingCount}</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Online Vendors */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 shadow-2xs">
+            <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Online Now
+            </div>
+            <div className="text-xl font-bold text-emerald-900">
+              {onlineCount} <span className="text-xs font-semibold text-emerald-600">/ {vendors.length}</span>
+            </div>
           </div>
-          <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+
+          {/* Approved */}
+          <div className="bg-green-50 border border-green-200 rounded-xl p-3 shadow-2xs">
             <div className="text-[10px] font-bold text-green-700 uppercase tracking-wider mb-1">Approved</div>
             <div className="text-xl font-bold text-green-900">{approvedCount}</div>
           </div>
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+
+          {/* Pending */}
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 shadow-2xs">
+            <div className="text-[10px] font-bold text-yellow-700 uppercase tracking-wider mb-1">Pending</div>
+            <div className="text-xl font-bold text-yellow-900">{pendingCount}</div>
+          </div>
+
+          {/* Rejected */}
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 shadow-2xs">
             <div className="text-[10px] font-bold text-red-700 uppercase tracking-wider mb-1">Rejected</div>
             <div className="text-xl font-bold text-red-900">{rejectedCount}</div>
           </div>
@@ -246,23 +274,31 @@ const AllVendors = () => {
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search vendors..."
+              placeholder="Search vendors by name, phone, email, service..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all text-xs"
+              className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all text-xs font-medium"
             />
           </div>
           <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            {['all', 'pending', 'approved', 'rejected'].map((status) => (
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'online', label: `Online (${onlineCount})`, isOnline: true },
+              { id: 'offline', label: `Offline (${offlineCount})` },
+              { id: 'approved', label: 'Approved' },
+              { id: 'pending', label: 'Pending' },
+              { id: 'rejected', label: 'Rejected' }
+            ].map((tab) => (
               <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`px-3 py-2 rounded-lg text-xs font-bold capitalize transition-all whitespace-nowrap ${filterStatus === status
-                  ? 'bg-blue-600 text-white shadow-sm'
+                key={tab.id}
+                onClick={() => setFilterStatus(tab.id)}
+                className={`px-3 py-2 rounded-lg text-xs font-bold capitalize transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${filterStatus === tab.id
+                  ? 'bg-[#9E2A2B] text-white shadow-sm'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
               >
-                {status}
+                {tab.isOnline && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>}
+                <span>{tab.label}</span>
               </button>
             ))}
           </div>
@@ -277,7 +313,7 @@ const AllVendors = () => {
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Vendor Details</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Business Info</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Payout Details (UPI / Bank)</th>
-                  <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Approval & Duty Status</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -295,7 +331,20 @@ const AllVendors = () => {
                     <tr key={vendor.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div>
-                          <p className="font-bold text-gray-900 text-xs">{vendor.name}</p>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <p className="font-bold text-gray-900 text-xs">{vendor.name}</p>
+                            {vendor.isOnline ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#DCFCE7] text-[#16A34A] border border-[#BBF7D0]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse"></span>
+                                Online
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                                Offline
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[10px] text-gray-500">{vendor.phone}</p>
                           <p className="text-[10px] text-gray-400">{vendor.email}</p>
                         </div>
@@ -348,12 +397,27 @@ const AllVendors = () => {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${vendor.approvalStatus === 'approved' ? 'bg-green-50 text-green-700 border-green-100' :
-                          vendor.approvalStatus === 'rejected' ? 'bg-red-50 text-red-700 border-red-100' :
-                            'bg-yellow-50 text-yellow-700 border-yellow-100'
-                          }`}>
-                          {vendor.approvalStatus}
-                        </span>
+                        <div className="space-y-1">
+                          <div>
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ${vendor.approvalStatus === 'approved' ? 'bg-green-50 text-green-700 border-green-100' :
+                              vendor.approvalStatus === 'rejected' ? 'bg-red-50 text-red-700 border-red-100' :
+                                'bg-yellow-50 text-yellow-700 border-yellow-100'
+                              }`}>
+                              {vendor.approvalStatus}
+                            </span>
+                          </div>
+                          {vendor.isOnline ? (
+                            <div className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              <span>Duty: Online</span>
+                            </div>
+                          ) : (
+                            <div className="text-[10px] font-medium text-gray-400 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+                              <span>Duty: Offline</span>
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
@@ -412,10 +476,10 @@ const AllVendors = () => {
             </table>
           </div>
         </div>
-      </CardShell >
+      </CardShell>
 
       {/* View Vendor Details Modal */}
-      < Modal
+      <Modal
         isOpen={isViewModalOpen}
         onClose={() => {
           setIsViewModalOpen(false);
@@ -450,19 +514,35 @@ const AllVendors = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Approval Status</label>
                 <div>{getStatusBadge(selectedVendor.approvalStatus)}</div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Live Online Status</label>
+                <div>
+                  {selectedVendor.isOnline ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-[#DCFCE7] text-[#16A34A] border border-[#BBF7D0]">
+                      <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse"></span>
+                      Currently Online & Available
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                      <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                      Currently Offline
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Account Active</label>
+                <div className={`text-sm font-semibold ${selectedVendor.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                  {selectedVendor.isActive ? 'Active (Can Login)' : 'Inactive (Disabled)'}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Registered On</label>
                 <div className="text-gray-900">
                   {new Date(selectedVendor.createdAt).toLocaleDateString()}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Active</label>
-                <div className={`text-sm font-semibold ${selectedVendor.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                  {selectedVendor.isActive ? 'Active' : 'Inactive'}
                 </div>
               </div>
             </div>
