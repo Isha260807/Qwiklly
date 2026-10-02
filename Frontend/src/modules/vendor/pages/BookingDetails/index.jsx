@@ -191,7 +191,7 @@ export default function BookingDetails() {
 
           if (isPaymentSuccess) {
             toast.success('Online Payment Received!');
-            setTimeout(() => window.location.reload(), 1500);
+            loadBooking();
           }
         }
       };
@@ -260,7 +260,8 @@ export default function BookingDetails() {
       await verifySelfVisit(id, otp, location);
       toast.success('Visit Verified');
       setIsVisitModalOpen(false);
-      window.location.reload();
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
+      await loadBooking();
     } catch (error) {
       console.error("Geo Error:", error);
       if (error.code === 1) toast.error('Location permission denied');
@@ -424,7 +425,8 @@ export default function BookingDetails() {
       const res = await vendorWalletService.confirmCashCollection(id, amount, code, extras);
       if (res.success) {
         toast.success('Payment verified successfully!');
-        window.location.reload();
+        window.dispatchEvent(new Event('vendorJobsUpdated'));
+        await loadBooking();
       }
       return res;
     } catch (error) {
@@ -479,7 +481,7 @@ export default function BookingDetails() {
           if (response && response.success) {
             toast.success('Assigned to yourself successfully');
             window.dispatchEvent(new Event('vendorJobsUpdated'));
-            window.location.reload();
+            await loadBooking();
           } else {
             throw new Error(response?.message || 'Failed to assign');
           }
@@ -533,7 +535,8 @@ export default function BookingDetails() {
       await completeSelfJob(id, { workPhotos: photos, workDoneDetails: { notes } });
       toast.success('Work marked done');
       setIsWorkDoneModalOpen(false);
-      window.location.reload();
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
+      await loadBooking();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to complete job');
     } finally {
@@ -553,7 +556,7 @@ export default function BookingDetails() {
           await updateBookingStatus(id, 'completed');
           window.dispatchEvent(new Event('vendorJobsUpdated'));
           toast.success('Work Approved! You can now pay the worker.');
-          window.location.reload();
+          await loadBooking();
         } catch (error) {
           console.error('Error approving work:', error);
           toast.error('Failed to approve work');
@@ -1490,7 +1493,11 @@ export default function BookingDetails() {
         isOpen={isVisitModalOpen}
         onClose={() => setIsVisitModalOpen(false)}
         bookingId={id}
-        onSuccess={() => window.location.reload()}
+        onSuccess={() => {
+          setIsVisitModalOpen(false);
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          loadBooking();
+        }}
       />
 
       {/* Unified Worker Completion Modal - REUSABLE COMPONENT */}
@@ -1507,7 +1514,8 @@ export default function BookingDetails() {
             await completeSelfJob(id, { workPhotos: photos, workDoneDetails: { notes } });
             toast.success('Work marked done');
             setIsWorkDoneModalOpen(false);
-            window.location.reload();
+            window.dispatchEvent(new Event('vendorJobsUpdated'));
+            await loadBooking();
           } catch (err) {
             toast.error(err.response?.data?.message || 'Failed to complete job');
           } finally {

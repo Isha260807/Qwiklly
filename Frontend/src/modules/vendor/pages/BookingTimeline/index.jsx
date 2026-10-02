@@ -140,7 +140,8 @@ const BookingTimeline = () => {
           setActionLoading(true);
           await payWorker(id);
           toast.success('Worker payment processed successfully');
-          window.location.reload();
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          await loadBooking();
         } catch (e) {
           toast.error(e.response?.data?.message || 'Payment failed');
         } finally {
@@ -161,7 +162,8 @@ const BookingTimeline = () => {
           setActionLoading(true);
           await updateBookingStatus(id, 'completed');
           toast.success('Work approved successfully');
-          window.location.reload();
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          await loadBooking();
         } catch (e) {
           toast.error(e.response?.data?.message || 'Approval failed');
         } finally {
@@ -182,7 +184,8 @@ const BookingTimeline = () => {
           setActionLoading(true);
           await updateBookingStatus(id, 'completed');
           toast.success('Booking completed successfully');
-          window.location.reload();
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          await loadBooking();
         } catch (e) {
           toast.error(e.response?.data?.message || 'Failed to complete booking');
         } finally {
@@ -204,7 +207,8 @@ const BookingTimeline = () => {
           // Using existing updateBookingStatus to mark settlement
           await updateBookingStatus(id, booking.status, { finalSettlementStatus: 'DONE' });
           toast.success('Final settlement completed!');
-          window.location.reload();
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          await loadBooking();
         } catch (e) {
           toast.error(e.response?.data?.message || 'Final settlement failed');
         } finally {
@@ -229,7 +233,8 @@ const BookingTimeline = () => {
       setActionLoading(true);
       await startSelfJob(id);
       toast.success('Journey Started');
-      navigate(`/vendor/booking/${id}/map`);
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
+      navigate(`/vendor/booking/${id}/map`, { state: { booking: { ...booking, status: 'journey_started' } } });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to start journey');
     } finally {
@@ -243,7 +248,10 @@ const BookingTimeline = () => {
 
     setActionLoading(true);
     // Location check for vendor? Optional or same as worker.
-    if (!navigator.geolocation) return toast.error('Geolocation required');
+    if (!navigator.geolocation) {
+      setActionLoading(false);
+      return toast.error('Geolocation required');
+    }
 
     navigator.geolocation.getCurrentPosition(async (position) => {
       try {
@@ -251,12 +259,18 @@ const BookingTimeline = () => {
         await verifySelfVisit(id, otp, location);
         toast.success('Visit Verified');
         setIsVisitModalOpen(false);
-        window.location.reload();
+        setOtpInput(['', '', '', '']);
+        window.dispatchEvent(new Event('vendorJobsUpdated'));
+        await loadBooking();
       } catch (err) {
         toast.error(err.response?.data?.message || 'Verification failed');
       } finally {
         setActionLoading(false);
       }
+    }, (geoErr) => {
+      console.error('Geo error:', geoErr);
+      toast.error('Location permission is required to verify visit');
+      setActionLoading(false);
     });
   };
 
@@ -268,7 +282,8 @@ const BookingTimeline = () => {
       await completeSelfJob(id, { workPhotos: photos, workDoneDetails: { notes } });
       toast.success('Work marked done');
       setIsWorkDoneModalOpen(false);
-      window.location.reload();
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
+      await loadBooking();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to complete work');
     } finally {
@@ -400,13 +415,15 @@ const BookingTimeline = () => {
 
   async function handleWorkDone() {
     try {
-      // Try to mark as completed or work_done if backend supports it
+      setActionLoading(true);
       await updateBookingStatus(id, 'work_done');
-      setCurrentStage(5); // Update to stage 5
-      window.location.reload();
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
+      await loadBooking();
     } catch (error) {
       console.error('Error updating status to work done:', error);
       toast.error('Failed to update status. Please follow valid status flow.');
+    } finally {
+      setActionLoading(false);
     }
   }
 

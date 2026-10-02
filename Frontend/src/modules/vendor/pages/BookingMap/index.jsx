@@ -1,6 +1,6 @@
 // BookingMap component for tracking vendor journey and arrival verification
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleMap, useJsApiLoader, DirectionsRenderer, OverlayView, PolylineF } from '@react-google-maps/api';
 import { FiArrowLeft, FiNavigation, FiMapPin, FiCrosshair, FiPhone, FiClock, FiCheckCircle, FiX, FiMaximize, FiMinimize, FiWifiOff, FiAlertTriangle, FiRefreshCw } from 'react-icons/fi';
@@ -41,9 +41,22 @@ const libraries = ['places', 'geometry'];
 const BookingMap = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [booking, setBooking] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [coords, setCoords] = useState(null);
+  const location = useLocation();
+  const initialBooking = location.state?.booking || null;
+
+  const [booking, setBooking] = useState(initialBooking);
+  const [loading, setLoading] = useState(!initialBooking);
+
+  // Initial coords from passed state if available
+  const initialCoords = useMemo(() => {
+    const bAddr = initialBooking?.address || {};
+    if (bAddr.lat && bAddr.lng) {
+      return { lat: parseFloat(bAddr.lat), lng: parseFloat(bAddr.lng) };
+    }
+    return null;
+  }, [initialBooking]);
+
+  const [coords, setCoords] = useState(initialCoords);
   const [map, setMap] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [directions, setDirections] = useState(null);
@@ -99,7 +112,7 @@ const BookingMap = () => {
 
         if (bAddr.lat && bAddr.lng) {
           setCoords({ lat: parseFloat(bAddr.lat), lng: parseFloat(bAddr.lng) });
-        } else {
+        } else if (window.google?.maps?.Geocoder) {
           const addressStr = typeof bAddr === 'string' ? bAddr : `${bAddr.addressLine1 || ''}, ${bAddr.city || ''}, ${bAddr.state || ''} ${bAddr.pincode || ''}`;
           if (addressStr.replaceAll(',', '').trim() && !addressStr.toLowerCase().includes('current location')) {
             const geocoder = new window.google.maps.Geocoder();
@@ -117,8 +130,24 @@ const BookingMap = () => {
         setLoading(false);
       }
     };
-    if (isLoaded) fetchBooking();
-  }, [id, isLoaded]);
+    fetchBooking();
+  }, [id]);
+
+  // Geocode address fallback if coordinates were not stored and Google Maps just loaded
+  useEffect(() => {
+    if (isLoaded && booking && (!coords || (!coords.lat && !coords.lng))) {
+      const bAddr = booking.address || {};
+      const addressStr = typeof bAddr === 'string' ? bAddr : `${bAddr.addressLine1 || ''}, ${bAddr.city || ''}, ${bAddr.state || ''} ${bAddr.pincode || ''}`;
+      if (addressStr.replaceAll(',', '').trim() && !addressStr.toLowerCase().includes('current location') && window.google?.maps?.Geocoder) {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ address: addressStr }, (results, status) => {
+          if (status === 'OK' && results[0]) {
+            setCoords(results[0].geometry.location.toJSON());
+          }
+        });
+      }
+    }
+  }, [isLoaded, booking, coords]);
 
   // Watch Location
   useEffect(() => {
@@ -527,7 +556,7 @@ const BookingMap = () => {
     mapId: mapId || '8e0a97af9386fefc',
   }), [mapId]);
 
-  if (!isLoaded || loading) return <div className="h-screen bg-gray-100 flex items-center justify-center"><div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (loading && !booking) return <div className="h-screen bg-gray-100 flex items-center justify-center"><div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
   return (
     <div className="h-screen flex flex-col relative bg-white overflow-hidden">
@@ -636,41 +665,48 @@ const BookingMap = () => {
       </AnimatePresence>
 
       <div className="flex-1 w-full h-full relative">
-        <GoogleMap
-          mapContainerStyle={{ width: '100%', height: '100%' }}
-          defaultCenter={defaultCenter}
-          defaultZoom={14}
-          onLoad={map => {
-            setMap(map);
-            map.setTilt(0);
-          }}
-          onDragStart={() => setIsAutoCenter(false)}
-          options={mapOptions}
-        >
-          {directions && (
-            <>
-              <DirectionsRenderer
-                directions={directions}
-                options={{
-                  suppressMarkers: true,
-                  suppressPolylines: true
-                }}
-              />
-              <PolylineF
-                path={routePath}
-                options={{
-                  strokeColor: "#0F766E", // Dark Teal
-                  strokeWeight: 8,
-                  strokeOpacity: 1,
-                  zIndex: 50
-                }}
-              />
-            </>
-          )}
+        {!isLoaded ? (
+          <div className="w-full h-full bg-slate-50 flex flex-col items-center justify-center gap-2">
+            <div className="w-7 h-7 border-3 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-[11px] text-gray-400 font-medium">Loading Map...</p>
+          </div>
+        ) : (
+          <GoogleMap
+            mapContainerStyle={{ width: '100%', height: '100%' }}
+            defaultCenter={defaultCenter}
+            defaultZoom={14}
+            onLoad={map => {
+              setMap(map);
+              map.setTilt(0);
+            }}
+            onDragStart={() => setIsAutoCenter(false)}
+            options={mapOptions}
+          >
+            {directions && (
+              <>
+                <DirectionsRenderer
+                  directions={directions}
+                  options={{
+                    suppressMarkers: true,
+                    suppressPolylines: true
+                  }}
+                />
+                <PolylineF
+                  path={routePath}
+                  options={{
+                    strokeColor: "#0F766E", // Dark Teal
+                    strokeWeight: 8,
+                    strokeOpacity: 1,
+                    zIndex: 50
+                  }}
+                />
+              </>
+            )}
 
-          {destinationMarker}
-          {riderMarker}
-        </GoogleMap>
+            {destinationMarker}
+            {riderMarker}
+          </GoogleMap>
+        )}
 
         {/* Full Screen Toggle Button */}
         <button
@@ -789,7 +825,11 @@ const BookingMap = () => {
         isOpen={isVisitModalOpen}
         onClose={() => setIsVisitModalOpen(false)}
         bookingId={id}
-        onSuccess={() => navigate(`/vendor/booking/${id}`)}
+        onSuccess={() => {
+          setIsVisitModalOpen(false);
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          navigate(`/vendor/booking/${id}/timeline`);
+        }}
       />
     </div>
   );

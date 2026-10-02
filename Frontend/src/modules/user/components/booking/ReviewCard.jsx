@@ -1,5 +1,6 @@
 import React from 'react';
 import { FiStar } from 'react-icons/fi';
+import { themeColors } from '../../../../theme';
 
 const ReviewCard = ({ booking, onWriteReview }) => {
   // Logic to determine if card should be shown
@@ -13,56 +14,54 @@ const ReviewCard = ({ booking, onWriteReview }) => {
   }
 
   return (
-    <div className="bg-white rounded-3xl overflow-hidden shadow-lg border-none relative group mb-6">
+    <div className="bg-white rounded-2xl overflow-hidden shadow-xs border border-[#E8D9DF] relative group mb-3">
       {/* Top Accent Gradient */}
-      <div className="h-1.5 bg-gradient-to-r from-orange-400 to-orange-600" />
+      <div className="h-1 bg-gradient-to-r from-[#720C3E] via-[#9A2459] to-[#E8A0B8]" />
 
-      <div className="p-6">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-500 shadow-inner">
-            <FiStar className="w-6 h-6" />
+      <div className="p-3.5 sm:p-4">
+        <div className="flex items-center gap-2.5 mb-2.5">
+          <div className="w-8 h-8 rounded-xl bg-[#FFF7FA] border border-[#E8D9DF] flex items-center justify-center text-[#720C3E] shrink-0">
+            <FiStar className="w-4 h-4 fill-[#720C3E]/10" />
           </div>
-          <div>
-            <h3 className="font-bold text-lg text-gray-900">How was your experience?</h3>
-            <p className="text-gray-500 text-sm">Your feedback helps us improve.</p>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-bold text-xs sm:text-sm text-[#24151D] leading-tight">How was your experience?</h3>
+            <p className="text-[#6F5A64] text-[11px] leading-tight mt-0.5">Your feedback helps us improve.</p>
           </div>
         </div>
 
         {!hasRating ? (
           <button
             onClick={onWriteReview}
-            className="w-full py-3.5 text-white font-bold rounded-xl shadow-lg shadow-orange-200 active:scale-95 transition-all hover:brightness-105"
+            className="w-full py-2.5 text-white font-bold text-xs rounded-xl shadow-xs active:scale-95 transition-all hover:opacity-95 cursor-pointer"
             style={{
-              background: 'linear-gradient(135deg, #F97316, #EA580C)'
+              background: themeColors.brand?.gradient || 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)'
             }}
           >
             Write a Review
           </button>
         ) : (
-          <div className="bg-orange-50/80 rounded-2xl p-5 border border-orange-100 text-center">
-            <p className="text-xs font-bold text-orange-600 uppercase tracking-widest mb-3">Your Rating</p>
-            <div className="flex justify-center gap-2 mb-4">
+          <div className="bg-[#FFF7FA] rounded-xl p-2.5 border border-[#E8D9DF] text-center">
+            <p className="text-[10px] font-bold text-[#720C3E] uppercase tracking-wider mb-1.5">Your Rating</p>
+            <div className="flex justify-center gap-1.5 mb-1.5">
               {[1, 2, 3, 4, 5].map((star) => (
                 <FiStar
                   key={star}
-                  className={`w-8 h-8 transition-transform hover:scale-110 ${star <= (booking.rating?.rating || booking.rating)
-                    ? 'fill-orange-500 text-orange-500 drop-shadow-sm'
+                  className={`w-5 h-5 sm:w-6 sm:h-6 ${star <= (booking.rating?.rating || booking.rating)
+                    ? 'fill-amber-400 text-amber-400 drop-shadow-xs'
                     : 'text-gray-300'
                     }`}
                 />
               ))}
             </div>
             {(booking.rating?.review || booking.review) && (
-              <div className="bg-white rounded-xl p-4 shadow-sm relative">
-                <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45 transform"></div>
-                <p className="text-gray-700 italic font-medium leading-relaxed">
+              <div className="bg-white rounded-lg p-2 border border-[#E8D9DF] shadow-2xs relative my-1.5 text-left">
+                <p className="text-[#24151D] italic font-normal text-xs leading-relaxed">
                   "{booking.rating?.review || booking.review}"
                 </p>
               </div>
             )}
 
-            {/* Optional: Add Date or 'Thank You' text */}
-            <div className="mt-3 text-xs text-orange-400 font-semibold">
+            <div className="text-[10px] text-[#720C3E] font-semibold">
               Thank you for your feedback!
             </div>
           </div>
@@ -73,3 +72,4 @@ const ReviewCard = ({ booking, onWriteReview }) => {
 };
 
 export default ReviewCard;
+
