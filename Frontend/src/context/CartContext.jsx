@@ -109,7 +109,13 @@ export const CartProvider = ({ children }) => {
       if (response.success && response.data) {
         // Replace with server data to ensure correctness
         setCartItems(prev =>
-          prev.map(item => item._id === itemId ? response.data : item)
+          prev.map(item => {
+            if (item._id === itemId || item.id === itemId) {
+              // Merge server data with local item to preserve all display fields
+              return { ...item, ...response.data, _id: item._id || item.id };
+            }
+            return item;
+          })
         );
       } else {
         fetchCart();

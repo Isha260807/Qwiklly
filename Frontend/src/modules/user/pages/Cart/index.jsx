@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiShoppingCart, FiTrash2, FiPlus, FiMinus, FiLoader, FiBell } from 'react-icons/fi';
+import { FiArrowLeft, FiShoppingCart, FiTrash2, FiPlus, FiMinus } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
 import BottomNav from '../../components/layout/BottomNav';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useCart } from '../../../../context/CartContext';
 import electricianIcon from '../../../../assets/images/icons/services/electrician.png';
 import womensSalonIcon from '../../../../assets/images/icons/services/womens-salon-spa-icon.png';
@@ -23,83 +22,40 @@ const toAssetUrl = (url) => {
   return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
 };
 
+const iconMap = {
+  'Electrician': electricianIcon,
+  'Electricity': electricianIcon,
+  "Women's Salon & Spa": womensSalonIcon,
+  'Salon for Women': womensSalonIcon,
+  'Salon Prime': womensSalonIcon,
+  'Massage for Men': massageMenIcon,
+  'Cleaning': cleaningIcon,
+  'Bathroom & Kitchen Cleaning': cleaningIcon,
+  'Sofa & Carpet Cleaning': cleaningIcon,
+  'AC Service and Repair': acApplianceRepairIcon,
+  'AC & Appliance Repair': acApplianceRepairIcon,
+};
+
+const getItemImage = (item) => {
+  const candidate = item?.icon || item?.iconUrl || item?.image || item?.imageUrl || item?.categoryIcon || item?.sectionIcon || item?.card?.imageUrl;
+  if (candidate && typeof candidate === 'string' && candidate.trim() !== '') return toAssetUrl(candidate);
+  return iconMap[item?.category] || null;
+};
+
 const Cart = () => {
   const navigate = useNavigate();
-  const { cartItems, isLoading: loading, removeItem, removeCategoryItems, updateItem } = useCart();
-
-  // Dynamic image resolver with fallback to exact category icon
-  const getCategoryImage = (items, category) => {
-    if (Array.isArray(items)) {
-      for (const item of items) {
-        const candidate = item?.icon || item?.iconUrl || item?.image || item?.imageUrl || item?.categoryIcon || item?.sectionIcon || item?.card?.imageUrl;
-        if (candidate && typeof candidate === 'string' && candidate.trim() !== '') {
-          return toAssetUrl(candidate);
-        }
-      }
-    }
-
-    const iconMap = {
-      'Electrician': electricianIcon,
-      'Electricity': electricianIcon,
-      "Women's Salon & Spa": womensSalonIcon,
-      'Salon for Women': womensSalonIcon,
-      'Salon Prime': womensSalonIcon,
-      'Massage for Men': massageMenIcon,
-      'Cleaning': cleaningIcon,
-      'Bathroom & Kitchen Cleaning': cleaningIcon,
-      'Sofa & Carpet Cleaning': cleaningIcon,
-      'AC Service and Repair': acApplianceRepairIcon,
-      'AC & Appliance Repair': acApplianceRepairIcon,
-    };
-
-    if (category && iconMap[category]) {
-      return iconMap[category];
-    }
-
-    return null;
-  };
-
-  // Group items by category
-  const groupedItems = useMemo(() => {
-    const groups = {};
-    cartItems.forEach(item => {
-      const category = item.category || 'Other';
-      if (!groups[category]) {
-        groups[category] = [];
-      }
-      groups[category].push(item);
-    });
-    return groups;
-  }, [cartItems]);
+  const { cartItems, isLoading: loading, removeItem, updateItem } = useCart();
 
   const cartCount = cartItems.length;
 
-  const handleBack = () => {
-    navigate(-1);
-  };
-
-  const handleDeleteCategory = async (category) => {
-    try {
-      const response = await removeCategoryItems(category);
-      if (response.success) {
-        toast.success('Category items removed');
-      } else {
-        toast.error(response.message || 'Failed to remove category items');
-      }
-    } catch (error) {
-      toast.error('Failed to remove category items');
-    }
-  };
+  const totalPrice = cartItems.reduce((sum, item) => sum + (item.price || 0), 0);
 
   const handleDelete = async (itemId) => {
     try {
       const response = await removeItem(itemId);
-      if (response.success) {
-        toast.success('Item removed from cart');
-      } else {
-        toast.error(response.message || 'Failed to remove item');
-      }
-    } catch (error) {
+      if (!response.success) toast.error(response.message || 'Failed to remove item');
+      else toast.success('Item removed');
+    } catch {
       toast.error('Failed to remove item');
     }
   };
@@ -108,261 +64,203 @@ const Cart = () => {
     try {
       const item = cartItems.find(i => (i._id || i.id) === itemId);
       if (!item) return;
-
       const newCount = Math.max(1, (item.serviceCount || 1) + change);
       const response = await updateItem(itemId, newCount);
-
-      if (!response.success) {
-        toast.error(response.message || 'Failed to update quantity');
-      }
-    } catch (error) {
+      if (!response.success) toast.error(response.message || 'Failed to update quantity');
+    } catch {
       toast.error('Failed to update quantity');
     }
   };
 
-  const handleAddServices = (category) => {
-    // Navigate back to home with instructions to open the category modal
-    const itemsInCategory = groupedItems[category];
-    const categoryId = itemsInCategory?.[0]?.categoryId;
+  const handleBookAll = () => navigate('/user/checkout');
 
-    navigate('/user', {
-      state: {
-        openCategoryId: categoryId,
-        openCategoryName: category
-      }
-    });
-  };
-
-  const handleCategoryCheckout = (category) => {
-    navigate('/user/checkout', { state: { category: category } });
-  };
-
-  const handleCartClick = () => {
-    // Already on cart page
-  };
-
-  // Calculate totals for all items
-  const totalPrice = cartItems.reduce((sum, item) => sum + (item.price || 0), 0);
-  const totalOriginalPrice = cartItems.reduce((sum, item) => {
-    const unitOriginalPrice = item.originalPrice || (item.unitPrice || (item.price / (item.serviceCount || 1)));
-    return sum + (unitOriginalPrice * (item.serviceCount || 1));
-  }, 0);
   return (
-    <div className="min-h-screen pb-32 relative bg-white">
-      {/* Refined Brand Mesh Gradient Background */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute inset-0"
-          style={{
-            background: `
-              radial-gradient(at 0% 0%, ${themeColors?.brand?.teal || '#347989'}25 0%, transparent 70%),
-              radial-gradient(at 100% 0%, ${themeColors?.brand?.yellow || '#D68F35'}20 0%, transparent 70%),
-              radial-gradient(at 100% 100%, ${themeColors?.brand?.orange || '#BB5F36'}15 0%, transparent 75%),
-              radial-gradient(at 0% 100%, ${themeColors?.brand?.teal || '#347989'}10 0%, transparent 70%),
-              radial-gradient(at 50% 50%, ${themeColors?.brand?.teal || '#347989'}03 0%, transparent 100%),
-              #FFFFFF
-            `
-          }}
-        />
-        {/* Elegant Dot Grid Pattern */}
-        <div className="absolute inset-0 opacity-[0.04]"
-          style={{
-            backgroundImage: `radial-gradient(${themeColors?.brand?.teal || '#347989'} 0.8px, transparent 0.8px)`,
-            backgroundSize: '32px 32px'
-          }}
-        />
-      </div>
-
-      <div className="relative z-10">
-        {/* Theme Gradient Header */}
-        <header 
-          className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
-          style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
-        >
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleBack}
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm"
-              title="Go Back"
-            >
-              <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-            </button>
-            <div className="flex items-center gap-2">
-              <FiShoppingCart className="w-5 h-5 text-white" />
-              <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">Your Cart</h1>
-              {cartCount > 0 && (
-                <span className="bg-white text-[#720C3E] text-xs font-bold px-2 py-0.5 rounded-full shadow-xs">
-                  {cartCount}
-                </span>
-              )}
-            </div>
+    <div className="min-h-screen bg-[#FAF7F8] relative">
+      {/* Header */}
+      <header
+        className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 flex items-center justify-between"
+        style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+      >
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 flex items-center justify-center transition-all border border-white/20"
+          >
+            <FiArrowLeft className="w-4 h-4 text-white" />
+          </button>
+          <div className="flex items-center gap-2">
+            <FiShoppingCart className="w-5 h-5 text-white" />
+            <h1 className="text-base font-bold text-white tracking-tight">Your Cart</h1>
+            {cartCount > 0 && (
+              <span className="bg-white text-[#720C3E] text-xs font-bold px-2 py-0.5 rounded-full">
+                {cartCount}
+              </span>
+            )}
           </div>
-          <NotificationBell 
-            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm relative shrink-0 cursor-pointer"
-            iconClassName="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2]"
-            dotClassName="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#FF2D55] rounded-full ring-1 ring-white/90 shadow-xs"
-          />
-        </header>
+        </div>
+        <NotificationBell
+          className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 flex items-center justify-center transition-all border border-white/20 relative shrink-0 cursor-pointer"
+          iconClassName="w-4 h-4 text-white stroke-[2]"
+          dotClassName="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#FF2D55] rounded-full ring-1 ring-white/90"
+        />
+      </header>
 
-        {/* Cart Items - Grouped by Category */}
-        <main className="px-4 py-4" style={{ paddingBottom: cartItems.length > 0 ? '70px' : '100px' }}>
-          {loading ? (
-            <div className="space-y-6">
-              {[1, 2].map(i => (
-                <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 animate-pulse">
-                  {/* Category Header Skeleton */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
-                    <div className="space-y-2">
-                      <div className="h-4 w-32 bg-gray-200 rounded"></div>
-                      <div className="h-3 w-24 bg-gray-200 rounded"></div>
-                    </div>
-                  </div>
-                  {/* Items Skeleton */}
-                  <div className="space-y-3">
-                    <div className="h-10 w-full bg-gray-100 rounded"></div>
-                    <div className="h-10 w-full bg-gray-100 rounded"></div>
-                  </div>
-                  {/* Buttons Skeleton */}
-                  <div className="flex gap-2 mt-4">
-                    <div className="flex-1 h-10 bg-gray-200 rounded-xl"></div>
-                    <div className="flex-1 h-10 bg-gray-300 rounded-xl"></div>
-                  </div>
+      {/* Main Content */}
+      <main className="px-4 py-4" style={{ paddingBottom: cartItems.length > 0 ? '140px' : '90px' }}>
+        {loading ? (
+          /* Skeleton */
+          <div className="bg-white rounded-2xl border border-[#E8D9DF]/70 shadow-sm p-4 animate-pulse space-y-4">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gray-200 rounded-xl shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-32 bg-gray-200 rounded" />
+                  <div className="h-2.5 w-20 bg-gray-100 rounded" />
                 </div>
-              ))}
-            </div>
-          ) : cartItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <div className="w-16 h-16 rounded-full bg-[#FFF7FA] border border-[#E8D9DF] flex items-center justify-center mb-3 shadow-xs">
-                <FiShoppingCart className="w-8 h-8 text-[#9A2459]" />
+                <div className="h-8 w-24 bg-gray-200 rounded-xl" />
               </div>
-              <p className="text-gray-800 text-base font-bold">Your cart is empty</p>
-              <p className="text-gray-400 text-xs mt-1">Add services to get started</p>
+            ))}
+          </div>
+        ) : cartItems.length === 0 ? (
+          /* Empty State */
+          <div className="flex flex-col items-center justify-center py-24">
+            <div className="w-16 h-16 rounded-full bg-[#FFF7FA] border border-[#E8D9DF] flex items-center justify-center mb-3">
+              <FiShoppingCart className="w-8 h-8 text-[#9A2459]" />
             </div>
-          ) : (
-            <div className="space-y-3 sm:space-y-3.5">
-              {Object.entries(groupedItems).map(([category, items]) => {
-                const categoryTotal = items.reduce((sum, item) => sum + (item.price || 0), 0);
-                const dynamicImage = getCategoryImage(items, category);
-                const serviceCount = items.reduce((sum, item) => sum + (item.serviceCount || 1), 0);
+            <p className="text-gray-800 text-base font-bold">Your cart is empty</p>
+            <p className="text-gray-400 text-xs mt-1">Add services to get started</p>
+            <button
+              onClick={() => navigate('/user')}
+              className="mt-6 px-6 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-all"
+              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+            >
+              Browse Services
+            </button>
+          </div>
+        ) : (
+          /* Single Unified Card */
+          <div className="bg-white rounded-2xl border border-[#E8D9DF]/70 shadow-[0_2px_12px_rgba(114,12,62,0.07)] overflow-hidden">
+            {/* Card Header */}
+            <div
+              className="px-4 py-3 flex items-center justify-between"
+              style={{ background: 'linear-gradient(135deg, #720C3E08 0%, #9A245908 100%)', borderBottom: '1px solid #E8D9DF60' }}
+            >
+              <div>
+                <p className="text-xs font-semibold text-gray-500">
+                  {cartCount} {cartCount === 1 ? 'Service' : 'Services'} Selected
+                </p>
+              </div>
+              <span className="text-sm font-extrabold text-[#720C3E]">
+                ₹{totalPrice.toLocaleString('en-IN')}
+              </span>
+            </div>
 
+            {/* Services List */}
+            <div className="divide-y divide-[#F0E8EC]">
+              {cartItems.map((item, index) => {
+                const img = getItemImage(item);
+                const qty = item.serviceCount || 1;
+                const itemKey = item._id || item.id || `cart-item-${index}`;
                 return (
-                  <div
-                    key={category}
-                    className="bg-white rounded-2xl border border-[#E8D9DF]/70 shadow-[0_2px_10px_rgba(114,12,62,0.05)] p-3 sm:p-3.5 transition-all"
-                  >
-                    {/* Category Header */}
-                    <div className="flex items-center justify-between gap-2.5">
-                      <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                        {/* Dynamic Image or Initials Badge */}
-                        {dynamicImage ? (
-                          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden bg-[#FFF7FA] border border-[#E8D9DF]/80 shadow-2xs">
-                            <img
-                              src={dynamicImage}
-                              alt={category}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                if (e.target.nextElementSibling) {
-                                  e.target.nextElementSibling.style.display = 'flex';
-                                }
-                              }}
-                            />
-                            <div className="hidden w-full h-full items-center justify-center bg-gradient-to-br from-[#720C3E] to-[#9A2459] text-white font-bold text-sm uppercase">
-                              {category?.charAt(0) || 'S'}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 overflow-hidden bg-gradient-to-br from-[#720C3E] to-[#9A2459] text-white font-bold text-sm uppercase shadow-2xs">
-                            {category?.charAt(0) || 'S'}
-                          </div>
-                        )}
+                  <div key={itemKey} className="flex items-start gap-3 px-4 py-3">
+                    {/* Icon */}
+                    <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 bg-[#FFF7FA] border border-[#E8D9DF]/60 flex items-center justify-center mt-0.5">
+                      {img ? (
+                        <img src={img} alt={item.title} className="w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
+                      ) : (
+                        <span className="text-sm font-bold text-[#720C3E] uppercase">{(item.title || item.category || 'S').charAt(0)}</span>
+                      )}
+                    </div>
 
-                        {/* Category Info */}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm sm:text-base font-bold text-gray-900 leading-snug capitalize truncate">{category}</h3>
-                          <p className="text-[11px] sm:text-xs text-gray-500 font-medium mt-0.5">
-                            {serviceCount} {serviceCount === 1 ? 'service' : 'services'} • <span className="font-bold text-[#720C3E]">₹{categoryTotal.toLocaleString('en-IN')}</span>
-                          </p>
+                    {/* Info — full name, detail on one line */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900 leading-snug">{item.title}</p>
+                      <p className="text-[11px] text-gray-400 font-medium mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
+                        {item.category}{item.durationMinutes ? ` · ${item.durationMinutes} mins` : item.hours ? ` · ${item.hours} hr` : ''}{item.description ? ` · ${item.description}` : ''}
+                      </p>
+                    </div>
+
+                    {/* Right: count controls on top, price below */}
+                    <div className="shrink-0 flex flex-col items-end gap-1.5">
+                      {/* Row 1: [- qty +] + [🗑] */}
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex items-center bg-[#FFF7FA] border border-[#E8D9DF] rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => handleQuantityChange(item._id || item.id, -1)}
+                            className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all"
+                          >
+                            <FiMinus className="w-2.5 h-2.5" />
+                          </button>
+                          <span className="text-[11px] font-extrabold text-[#720C3E] min-w-[14px] text-center px-0.5">{qty}</span>
+                          <button
+                            onClick={() => handleQuantityChange(item._id || item.id, +1)}
+                            className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all"
+                          >
+                            <FiPlus className="w-2.5 h-2.5" />
+                          </button>
                         </div>
+                        <button
+                          onClick={() => handleDelete(item._id || item.id)}
+                          className="p-1 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg transition-colors"
+                        >
+                          <FiTrash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-
-                      {/* Delete Category Button */}
-                      <button
-                        onClick={() => handleDeleteCategory(category)}
-                        className="p-1.5 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg transition-colors shrink-0"
-                        title="Remove category"
-                      >
-                        <FiTrash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Services List */}
-                    <div className="my-2.5 bg-[#FAF7F8]/80 rounded-xl p-2 sm:p-2.5 border border-[#E8D9DF]/50 divide-y divide-gray-100">
-                      {items.map((item) => (
-                        <div key={item._id || item.id} className="flex items-center justify-between py-1.5 first:pt-0 last:pb-0 gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="text-xs sm:text-sm text-gray-800 font-bold capitalize truncate">
-                                {item.title}
-                              </p>
-                              <span className="text-[10px] sm:text-[11px] font-bold text-[#720C3E] bg-[#FFF7FA] px-1.5 py-0.5 rounded border border-[#E8D9DF] shrink-0">
-                                {item.durationMinutes 
-                                  ? `${item.durationMinutes} Mins` 
-                                  : (item.hours ? `${item.hours} ${item.hours === 1 ? 'Hour' : 'Hours'}` : `× ${item.serviceCount || 1}`)}
-                              </span>
-                            </div>
-                            {item.durationMinutes ? (
-                              <p className="text-[10px] sm:text-[11px] text-gray-500 font-medium mt-0.5 truncate">
-                                ₹{(item.pricePer30Minutes || item.unitPrice || 0).toLocaleString('en-IN')}/30m × {item.durationMinutes} mins
-                              </p>
-                            ) : item.hours ? (
-                              <p className="text-[10px] sm:text-[11px] text-gray-400 mt-0.5 truncate">₹{(item.unitPrice || 0).toLocaleString('en-IN')}/hr × {item.hours} {item.hours === 1 ? 'hr' : 'hrs'}</p>
-                            ) : item.description && (
-                              <p className="text-[10px] sm:text-[11px] text-gray-400 mt-0.5 truncate">{item.description}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs sm:text-sm font-bold text-[#720C3E]">
-                              ₹{(item.price || 0).toLocaleString('en-IN')}
-                            </span>
-                            <button
-                              onClick={() => handleDelete(item._id || item.id)}
-                              className="p-1 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded transition-colors"
-                              title="Delete item"
-                            >
-                              <FiTrash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="grid grid-cols-2 gap-2 mt-2.5">
-                      <button
-                        onClick={() => handleAddServices(category)}
-                        className="py-2 px-3 bg-[#FFF7FA] hover:bg-[#FCEBF3] border border-[#E8D9DF] text-[#720C3E] rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 text-center"
-                      >
-                        Add Services
-                      </button>
-                      <button
-                        onClick={() => handleCategoryCheckout(category)}
-                        className="py-2 px-3 rounded-xl text-xs sm:text-sm font-bold text-white transition-all active:scale-95 shadow-xs text-center"
-                        style={{
-                          background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)',
-                        }}
-                      >
-                        Book
-                      </button>
+                      {/* Row 2: ₹price below */}
+                      <span className="text-sm font-extrabold text-[#720C3E]">
+                        ₹{(item.price || 0).toLocaleString('en-IN')}
+                      </span>
                     </div>
                   </div>
                 );
               })}
             </div>
-          )}
-        </main>
+          </div>
+        )}
+      </main>
 
-      </div>
+      {/* Bottom Buttons — above BottomNav */}
+      {cartItems.length > 0 && (
+        <div
+          className="fixed left-0 right-0 z-40 px-4 pt-2 pb-2"
+          style={{
+            bottom: '64px',
+            background: 'linear-gradient(to top, rgba(250,247,248,1) 60%, rgba(250,247,248,0))',
+          }}
+        >
+          <div className="flex gap-2">
+            {/* Add Services */}
+            <button
+              onClick={() => navigate('/user')}
+              className="flex-1 py-2.5 rounded-xl font-semibold text-xs active:scale-[0.98] transition-all border"
+              style={{
+                borderColor: '#720C3E',
+                color: '#720C3E',
+                background: '#FFF7FA',
+              }}
+            >
+              + Add Services
+            </button>
+
+            {/* Book */}
+            <button
+              onClick={handleBookAll}
+              className="flex-1 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
+              style={{
+                background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)',
+                boxShadow: '0 4px 14px rgba(114,12,62,0.3)',
+              }}
+            >
+              <span className="text-white">Book</span>
+              <span className="bg-white/20 px-2 py-0.5 rounded-lg text-[11px] font-bold text-white">
+                ₹{totalPrice.toLocaleString('en-IN')}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <BottomNav />
     </div>
   );
 };

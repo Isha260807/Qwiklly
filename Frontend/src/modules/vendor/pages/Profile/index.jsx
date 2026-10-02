@@ -281,9 +281,9 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Three Cards Section - Horizontal */}
+        {/* Quick Action Cards - Horizontal */}
         <div className="px-4 mb-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             {/* Active Jobs */}
             <button
               onClick={() => navigate('/vendor/jobs')}
@@ -307,19 +307,6 @@ const Profile = () => {
               </div>
               <span className="text-[11px] font-bold text-[#24151D] text-center leading-tight">
                 Wallet
-              </span>
-            </button>
-
-            {/* My Services */}
-            <button
-              onClick={() => navigate('/vendor/services')}
-              className="flex flex-col items-center justify-center p-2.5 rounded-xl active:scale-95 transition-all duration-200 bg-white shadow-xs hover:shadow-sm cursor-pointer"
-            >
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-1 bg-[#FCEBF3] text-[#720C3E]">
-                <FiLayers className="w-3.5 h-3.5" />
-              </div>
-              <span className="text-[11px] font-bold text-[#24151D] text-center leading-tight">
-                My Services
               </span>
             </button>
           </div>

@@ -1122,104 +1122,91 @@ const Checkout = () => {
           </div>
         )}
 
-        {/* Cart Items */}
-        <div className="space-y-4 mb-4">
-          {cartItems.map((item) => {
-            const brandName = item.brand || item.sectionTitle;
-            const categoryName = item.categoryTitle || item.category;
+        {/* Cart Items — single unified card */}
+        <div className="bg-white border border-[#E8D9DF]/70 rounded-2xl shadow-sm mb-4 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#F0E8EC]"
+            style={{ background: 'linear-gradient(135deg, #720C3E08 0%, #9A245908 100%)' }}>
+            <p className="text-xs font-semibold text-gray-500">
+              {cartItems.length} {cartItems.length === 1 ? 'Service' : 'Services'} Selected
+            </p>
+            <span className="text-sm font-extrabold text-[#720C3E]">
+              ₹{cartItems.reduce((s, i) => s + (i.price || 0), 0).toLocaleString('en-IN')}
+            </span>
+          </div>
 
-            return (
-              <div key={item._id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm relative overflow-hidden">
-                {/* Brand Header */}
-                {(brandName || categoryName) && (
-                  <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-50">
-                    {item.sectionIcon ? (
-                      <img src={toAssetUrl(item.sectionIcon)} className="w-5 h-5 rounded-md object-cover border border-gray-100" alt="" />
+          {/* Rows */}
+          <div className="divide-y divide-[#F0E8EC]">
+            {cartItems.map((item, index) => {
+              const itemKey = item._id || item.id || `co-item-${index}`;
+              const img = item.sectionIcon || item.icon || item.iconUrl || item.image || item.imageUrl;
+              const imgUrl = img ? toAssetUrl(img) : null;
+              return (
+                <div key={itemKey} className="flex items-start gap-3 px-4 py-3">
+                  {/* Icon */}
+                  <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 bg-[#FFF7FA] border border-[#E8D9DF]/60 flex items-center justify-center mt-0.5">
+                    {imgUrl ? (
+                      <img src={imgUrl} alt={item.title} className="w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
                     ) : (
-                      <div className="w-5 h-5 rounded-md bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-500">
-                        {(brandName || "B").charAt(0)}
-                      </div>
-                    )}
-                    <div className="flex flex-col leading-none">
-                      {brandName && <span className="text-xs font-bold text-gray-900">{brandName}</span>}
-                      {categoryName && <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mt-0.5">{categoryName}</span>}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1 pr-4">
-                    <h3 className="text-base font-bold text-gray-900 mb-1 leading-snug">{item.title}</h3>
-                    {item.description && (
-                      <p className="text-sm text-gray-600 line-clamp-2">{item.description}</p>
-                    )}
-                    {item.duration && (
-                      <div className="flex items-center gap-1 mt-2 text-xs text-gray-500">
-                        <FiClock className="w-3 h-3" />
-                        {item.duration}
-                      </div>
+                      <span className="text-xs font-bold text-[#720C3E] uppercase">{(item.title || item.category || 'S').charAt(0)}</span>
                     )}
                   </div>
-                  {!item.isPlan && (
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg p-0.5">
-                        <button
-                          onClick={() => handleQuantityChange(item._id, -1)}
-                          className="p-1.5 hover:bg-white rounded-md transition-all shadow-sm"
-                        >
-                          <FiMinus className="w-3.5 h-3.5 text-gray-600" />
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 leading-snug">{item.title}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
+                      {item.category || item.categoryTitle}
+                      {item.durationMinutes ? ` · ${item.durationMinutes} mins` : item.hours ? ` · ${item.hours} hr` : ''}
+                      {item.description ? ` · ${item.description}` : ''}
+                    </p>
+                  </div>
+
+                  {/* Right: controls on top, price below */}
+                  <div className="shrink-0 flex flex-col items-end gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      {!item.isPlan && (
+                        <div className="flex items-center bg-[#FFF7FA] border border-[#E8D9DF] rounded-lg overflow-hidden">
+                          <button onClick={() => handleQuantityChange(item._id, -1)}
+                            className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all">
+                            <FiMinus className="w-2.5 h-2.5" />
+                          </button>
+                          <span className="text-[11px] font-extrabold text-[#720C3E] min-w-[14px] text-center px-0.5">{item.serviceCount || 1}</span>
+                          <button onClick={() => handleQuantityChange(item._id, 1)}
+                            className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all">
+                            <FiPlus className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      )}
+                      {!item.isPlan && (
+                        <button onClick={() => handleRemoveItem(item._id)}
+                          className="p-1 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg transition-colors">
+                          <FiTrash2 className="w-3.5 h-3.5" />
                         </button>
-                        <span className="w-6 text-center text-sm font-bold text-gray-900">{item.serviceCount || 1}</span>
-                        <button
-                          onClick={() => handleQuantityChange(item._id, 1)}
-                          className="p-1.5 hover:bg-white rounded-md transition-all shadow-sm"
-                        >
-                          <FiPlus className="w-3.5 h-3.5 text-gray-900" />
-                        </button>
-                      </div>
+                      )}
                     </div>
-                  )}
-                  {!item.isPlan && (
-                    <button
-                      onClick={() => handleRemoveItem(item._id)}
-                      className="absolute top-3 right-3 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                    >
-                      <FiTrash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-extrabold text-[#720C3E]">
+                        {calculateItemPrice(item) === 0
+                          ? <span className="text-green-600 text-xs">Free</span>
+                          : `₹${(item.price || 0).toLocaleString('en-IN')}`}
+                      </span>
+                      {(() => {
+                        const unitOriginalPrice = item.originalPrice || (item.price / (item.serviceCount || 1));
+                        const originalTotal = unitOriginalPrice * (item.serviceCount || 1);
+                        if (calculateItemPrice(item) > 0 && originalTotal > item.price) {
+                          return <span className="text-[11px] text-gray-400 line-through">₹{originalTotal.toLocaleString('en-IN')}</span>;
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-black">
-                    {calculateItemPrice(item) === 0 ? (
-                      <span className="text-green-600">Free</span>
-                    ) : (
-                      `₹${(item.price || 0).toLocaleString('en-IN')}`
-                    )}
-                  </span>
-                  {calculateItemPrice(item) === 0 && (
-                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full border border-green-200">
-                      WITH PLAN
-                    </span>
-                  )}
-                  {calculateItemPrice(item) > 0 && (() => {
-                    const unitPrice = item.unitPrice || (item.price / (item.serviceCount || 1));
-                    const unitOriginalPrice = item.originalPrice || unitPrice;
-                    const currentTotal = item.price;
-                    const originalTotal = unitOriginalPrice * (item.serviceCount || 1);
-                    if (originalTotal > currentTotal) {
-                      return (
-                        <span className="text-sm text-gray-400 line-through">
-                          ₹{originalTotal.toLocaleString('en-IN')}
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
-                </div>
-              </div>
-            )
-          })}
+              );
+            })}
+          </div>
         </div>
+
 
         {/* ... */}
 
@@ -1265,60 +1252,46 @@ const Checkout = () => {
         )}
 
         {/* Payment Method Selection Card */}
-        <div className="bg-white border-2 border-slate-100 rounded-2xl p-4 mb-4 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <FiCreditCard className="w-4 h-4 text-emerald-600" />
+        <div className="bg-white border border-slate-100 rounded-xl p-3 mb-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+              <FiCreditCard className="w-3.5 h-3.5 text-emerald-600" />
               Payment Method
             </h3>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 flex items-center gap-1">
-              <FiShield className="w-3 h-3" /> 100% Secure
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-100 flex items-center gap-1">
+              <FiShield className="w-2.5 h-2.5" /> 100% Secure
             </span>
           </div>
 
           {totalAmount === 0 ? (
-            <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-500 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-                  ★
-                </div>
+            <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-400 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-xs">★</div>
                 <div>
-                  <p className="text-sm font-bold text-slate-900">Membership Plan Benefit</p>
-                  <p className="text-xs text-green-700 font-medium">Free service under {planBenefits.name || 'active plan'}</p>
+                  <p className="text-xs font-bold text-slate-900">Membership Plan Benefit</p>
+                  <p className="text-[10px] text-green-700 font-medium">Free under {planBenefits.name || 'active plan'}</p>
                 </div>
               </div>
-              <div className="w-5 h-5 rounded-full bg-green-600 text-white flex items-center justify-center">
-                <FiCheck className="w-3.5 h-3.5" />
+              <div className="w-4 h-4 rounded-full bg-green-600 text-white flex items-center justify-center">
+                <FiCheck className="w-2.5 h-2.5" />
               </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between p-3.5 bg-emerald-50/40 border-2 border-emerald-500 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-emerald-200 flex items-center justify-center shadow-xs">
-                    <FiCreditCard className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-slate-900">Online Payment</p>
-                      <span className="text-[9px] font-extrabold bg-emerald-600 text-white px-1.5 py-0.5 rounded">UPI / CARDS</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Google Pay, PhonePe, Paytm, Cards, NetBanking, Wallets</p>
-                  </div>
+            <div className="flex items-center justify-between p-2.5 bg-emerald-50/40 border border-emerald-400 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-white border border-emerald-200 flex items-center justify-center shadow-xs">
+                  <FiCreditCard className="w-4 h-4 text-emerald-600" />
                 </div>
-                <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <FiCheck className="w-3.5 h-3.5" />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-bold text-slate-900">Online Payment</p>
+                    <span className="text-[8px] font-extrabold bg-emerald-600 text-white px-1 py-0.5 rounded">UPI/CARDS</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">GPay · PhonePe · Paytm · Cards · NetBanking</p>
                 </div>
               </div>
-
-              {/* Payment Partners Badges */}
-              <div className="flex items-center justify-between px-2 pt-1 text-[10px] text-slate-400 font-medium">
-                <span>Powered by Razorpay</span>
-                <span className="flex items-center gap-1.5 font-mono text-[9px] text-slate-500">
-                  <span className="px-1.5 py-0.5 bg-slate-100 rounded">UPI</span>
-                  <span className="px-1.5 py-0.5 bg-slate-100 rounded">Cards</span>
-                  <span className="px-1.5 py-0.5 bg-slate-100 rounded">NetBanking</span>
-                </span>
+              <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <FiCheck className="w-2.5 h-2.5" />
               </div>
             </div>
           )}

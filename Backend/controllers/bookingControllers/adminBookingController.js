@@ -457,14 +457,7 @@ const assignVendorToBooking = async (req, res) => {
       return res.status(400).json({ success: false, code: 'VENDOR_NOT_IN_ZONE', message: 'Vendor is not assigned to this booking\'s zone' });
     }
 
-    // 2. Service offered
-    const bookedServiceTitle = booking.serviceName || booking.serviceCategory || '';
-    if (bookedServiceTitle) {
-      const offering = await findServiceVendorsInZone([vendor._id.toString()], bookedServiceTitle);
-      if (offering.length === 0) {
-        return res.status(400).json({ success: false, code: 'VENDOR_SERVICE_MISMATCH', message: `Vendor does not offer "${bookedServiceTitle}"` });
-      }
-    }
+    // 2. Universal Model: All approved vendors in the zone provide all services
 
     // 3. Approval + active
     if (vendor.approvalStatus !== VENDOR_STATUS.APPROVED) {

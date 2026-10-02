@@ -89,17 +89,8 @@ const _buildVendorQuery = (filters = {}) => {
     baseQuery._id = { $in: filters.vendorIds };
   }
 
-  if (serviceCategory) {
-    const escaped = serviceCategory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const reg = new RegExp(escaped, 'i');
-    baseQuery.$or = [
-      { categories: { $in: [serviceCategory] } },
-      { service: { $in: [serviceCategory] } },
-      { categories: { $regex: reg } },
-      { service: { $regex: reg } },
-      { skills: { $regex: reg } }
-    ];
-  }
+  // Universal Service Model: All approved vendors provide all platform services
+  // No restrictive serviceCategory filtering applied
 
   if (checkCashLimit) {
     baseQuery.$expr = { $lte: ["$wallet.dues", "$wallet.cashLimit"] };

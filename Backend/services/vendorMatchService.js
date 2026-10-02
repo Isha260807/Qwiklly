@@ -36,23 +36,12 @@ const findVendorsByZone = async (zone) => {
 const findServiceVendorsInZone = async (zoneVendorIds, serviceTitle) => {
   if (!zoneVendorIds || zoneVendorIds.length === 0) return [];
 
+  // Universal Service Provider Model: Any approved, active vendor provides all services
   const query = {
     _id: { $in: zoneVendorIds },
     approvalStatus: VENDOR_STATUS.APPROVED,
     isActive: true
   };
-
-  if (serviceTitle) {
-    const escaped = serviceTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const reg = new RegExp(escaped, 'i');
-    query.$or = [
-      { categories: { $in: [serviceTitle] } },
-      { service: { $in: [serviceTitle] } },
-      { categories: { $regex: reg } },
-      { service: { $regex: reg } },
-      { skills: { $regex: reg } }
-    ];
-  }
 
   return Vendor.find(query)
     .select('name businessName phone address location geoLocation settings isOnline availability rating')
