@@ -22,7 +22,9 @@ const Header = memo(({
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [isOnline, setIsOnline] = useState(() => {
     const saved = localStorage.getItem('vendorIsOnline');
-    return saved !== null ? saved === 'true' : true;
+    if (saved !== null) return saved === 'true';
+    const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+    return profile.isOnline !== undefined ? Boolean(profile.isOnline) : true;
   });
   const [togglingStatus, setTogglingStatus] = useState(false);
 
@@ -40,23 +42,8 @@ const Header = memo(({
     }
   }, [notificationCount]);
 
-  // Load online status from profile
+  // Sync online status via custom events
   useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await vendorService.getProfile();
-        if (res.success && res.vendor) {
-          const online = res.vendor.isOnline !== undefined ? Boolean(res.vendor.isOnline) : true;
-          setIsOnline(online);
-          localStorage.setItem('vendorIsOnline', String(online));
-        }
-      } catch (err) {
-        // Fallback to local
-      }
-    };
-
-    fetchStatus();
-
     const handleStatusSync = (e) => {
       if (e.detail && e.detail.isOnline !== undefined) {
         setIsOnline(e.detail.isOnline);

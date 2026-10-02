@@ -50,7 +50,7 @@ const MyServices = () => {
         try {
           const profileRes = await vendorAuthService.getProfile();
           if (profileRes?.success && profileRes.vendor) {
-            const raw = profileRes.vendor.service || profileRes.vendor.services || [];
+            const raw = profileRes.vendor.service || profileRes.vendor.services || profileRes.vendor.categories || [];
             initialServices = Array.isArray(raw) ? raw : (raw ? [raw] : []);
           }
         } catch (e) {

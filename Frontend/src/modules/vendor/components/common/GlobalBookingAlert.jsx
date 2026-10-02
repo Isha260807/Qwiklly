@@ -113,27 +113,7 @@ export default function GlobalBookingAlert() {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Fetch global config for accurate timer
-    const fetchConfig = async () => {
-      const token = localStorage.getItem('vendorAccessToken') || sessionStorage.getItem('vendorAccessToken');
-      if (!token) return;
-
-      try {
-        const { vendorDashboardService } = await import('../../services/dashboardService');
-        const response = await vendorDashboardService.getDashboardStats();
-        if (response.success && response.data.config) {
-          setMaxSearchTime(response.data.config.maxSearchTime || 1);
-        }
-      } catch (error) {
-        console.error('Failed to fetch config for GlobalAlert:', error);
-      }
-    };
-
     syncAlerts(true);
-    fetchConfig();
-
-    // 3. Heartbeat: Periodic sync
-    const heartbeat = setInterval(() => syncAlerts(false), 5000);
 
     // Listen for custom dashboard events from SocketContext
     const handleShowAlert = (e) => {
@@ -161,7 +141,6 @@ export default function GlobalBookingAlert() {
       window.removeEventListener('showDashboardBookingAlert', handleShowAlert);
       window.removeEventListener('removeVendorBooking', handleRemoveBooking);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearInterval(heartbeat);
     };
   }, []);
 

@@ -39,13 +39,39 @@ const Dashboard = memo(() => {
     completedJobs: 0,
     rating: 0,
   });
-  const [vendorProfile, setVendorProfile] = useState({
-    name: 'Vendor Name',
-    businessName: 'Business Name',
-    photo: null,
-    service: [],
-    payoutAdded: false
-  });
+  const getInitialVendorProfile = () => {
+    try {
+      const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+      const services = profile.service || profile.services || profile.categories || [];
+      const servicesList = Array.isArray(services) ? services : (services ? [services] : []);
+      const hasBank = !!(
+        profile.bankDetails?.accountNumber ||
+        profile.bankDetails?.upiId ||
+        profile.bankDetails?.upiQrCode ||
+        profile.bankAccount?.accountNumber ||
+        profile.upiId ||
+        profile.payoutDetails?.upiId ||
+        profile.payoutDetails?.accountNumber
+      );
+      return {
+        name: profile.name || 'Vendor Name',
+        businessName: profile.businessName || 'Business Name',
+        photo: profile.profilePhoto || null,
+        service: servicesList,
+        payoutAdded: hasBank
+      };
+    } catch {
+      return {
+        name: 'Vendor Name',
+        businessName: 'Business Name',
+        photo: null,
+        service: [],
+        payoutAdded: false
+      };
+    }
+  };
+
+  const [vendorProfile, setVendorProfile] = useState(getInitialVendorProfile);
   const [recentJobs, setRecentJobs] = useState([]);
   const [pendingBookings, setPendingBookings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -200,15 +226,66 @@ const Dashboard = memo(() => {
     }));
     setRecentJobs(recentJobsData);
 
-    // Load vendor profile from localStorage (once)
-    const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
-    setVendorProfile({
-      name: profile.name || 'Vendor Name',
-      businessName: profile.businessName || 'Business Name',
-      photo: profile.profilePhoto || null,
-      service: profile.service || [],
-      payoutAdded: !!(profile.bankAccount?.accountNumber || profile.upiId || profile.payoutDetails?.upiId || profile.payoutDetails?.accountNumber)
-    });
+    // Load vendor profile from localStorage
+    try {
+      const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+      const services = profile.service || profile.services || profile.categories || [];
+      const servicesList = Array.isArray(services) ? services : (services ? [services] : []);
+      const hasBank = !!(
+        profile.bankDetails?.accountNumber ||
+        profile.bankDetails?.upiId ||
+        profile.bankDetails?.upiQrCode ||
+        profile.bankAccount?.accountNumber ||
+        profile.upiId ||
+        profile.payoutDetails?.upiId ||
+        profile.payoutDetails?.accountNumber
+      );
+      setVendorProfile({
+        name: profile.name || 'Vendor Name',
+        businessName: profile.businessName || 'Business Name',
+        photo: profile.profilePhoto || null,
+        service: servicesList,
+        payoutAdded: hasBank
+      });
+    } catch (e) {
+      console.error('Error updating vendor profile from localStorage:', e);
+    }
+  }, []);
+
+  // Sync profile when vendorDataUpdated or vendorProfileUpdated events occur
+  useEffect(() => {
+    const handleProfileSync = () => {
+      try {
+        const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+        const services = profile.service || profile.services || profile.categories || [];
+        const servicesList = Array.isArray(services) ? services : (services ? [services] : []);
+        const hasBank = !!(
+          profile.bankDetails?.accountNumber ||
+          profile.bankDetails?.upiId ||
+          profile.bankDetails?.upiQrCode ||
+          profile.bankAccount?.accountNumber ||
+          profile.upiId ||
+          profile.payoutDetails?.upiId ||
+          profile.payoutDetails?.accountNumber
+        );
+        setVendorProfile({
+          name: profile.name || 'Vendor Name',
+          businessName: profile.businessName || 'Business Name',
+          photo: profile.profilePhoto || null,
+          service: servicesList,
+          payoutAdded: hasBank
+        });
+      } catch (err) {
+        console.error('Error syncing vendor profile:', err);
+      }
+    };
+
+    window.addEventListener('vendorProfileUpdated', handleProfileSync);
+    window.addEventListener('vendorDataUpdated', handleProfileSync);
+    return () => {
+      window.removeEventListener('vendorProfileUpdated', handleProfileSync);
+      window.removeEventListener('vendorDataUpdated', handleProfileSync);
+    };
   }, []);
 
   // Main data loader - useCallback to prevent recreation
@@ -420,25 +497,6 @@ const Dashboard = memo(() => {
 
   // Show error state
   if (error) {
-    return (
-      <div className="min-h-screen pb-20 flex items-center justify-center" style={{ background: themeColors.backgroundGradient }}>
-        <div className="text-center px-6">
-          <div className="text-red-400 text-6xl mb-4">⚠️</div>
-          <h2 className="text-white text-xl font-semibold mb-2">Failed to Load Dashboard</h2>
-          <p className="text-gray-300 mb-6">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-white text-gray-900 px-6 py-3 rounded-lg font-medium hover:bg-gray-100 transition-colors"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Show error state
-  if (error && error.length > 0 && !loading) {
     return (
       <div className="min-h-screen pb-20 flex items-center justify-center" style={{ background: themeColors.backgroundGradient }}>
         <div className="text-center px-6">

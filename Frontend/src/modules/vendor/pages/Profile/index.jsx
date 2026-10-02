@@ -100,6 +100,9 @@ const Profile = () => {
               `${vendorData.address.addressLine1 || ''} ${vendorData.address.addressLine2 || ''} ${vendorData.address.city || ''} ${vendorData.address.state || ''} ${vendorData.address.pincode || ''}`.trim() || 'Not set')
             : 'Not set';
 
+          const rawServices = vendorData.service || vendorData.categories || [];
+          const servicesList = Array.isArray(rawServices) ? rawServices : (rawServices ? [rawServices] : []);
+
           setProfile({
             name: vendorData.name || 'Vendor Name',
             businessName: vendorData.businessName || null,
@@ -109,8 +112,9 @@ const Profile = () => {
             rating: vendorData.rating || 0,
             totalJobs: vendorData.totalJobs || 0,
             completionRate: vendorData.completionRate || 0,
-            serviceCategory: vendorData.service || '',
-            skills: [],
+            serviceCategory: Array.isArray(vendorData.service) ? vendorData.service.join(', ') : (vendorData.service || ''),
+            services: servicesList,
+            skills: vendorData.skills || [],
             photo: vendorData.profilePhoto || null,
             approvalStatus: vendorData.approvalStatus,
             isPhoneVerified: vendorData.isPhoneVerified || false,
@@ -263,25 +267,6 @@ const Profile = () => {
                     </div>
                   )}
                 </div>
-
-                {/* Assigned Services Pills */}
-                {profile.services && profile.services.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {profile.services.slice(0, 3).map((srv, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold text-[#720C3E] bg-[#FCEBF3]"
-                      >
-                        {srv}
-                      </span>
-                    ))}
-                    {profile.services.length > 3 && (
-                      <span className="text-[9px] font-bold text-[#720C3E] self-center">
-                        +{profile.services.length - 3}
-                      </span>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* Navigate Button */}

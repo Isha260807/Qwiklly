@@ -39,10 +39,18 @@ const VendorUnderReviewModal = () => {
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen && !showSupport) return;
     configService.getSettings().then(r => {
-      if (r?.data?.support) setSupportInfo({ phone: r.data.support.phone || '+91 9876543210', email: r.data.support.email || 'support@qwiklly.com', whatsapp: r.data.support.whatsapp || r.data.support.phone || '+919876543210' });
+      const s = r?.settings || r?.data?.support;
+      if (s) {
+        setSupportInfo({
+          phone: s.supportPhone || s.companyPhone || '+91 9876543210',
+          email: s.supportEmail || s.companyEmail || 'support@qwiklly.com',
+          whatsapp: s.supportWhatsapp || s.supportPhone || s.companyPhone || '+919876543210'
+        });
+      }
     }).catch(() => {});
-  }, []);
+  }, [isOpen, showSupport]);
 
   const check = useCallback(async (manual = false) => {
     const tok = localStorage.getItem('vendorAccessToken') || sessionStorage.getItem('vendorAccessToken');
@@ -88,10 +96,10 @@ const VendorUnderReviewModal = () => {
       setStatus(ls);
       if (d && d.approvalStatus && (ls === 'pending' || ls === 'rejected')) {
         setIsOpen(true);
+        check(false);
       } else {
         setIsOpen(false);
       }
-      check(false);
     } else {
       setIsOpen(false);
     }

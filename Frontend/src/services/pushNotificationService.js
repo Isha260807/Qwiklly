@@ -180,6 +180,11 @@ async function registerFCMToken(userType = 'user', forceUpdate = false) {
       return null;
     }
 
+    // Check if token is already registered in localStorage
+    if (savedToken === token && !forceUpdate) {
+      return token;
+    }
+
     // Save to backend
     const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
     console.log(`[FCM] Saving to backend: ${baseUrl}${endpoint}`);
