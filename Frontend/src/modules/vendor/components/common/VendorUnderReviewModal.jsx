@@ -11,12 +11,21 @@ const VendorUnderReviewModal = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
-  const [status, setStatus] = useState('pending');
+  const getInitialStatus = () => {
+    try {
+      const d = JSON.parse(localStorage.getItem('vendorData') || '{}');
+      return (d.approvalStatus || 'pending').toLowerCase();
+    } catch {
+      return 'pending';
+    }
+  };
+
+  const [status, setStatus] = useState(getInitialStatus);
   const [vendorData, setVendorData] = useState(null);
   const [isChecking, setIsChecking] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [supportInfo, setSupportInfo] = useState({ phone: '+91 9876543210', email: 'support@qwiklly.com', whatsapp: '+919876543210' });
-  const prevStatus = useRef('pending');
+  const prevStatus = useRef(getInitialStatus());
   const pollRef = useRef(null);
 
   // Lock body scroll when modal is open
@@ -46,12 +55,18 @@ const VendorUnderReviewModal = () => {
         setVendorData(res.vendor);
         setStatus(s);
         if (s === 'approved') {
-          if (prevStatus.current === 'pending') toast.success('Your vendor profile is approved! Dashboard unlocked.', { duration: 6000, id: 'v-approved' });
-          setIsOpen(false); prevStatus.current = 'approved';
+          if (prevStatus.current === 'pending' && isOpen) {
+            toast.success('Your vendor profile is approved! Dashboard unlocked.', { duration: 6000, id: 'v-approved' });
+          }
+          setIsOpen(false);
+          prevStatus.current = 'approved';
           window.dispatchEvent(new Event('vendorDataUpdated'));
-        } else if (s === 'rejected') { setIsOpen(true); prevStatus.current = 'rejected'; }
-        else {
-          setIsOpen(true); prevStatus.current = 'pending';
+        } else if (s === 'rejected') {
+          setIsOpen(true);
+          prevStatus.current = 'rejected';
+        } else {
+          setIsOpen(true);
+          prevStatus.current = 'pending';
           if (manual) toast('Still under review. We will notify you once approved!', { icon: '\u23f3', duration: 4000 });
         }
       }
@@ -68,8 +83,18 @@ const VendorUnderReviewModal = () => {
     const d = JSON.parse(localStorage.getItem('vendorData') || '{}');
     const ls = (d.approvalStatus || 'pending').toLowerCase();
     const tok = localStorage.getItem('vendorAccessToken') || sessionStorage.getItem('vendorAccessToken');
-    if (tok) { setVendorData(d); setStatus(ls); if (ls === 'pending' || ls === 'rejected') setIsOpen(true); check(false); }
-    else setIsOpen(false);
+    if (tok) {
+      setVendorData(d);
+      setStatus(ls);
+      if (d && d.approvalStatus && (ls === 'pending' || ls === 'rejected')) {
+        setIsOpen(true);
+      } else {
+        setIsOpen(false);
+      }
+      check(false);
+    } else {
+      setIsOpen(false);
+    }
   }, [check, location.pathname]);
 
   useEffect(() => {

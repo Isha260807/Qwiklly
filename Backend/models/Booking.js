@@ -305,6 +305,16 @@ const bookingSchema = new mongoose.Schema({
     default: BOOKING_STATUS.PENDING,
     index: true
   },
+  vendorAssignmentStatus: {
+    type: String,
+    enum: ['PENDING', 'ACCEPTED', 'REJECTED', 'REASSIGNING', 'FAILED'],
+    default: 'PENDING',
+    index: true
+  },
+  rejectedVendors: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Vendor'
+  }],
   workerResponse: {
     type: String,
     enum: ['PENDING', 'ACCEPTED', 'REJECTED'],

@@ -25,7 +25,6 @@ export default function GlobalBookingAlert() {
           return;
         }
 
-        // Every few heartbeats or if forced, sync with Server API for missed sockets
         const token = localStorage.getItem('vendorAccessToken') || sessionStorage.getItem('vendorAccessToken');
         if (token && (forceServerSync || (Math.random() > 0.8))) {
           try {
@@ -49,32 +48,58 @@ export default function GlobalBookingAlert() {
                   customerName: b.userId?.name || 'Customer'
                 }));
 
-              const existingIds = new Set(pendingJobs.map(j => String(j.id || j._id)));
-              let updated = false;
+              const serverJobIds = new Set(serverJobs.map(sj => String(sj.id || sj._id)));
+              // Reconcile: keep server-confirmed jobs or very recent socket jobs (<15s)
+              pendingJobs = pendingJobs.filter(pj => {
+                const pId = String(pj.id || pj._id);
+                if (ignoredBookingIds.current.has(pId)) return false;
+                if (serverJobIds.has(pId)) return true;
+                const isVeryRecent = pj.receivedAt && (now - pj.receivedAt < 15000);
+                return isVeryRecent;
+              });
+
+              // Add any new server jobs not in pending
+              const currentPendingIds = new Set(pendingJobs.map(pj => String(pj.id || pj._id)));
               serverJobs.forEach(sj => {
-                if (!existingIds.has(String(sj.id))) {
+                const sId = String(sj.id || sj._id);
+                if (!currentPendingIds.has(sId) && !ignoredBookingIds.current.has(sId)) {
                   pendingJobs.unshift(sj);
-                  updated = true;
                 }
               });
-              if (updated) localStorage.setItem('vendorPendingJobs', JSON.stringify(pendingJobs));
+              localStorage.setItem('vendorPendingJobs', JSON.stringify(pendingJobs));
             }
           } catch (e) { console.error("Server sync error:", e); }
         }
 
         const validJobs = pendingJobs.filter(job => {
-          if (!job.expiresAt) return true;
-          return new Date(job.expiresAt).getTime() > now;
+          const idStr = String(job.id || job._id);
+          if (ignoredBookingIds.current.has(idStr)) return false;
+          if (job.expiresAt) {
+            return new Date(job.expiresAt).getTime() > now;
+          }
+          if (job.createdAt) {
+            const elapsed = now - new Date(job.createdAt).getTime();
+            return elapsed < 5 * 60 * 1000;
+          }
+          return false;
         });
 
-        if (validJobs.length > 0) {
-          setActiveAlertBookings(prev => {
-            const currentIds = new Set(prev.map(b => String(b.id || b._id)));
-            const newJobsToAdd = validJobs.filter(v => !currentIds.has(String(v.id || v._id)));
-            if (newJobsToAdd.length === 0) return prev;
-            return [...newJobsToAdd, ...prev];
-          });
+        // Sync back cleaned validJobs to localStorage
+        if (validJobs.length !== pendingJobs.length) {
+          localStorage.setItem('vendorPendingJobs', JSON.stringify(validJobs));
         }
+
+        setActiveAlertBookings(prev => {
+          const validIds = new Set(validJobs.map(v => String(v.id || v._id)));
+          // Remove anything not in validJobs or in ignored
+          const filteredPrev = prev.filter(b => {
+            const bId = String(b.id || b._id);
+            return validIds.has(bId) && !ignoredBookingIds.current.has(bId);
+          });
+          const existingInPrev = new Set(filteredPrev.map(b => String(b.id || b._id)));
+          const newJobsToAdd = validJobs.filter(v => !existingInPrev.has(String(v.id || v._id)));
+          return [...filteredPrev, ...newJobsToAdd];
+        });
       } catch (err) {
         console.error('[GlobalAlert] Sync error:', err);
       }
@@ -158,18 +183,20 @@ export default function GlobalBookingAlert() {
       bookings={activeAlertBookings}
       maxSearchTimeMins={maxSearchTime}
       onAccept={async (id) => {
+        const idStr = String(id);
+        ignoredBookingIds.current.add(idStr);
         try {
           await acceptBooking(id);
           await assignWorker(id, 'SELF');
 
           // Remove from local storage
           const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
-          const updated = pendingJobs.filter(b => String(b.id || b._id) !== String(id));
+          const updated = pendingJobs.filter(b => String(b.id || b._id) !== idStr);
           localStorage.setItem('vendorPendingJobs', JSON.stringify(updated));
 
           // Dispatch remove event
           window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id } }));
-          setActiveAlertBookings(prev => prev.filter(b => String(b.id || b._id) !== String(id)));
+          setActiveAlertBookings(prev => prev.filter(b => String(b.id || b._id) !== idStr));
 
           window.dispatchEvent(new Event('vendorJobsUpdated'));
           window.dispatchEvent(new Event('vendorStatsUpdated'));
@@ -179,18 +206,20 @@ export default function GlobalBookingAlert() {
         }
       }}
       onReject={async (id) => {
+        const idStr = String(id);
+        ignoredBookingIds.current.add(idStr);
         try {
-          // Reject is often silent or via reject api
+          // Reject via API
           await rejectBooking(id);
         } catch (error) {
           console.error("Failed to reject job via API, removing locally");
         } finally {
           const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
-          const updated = pendingJobs.filter(b => String(b.id || b._id) !== String(id));
+          const updated = pendingJobs.filter(b => String(b.id || b._id) !== idStr);
           localStorage.setItem('vendorPendingJobs', JSON.stringify(updated));
 
           window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id } }));
-          setActiveAlertBookings(prev => prev.filter(b => String(b.id || b._id) !== String(id)));
+          setActiveAlertBookings(prev => prev.filter(b => String(b.id || b._id) !== idStr));
 
           toast.success('Booking application rejected');
           window.dispatchEvent(new Event('vendorJobsUpdated'));

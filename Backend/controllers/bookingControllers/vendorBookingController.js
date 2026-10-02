@@ -14,16 +14,26 @@ const getVendorBookings = async (req, res) => {
     const { status, q, page = 1, limit = 20 } = req.query;
 
     const vId = new mongoose.Types.ObjectId(vendorId);
+    const now = new Date();
 
     // ── Build Base Query ──
     // This Or condition ensures vendors see their own jobs OR relevant unassigned alerts
     const query = {
       $or: [
-        { vendorId: vId, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } },
+        {
+          vendorId: vId,
+          status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT },
+          rejectedVendors: { $ne: vId }
+        },
         {
           vendorId: null,
           status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
-          'potentialVendors.vendorId': vId // Only show jobs where THIS vendor is within range
+          'potentialVendors.vendorId': vId, // Only show jobs where THIS vendor is within range
+          rejectedVendors: { $ne: vId },    // Exclude jobs this vendor has rejected
+          $or: [
+            { expiresAt: null },
+            { expiresAt: { $gt: now } }
+          ]
         }
       ]
     };
@@ -204,19 +214,23 @@ const acceptBooking = async (req, res) => {
     const { id } = req.params;
 
     // ATOMIC UPDATE: Check status and vendorId in query to prevent race conditions
-    // Only accept if status is REQUESTED/SEARCHING and NO vendor is assigned yet
+    // Accept if status is REQUESTED/SEARCHING and vendorId is null OR already assigned to this vendor
+    const vObjId = mongoose.Types.ObjectId.isValid(vendorId) ? new mongoose.Types.ObjectId(vendorId) : vendorId;
     const updatedBooking = await Booking.findOneAndUpdate(
       {
         _id: id,
         status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
-        vendorId: null // Crucial: Ensures another request didn't just take it
+        $or: [
+          { vendorId: null },
+          { vendorId: vObjId }
+        ]
       },
       {
         $set: {
-          vendorId: vendorId,
+          vendorId: vObjId,
+          vendorAssignmentStatus: 'ACCEPTED',
           acceptedAt: new Date(),
-          // Check payment method for optimized status update logic
-          status: BOOKING_STATUS.CONFIRMED // Default to confirmed
+          status: BOOKING_STATUS.CONFIRMED
         }
       },
       { new: true } // Return updated doc
@@ -225,7 +239,7 @@ const acceptBooking = async (req, res) => {
     if (!updatedBooking) {
       // If update failed, check why (likely already taken)
       const existing = await Booking.findById(id);
-      if (existing && existing.vendorId) {
+      if (existing && existing.vendorId && existing.vendorId.toString() !== vendorId.toString()) {
         return res.status(409).json({ // 409 Conflict
           success: false,
           message: 'Sorry, this job has already been accepted by another vendor.'
@@ -361,10 +375,13 @@ const rejectBooking = async (req, res) => {
     const { reason } = req.body;
 
     // Find booking
+    const vObjId = mongoose.Types.ObjectId.isValid(vendorId) ? new mongoose.Types.ObjectId(vendorId) : vendorId;
     const booking = await Booking.findOne({
       _id: id,
       $or: [
-        { notifiedVendors: vendorId },
+        { vendorId: vObjId },
+        { notifiedVendors: vObjId },
+        { 'potentialVendors.vendorId': vObjId },
         { vendorId: null, status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] } }
       ]
     });
@@ -376,12 +393,32 @@ const rejectBooking = async (req, res) => {
       });
     }
 
-    const validStatuses = [BOOKING_STATUS.PENDING, BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING];
-    if (!validStatuses.includes(booking.status)) {
+    const invalidStatuses = [
+      BOOKING_STATUS.IN_PROGRESS,
+      BOOKING_STATUS.WORK_DONE,
+      BOOKING_STATUS.COMPLETED,
+      BOOKING_STATUS.JOURNEY_STARTED,
+      BOOKING_STATUS.VISITED
+    ];
+    if (invalidStatuses.includes(booking.status)) {
       return res.status(400).json({
         success: false,
         message: `Cannot reject booking with status: ${booking.status}`
       });
+    }
+
+    // Always record vendor in rejectedVendors
+    if (!booking.rejectedVendors) {
+      booking.rejectedVendors = [];
+    }
+    if (!booking.rejectedVendors.some(v => v?.toString() === vendorId.toString())) {
+      booking.rejectedVendors.push(vObjId);
+    }
+
+    // If this vendor was the assigned vendorId, clear assignment
+    if (booking.vendorId && booking.vendorId.toString() === vendorId.toString()) {
+      booking.vendorId = null;
+      booking.vendorAssignmentStatus = 'REJECTED';
     }
 
     // Update BookingRequest for this vendor
@@ -396,12 +433,12 @@ const rejectBooking = async (req, res) => {
     );
 
     // Remove vendor from notifiedVendors (they've responded)
-    booking.notifiedVendors = booking.notifiedVendors.filter(
+    booking.notifiedVendors = (booking.notifiedVendors || []).filter(
       v => v.toString() !== vendorId.toString()
     );
 
     // Remove from potentialVendors too
-    booking.potentialVendors = booking.potentialVendors.filter(
+    booking.potentialVendors = (booking.potentialVendors || []).filter(
       v => v.vendorId?.toString() !== vendorId.toString()
     );
 
@@ -413,7 +450,7 @@ const rejectBooking = async (req, res) => {
 
     const remainingPotential = booking.potentialVendors.length;
 
-    if (pendingRequests === 0 && remainingPotential === 0) {
+    if (pendingRequests === 0 && remainingPotential === 0 && !booking.vendorId) {
       // No vendors left - mark booking as rejected/failed
       booking.status = BOOKING_STATUS.REJECTED;
       booking.cancelledAt = new Date();

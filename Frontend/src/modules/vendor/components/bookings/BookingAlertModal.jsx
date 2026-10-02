@@ -243,10 +243,11 @@ const BookingAlertCard = ({ booking, onAccept, onReject, maxSearchTimeMins = 1 }
 
 const BookingAlertModal = ({ isOpen, booking, bookings, onAccept, onReject, onMinimize, maxSearchTimeMins = 1 }) => {
   const alertsArray = bookings || (booking ? [booking] : []);
+  const currentBooking = alertsArray.length > 0 ? alertsArray[0] : null;
 
   return (
     <AnimatePresence>
-      {isOpen && alertsArray.length > 0 && (
+      {isOpen && currentBooking && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -263,25 +264,21 @@ const BookingAlertModal = ({ isOpen, booking, bookings, onAccept, onReject, onMi
             </button>
           )}
 
-          <div className="w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide flex gap-4 px-8 items-center h-full">
-            <div className="flex gap-4 m-auto">
-              {alertsArray.map(b => (
-                <BookingAlertCard
-                  key={b.id || b._id}
-                  booking={b}
-                  onAccept={onAccept}
-                  onReject={onReject}
-                  maxSearchTimeMins={maxSearchTimeMins}
-                />
-              ))}
-            </div>
-          </div>
+          <div className="flex flex-col items-center justify-center px-4 w-full">
+            {alertsArray.length > 1 && (
+              <div className="mb-3 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-xs font-bold uppercase tracking-wider shadow-sm animate-pulse">
+                Order 1 of {alertsArray.length} in queue
+              </div>
+            )}
 
-          {alertsArray.length > 1 && (
-            <div className="absolute bottom-10 left-0 right-0 flex justify-center text-white text-sm font-medium animate-pulse drop-shadow-lg">
-              Swipe to see all {alertsArray.length} alerts →
-            </div>
-          )}
+            <BookingAlertCard
+              key={currentBooking.id || currentBooking._id}
+              booking={currentBooking}
+              onAccept={onAccept}
+              onReject={onReject}
+              maxSearchTimeMins={maxSearchTimeMins}
+            />
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
