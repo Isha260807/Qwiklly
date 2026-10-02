@@ -27,7 +27,6 @@ exports.checkServiceability = async (req, res) => {
       success: true,
       serviceable: result.serviceable,
       zone: result.zone ? { id: result.zone._id, name: result.zone.name } : null,
-      radiusKm: result.radiusKm,
       vendorCount: result.vendors.length,
       reason: result.reason,
       nearestZone: result.nearestZone || null

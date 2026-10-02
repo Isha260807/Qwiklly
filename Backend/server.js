@@ -275,7 +275,7 @@ if (process.env.VERCEL !== '1' && !process.env.VERCEL_ENV) {
   // Make io instance available in request
   app.set('io', getIO());
 
-  // Initialize Booking Scheduler for Wave-Based Alerting
+  // Initialize Booking Scheduler for zone-broadcast expiry and payment recovery
   const { initializeScheduler } = require('./services/bookingScheduler');
   initializeScheduler(getIO());
   console.log('[Server] Booking Scheduler initialized for wave-based alerting');

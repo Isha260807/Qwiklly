@@ -164,8 +164,7 @@ const getDashboardStats = async (req, res) => {
       success: true,
       data: {
         config: {
-          maxSearchTime: globalSettings?.maxSearchTime || 5, // mins
-          waveDuration: globalSettings?.waveDuration || 60  // secs
+          maxSearchTime: globalSettings?.maxSearchTime || 5 // mins
         },
         stats: {
           totalBookings: counts.total || 0,

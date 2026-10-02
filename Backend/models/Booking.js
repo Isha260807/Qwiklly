@@ -37,8 +37,18 @@ const bookingSchema = new mongoose.Schema({
     ref: 'Vendor'
   }],
 
+  // Zone-only dispatch state. A booking is broadcast once to all currently
+  // available vendors in its resolved zone; this prevents payment retries or
+  // background jobs from broadcasting the same booking again.
+  dispatchState: {
+    type: String,
+    enum: ['PENDING', 'DISPATCHING', 'DISPATCHED'],
+    default: 'PENDING',
+    index: true
+  },
+
   // ==========================================
-  // WAVE-BASED ALERTING
+  // ZONE-BROADCAST ALERTING
   // ==========================================
   potentialVendors: [{
     vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor' },

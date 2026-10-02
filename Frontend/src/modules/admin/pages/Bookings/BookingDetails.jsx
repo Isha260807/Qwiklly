@@ -388,8 +388,8 @@ const BookingDetails = () => {
                   <span>
                     No partner is currently assigned to this booking.
                     {normalizedStatus === 'PENDING_ADMIN'
-                      ? ' Zone/service/radius matching found no automatic candidates - assign one manually below.'
-                      : ' Matching engine is still broadcasting to nearest vendors.'}
+                      ? ' Zone/service/availability matching found no automatic candidates - assign one manually below.'
+                      : ' Matching engine is broadcasting to all available vendors in the zone.'}
                   </span>
                 </div>
 
@@ -410,14 +410,14 @@ const BookingDetails = () => {
                     {eligibleVendors && (
                       <>
                         <p className="text-[11px] text-gray-500">
-                          Zone: <span className="font-semibold text-gray-700">{eligibleVendors.zone?.name}</span> · Radius: {eligibleVendors.radiusKm}km
+                          Zone: <span className="font-semibold text-gray-700">{eligibleVendors.zone?.name}</span> · Zone-only matching
                           {eligibleVendors.reason && (
                             <span className="ml-2 text-amber-600 font-semibold">({eligibleVendors.reason.replace(/_/g, ' ')})</span>
                           )}
                         </p>
 
                         {eligibleVendors.vendors.length === 0 ? (
-                          <p className="text-xs text-gray-400 italic">No vendors qualify by zone + service + radius. Try assigning a vendor manually from Vendor Management, or expand this vendor's zones/radius.</p>
+                          <p className="text-xs text-gray-400 italic">No approved, active and available vendors qualify in this zone. Try assigning a vendor manually from Vendor Management.</p>
                         ) : (
                           <div className="space-y-2 max-h-64 overflow-y-auto">
                             {eligibleVendors.vendors.map(v => (
@@ -425,7 +425,7 @@ const BookingDetails = () => {
                                 <div className="min-w-0">
                                   <p className="text-xs font-bold text-gray-800 truncate">{v.businessName || v.name}</p>
                                   <p className="text-[11px] text-gray-500">
-                                    {v.distance?.toFixed(1)}km away · {v.isOnline ? 'Online' : 'Offline'} · {v.availability || 'UNKNOWN'}
+                                    Zone eligible · {v.isOnline ? 'Online' : 'Offline'} · {v.availability || 'UNKNOWN'}
                                   </p>
                                 </div>
                                 <button

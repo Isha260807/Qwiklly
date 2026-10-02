@@ -109,7 +109,7 @@ const createBooking = async (req, res) => {
     // Check for Pending Penalty
     const pendingPenalty = user.wallet?.penalty || 0;
 
-    // --- ZONE -> SERVICE -> RADIUS SERVICEABILITY CHECK ---
+    // --- ZONE -> SERVICE -> VENDOR AVAILABILITY CHECK ---
     // Backend is the sole source of truth for zone resolution: any zoneId
     // sent by the client is ignored, and the zone is always re-derived from
     // the booking's own coordinates.
@@ -164,10 +164,10 @@ const createBooking = async (req, res) => {
     }
 
     const resolvedZone = serviceability.zone;
-    const nearbyVendors = serviceability.vendors; // zone + service + radius scoped candidates
+    const nearbyVendors = serviceability.vendors; // zone + service + availability scoped candidates
     const matchFailureReason = nearbyVendors.length === 0 ? serviceability.reason : null;
 
-    console.log(`[CreateBooking] Zone=${resolvedZone.name} (${resolvedZone._id}), radius=${serviceability.radiusKm}km, candidates=${nearbyVendors.length}, reason=${matchFailureReason}`);
+    console.log(`[CreateBooking] Zone=${resolvedZone.name} (${resolvedZone._id}), available zone vendors=${nearbyVendors.length}, reason=${matchFailureReason}`);
     // --- END SERVICEABILITY BLOCK ---
 
     // -------------------------------------------------------------------------
@@ -208,7 +208,7 @@ const createBooking = async (req, res) => {
     let instantBookingChargesCalculated = pricing.instantBookingCharges || 0;
     let finalAmount = pricing.finalAmount;
 
-    // Zero zone+service+radius candidates is treated as a dead end, not a
+    // Zero zone+service+availability candidates is treated as a dead end, not a
     // "wait for admin" case - the booking is created (for the user's
     // history/audit trail) but immediately auto-cancelled with a clear
     // reason, rather than being parked for manual assignment.
@@ -216,7 +216,7 @@ const createBooking = async (req, res) => {
     const NO_VENDOR_CANCELLATION_MESSAGES = {
       NO_ZONE_VENDOR: 'No service providers are currently registered in your area.',
       NO_SERVICE_VENDOR: 'No service providers in your area currently offer this service.',
-      NO_VENDOR_WITHIN_RADIUS: 'No service providers are currently close enough to reach your location.'
+      NO_AVAILABLE_VENDOR: 'No service providers are currently available in your area.'
     };
     const cancellationReason = matchFailureReason
       ? (NO_VENDOR_CANCELLATION_MESSAGES[matchFailureReason] || 'No service providers are currently available for this booking.')
@@ -359,7 +359,7 @@ const createBooking = async (req, res) => {
       },
       potentialVendors: nearbyVendors.map(v => ({
         vendorId: v._id,
-        distance: v.distance || 0
+        distance: null
       })),
       paymentMethod: paymentMethod || null,
       status: bookingStatus,
@@ -450,10 +450,10 @@ const createBooking = async (req, res) => {
 
         // Payment now happens AFTER a vendor accepts, so vendors are dispatched
         // immediately regardless of payment method/status. Skip dispatch when
-        // zone/service/radius matching already found zero candidates - the
+        // zone/service/availability matching already found zero candidates - the
         // booking was already auto-cancelled instead of being dispatched.
         if (bookingForBackground.status !== BOOKING_STATUS.CANCELLED) {
-          console.log(`[CreateBooking] Dispatching booking ${bookingForBackground.bookingNumber} to nearby vendors.`);
+          console.log(`[CreateBooking] Broadcasting booking ${bookingForBackground.bookingNumber} to available vendors in its zone.`);
           await dispatchBookingToVendors(bookingForBackground._id);
         } else {
           console.log(`[CreateBooking] Booking ${bookingForBackground.bookingNumber} auto-cancelled (reason=${bookingForBackground.matchFailureReason}).`);
@@ -1059,100 +1059,125 @@ const getUserRatings = async (req, res) => {
 };
 
 /**
- * Dispatch booking to nearby vendors (Wave 1)
- * Triggered ONLY when payment is confirmed or booking is free under plan
+ * Broadcast a booking once to every currently available vendor in the
+ * booking's resolved zone. There is no radius filter, nearest-first sort or
+ * wave fallback. The vendor acceptance endpoint remains the first-accept-wins
+ * gate for the booking.
  */
 const dispatchBookingToVendors = async (bookingId) => {
+  let dispatchClaimed = false;
+
   try {
-    const booking = await Booking.findById(bookingId)
+    // Claim the dispatch atomically so payment callbacks/background retries
+    // cannot broadcast the same booking twice.
+    const booking = await Booking.findOneAndUpdate(
+      {
+        _id: bookingId,
+        status: BOOKING_STATUS.SEARCHING,
+        vendorId: null,
+        $or: [
+          { dispatchState: { $exists: false } },
+          { dispatchState: null },
+          { dispatchState: 'PENDING' }
+        ]
+      },
+      { $set: { dispatchState: 'DISPATCHING' } },
+      { new: true }
+    )
       .populate('userId', 'name phone email')
       .populate('serviceId', 'title iconUrl')
       .populate('categoryId', 'title slug');
 
     if (!booking) {
-      console.error(`[dispatchBookingToVendors] Booking ${bookingId} not found`);
+      console.log(`[dispatchBookingToVendors] Booking ${bookingId} was already dispatched, accepted, cancelled, or not found.`);
       return;
     }
+    dispatchClaimed = true;
 
-    const { geocodeAddress } = require('../../services/locationService');
     const { findQualifiedVendors } = require('../../services/vendorMatchService');
-    const { resolveRadiusKm } = require('../../services/serviceabilityService');
     const Zone = require('../../models/Zone');
+    const BookingRequest = require('../../models/BookingRequest');
     const bookedServiceTitle = booking.serviceName || booking.serviceId?.title || booking.serviceCategory || '';
 
-    let bookingLocation = null;
-    if (booking.address?.lat && booking.address?.lng) {
-      bookingLocation = {
-        lat: Number(booking.address.lat),
-        lng: Number(booking.address.lng)
-      };
-    } else if (booking.address?.addressLine1) {
-      bookingLocation = await geocodeAddress(
-        `${booking.address.addressLine1}, ${booking.address.city || ''} ${booking.address.state || ''} ${booking.address.pincode || ''}`
-      );
-    }
-
-    // Re-derive the zone-scoped candidate pool for this wave. zoneId was
-    // resolved once at booking creation and is a permanent record of where
-    // this booking is - it is reused here rather than re-resolving from
-    // coordinates, so a vendor's later zone reassignment can't retroactively
-    // change which zone an in-flight booking belongs to.
-    let nearbyVendors = [];
-    if (booking.zoneId && bookingLocation) {
+    // zoneId was resolved at booking creation and is the permanent geographic
+    // scope for this booking. Vendor coordinates are intentionally ignored.
+    let zoneVendors = [];
+    let matchReason = null;
+    if (booking.zoneId) {
       const zone = await Zone.findById(booking.zoneId).lean();
       if (zone) {
-        const serviceDoc = await Service.findById(booking.serviceId).select('serviceRadiusKm').lean();
-        const radiusKm = await resolveRadiusKm(serviceDoc || {});
         const matchResult = await findQualifiedVendors({
           zone,
-          serviceTitle: bookedServiceTitle,
-          location: bookingLocation,
-          radiusKm
+          serviceTitle: bookedServiceTitle
         });
-        nearbyVendors = matchResult.vendors;
+        zoneVendors = matchResult.vendors;
+        matchReason = matchResult.reason;
+      } else {
+        matchReason = 'NO_ZONE_VENDOR';
       }
+    } else {
+      matchReason = 'NO_ZONE_VENDOR';
     }
 
-    // Deduplicate
+    // Deduplicate while preserving the database order. No distance sorting.
     const uniqueVendorIds = new Set();
-    nearbyVendors = (nearbyVendors || []).filter(vendor => {
+    const eligibleVendors = (zoneVendors || []).filter(vendor => {
       const idStr = (vendor._id || vendor.id).toString();
       if (uniqueVendorIds.has(idStr)) return false;
       uniqueVendorIds.add(idStr);
       return true;
     });
 
-    const sortedVendors = nearbyVendors.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-    const WAVE_1_COUNT = 3;
-    const wave1Vendors = sortedVendors.slice(0, WAVE_1_COUNT);
-
     const now = Date.now();
-    const waveExpiryDate = new Date(now + 60 * 1000);
     const overallExpiryDate = new Date(now + 5 * 60 * 1000);
+    const vendorIds = eligibleVendors.map(vendor => vendor._id);
 
-    booking.potentialVendors = sortedVendors.map(v => ({
-      vendorId: v._id,
-      distance: v.distance || 0
+    booking.potentialVendors = eligibleVendors.map(vendor => ({
+      vendorId: vendor._id,
+      distance: null
     }));
     booking.currentWave = 1;
     booking.waveStartedAt = new Date(now);
     booking.expiresAt = overallExpiryDate;
-    booking.notifiedVendors = wave1Vendors.map(v => v._id);
-    booking.status = wave1Vendors.length > 0 ? BOOKING_STATUS.SEARCHING : BOOKING_STATUS.NO_VENDORS;
-    await booking.save();
+    booking.notifiedVendors = vendorIds;
 
-    if (wave1Vendors.length > 0) {
-      console.log(`[dispatchBookingToVendors] Alerting ${wave1Vendors.length} closest vendors for booking ${booking.bookingNumber}`);
+    if (eligibleVendors.length === 0) {
+      const cancellationReason = matchReason === 'NO_ZONE_VENDOR'
+        ? 'No service providers are currently registered in your area.'
+        : 'No service providers are currently available in your area.';
 
-      const BookingRequest = require('../../models/BookingRequest');
-      const bookingRequests = wave1Vendors.map(vendor => ({
+      booking.status = BOOKING_STATUS.CANCELLED;
+      booking.matchFailureReason = matchReason || 'NO_AVAILABLE_VENDOR';
+      booking.cancelledAt = new Date();
+      booking.cancelledBy = 'system';
+      booking.cancellationReason = cancellationReason;
+      booking.dispatchState = 'DISPATCHED';
+      await booking.save();
+
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io) {
+        io.to(`user_${booking.userId?._id || booking.userId}`).emit('booking_search_failed', {
+          bookingId: booking._id,
+          message: cancellationReason
+        });
+      }
+      console.warn(`[dispatchBookingToVendors] No available vendors in zone for booking ${booking.bookingNumber}`);
+    } else {
+      booking.status = BOOKING_STATUS.SEARCHING;
+      booking.dispatchState = 'DISPATCHED';
+      await booking.save();
+
+      console.log(`[dispatchBookingToVendors] Broadcasting booking ${booking.bookingNumber} to ${eligibleVendors.length} available vendors in its zone`);
+
+      const bookingRequests = eligibleVendors.map(vendor => ({
         bookingId: booking._id,
         vendorId: vendor._id,
         status: 'PENDING',
         wave: 1,
-        distance: vendor.distance || null,
+        distance: null,
         sentAt: new Date(now),
-        expiresAt: waveExpiryDate
+        expiresAt: overallExpiryDate
       }));
 
       try {
@@ -1161,13 +1186,11 @@ const dispatchBookingToVendors = async (bookingId) => {
         if (err.code !== 11000) console.error('[dispatchBookingToVendors] BookingRequest insert error:', err);
       }
 
-      // 1. Emit Socket.IO event to vendors
       const { getIO } = require('../../sockets');
       const io = getIO();
       if (io) {
-        wave1Vendors.forEach(vendor => {
+        eligibleVendors.forEach(vendor => {
           const vendorRoom = `vendor_${vendor._id.toString()}`;
-          console.log(`[Wave 1] Emitting new_booking_request to ${vendorRoom} after confirmed payment`);
           io.to(vendorRoom).emit('new_booking_request', {
             bookingId: booking._id,
             serviceName: booking.serviceName || booking.serviceId?.title,
@@ -1177,63 +1200,63 @@ const dispatchBookingToVendors = async (bookingId) => {
             scheduledTime: booking.scheduledTime,
             price: booking.finalAmount,
             address: booking.address,
-            distance: vendor.distance,
+            distance: null,
             serviceCategory: booking.serviceCategory,
             brandName: booking.brandName,
             brandIcon: booking.brandIcon,
             categoryIcon: booking.categoryIcon,
             createdAt: booking.createdAt || new Date(now),
             waveStartedAt: new Date(now),
-            expiresAt: waveExpiryDate.toISOString(),
+            expiresAt: overallExpiryDate.toISOString(),
             playSound: true,
-            message: `New pre-paid booking request within ${vendor.distance?.toFixed(1) || '?'}km!`
+            message: 'New booking request in your service zone!'
           });
         });
       }
 
-      // 2. Send Push Notifications to Wave 1 vendors
       try {
-        const vendorNotifications = wave1Vendors.map(vendor =>
-          createNotification({
-            vendorId: vendor._id,
-            type: 'booking_request',
-            title: 'New Pre-Paid Booking Request',
-            message: `New pre-paid service request for ${booking.serviceName} from ${booking.userId?.name}`,
-            relatedId: booking._id,
-            relatedType: 'booking',
-            data: {
-              bookingId: booking._id,
-              serviceName: booking.serviceName,
-              customerName: booking.userId?.name,
-              customerPhone: booking.userId?.phone,
-              scheduledDate: booking.scheduledDate,
-              scheduledTime: booking.scheduledTime,
-              location: booking.address,
-              price: booking.finalAmount,
-              distance: vendor.distance
-            },
-            pushData: {
-              type: 'new_booking',
-              dataOnly: false,
-              link: `/vendor/bookings/${booking._id}`
-            }
-          })
-        );
-        await Promise.all(vendorNotifications);
+        await Promise.all(eligibleVendors.map(vendor => createNotification({
+          vendorId: vendor._id,
+          type: 'booking_request',
+          title: 'New Booking Request',
+          message: `New service request for ${booking.serviceName} from ${booking.userId?.name}`,
+          relatedId: booking._id,
+          relatedType: 'booking',
+          data: {
+            bookingId: booking._id,
+            serviceName: booking.serviceName,
+            customerName: booking.userId?.name,
+            customerPhone: booking.userId?.phone,
+            scheduledDate: booking.scheduledDate,
+            scheduledTime: booking.scheduledTime,
+            location: booking.address,
+            price: booking.finalAmount,
+            distance: null
+          },
+          pushData: {
+            type: 'new_booking',
+            dataOnly: false,
+            link: `/vendor/bookings/${booking._id}`
+          }
+        })));
       } catch (notifError) {
-        console.error('[dispatchBookingToVendors] Firebase/Notification Error:', notifError.message);
+        console.error('[dispatchBookingToVendors] Notification Error:', notifError.message);
       }
-    } else {
-      console.warn(`[dispatchBookingToVendors] No vendors found nearby for booking ${booking.bookingNumber}`);
     }
 
-    // Clear user cart
+    // Clear user cart after the one-shot dispatch decision.
     if (booking.userId?._id || booking.userId) {
       const Cart = require('../../models/Cart');
       await Cart.findOneAndUpdate({ userId: booking.userId._id || booking.userId }, { $set: { items: [] } });
     }
   } catch (error) {
-    console.error('[dispatchBookingToVendors] Error dispatching to vendors:', error);
+    if (dispatchClaimed) {
+      await Booking.findOneAndUpdate(
+        { _id: bookingId, status: BOOKING_STATUS.SEARCHING, dispatchState: 'DISPATCHING' },
+        { $set: { dispatchState: 'PENDING' } }
+      ).catch(resetError => console.error('[dispatchBookingToVendors] Dispatch reset error:', resetError));
+    }
+    console.error('[dispatchBookingToVendors] Error dispatching to zone vendors:', error);
   }
 };
 

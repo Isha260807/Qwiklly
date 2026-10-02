@@ -51,7 +51,7 @@ const BOOKING_STATUS = {
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
   REJECTED: 'rejected',
-  NO_VENDORS: 'no_vendors', // Wave search exhausted with nobody accepting
+  NO_VENDORS: 'no_vendors', // Zone broadcast search exhausted with nobody accepting
   PENDING_ADMIN: 'pending_admin' // Zone/radius matching could not find a dispatchable vendor
 };
 
@@ -62,7 +62,6 @@ const MATCH_FAILURE_REASONS = {
   SERVICE_NOT_AVAILABLE_IN_ZONE: 'SERVICE_NOT_AVAILABLE_IN_ZONE',
   NO_ZONE_VENDOR: 'NO_ZONE_VENDOR',
   NO_SERVICE_VENDOR: 'NO_SERVICE_VENDOR',
-  NO_VENDOR_WITHIN_RADIUS: 'NO_VENDOR_WITHIN_RADIUS',
   ALL_VENDORS_OFFLINE: 'ALL_VENDORS_OFFLINE',
   ALL_VENDORS_BUSY: 'ALL_VENDORS_BUSY',
   NO_AVAILABLE_VENDOR: 'NO_AVAILABLE_VENDOR',

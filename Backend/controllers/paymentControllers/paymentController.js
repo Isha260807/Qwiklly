@@ -182,12 +182,14 @@ const finalizePaymentSuccess = async (booking, paymentId) => {
     referenceId: paymentId
   });
 
-  // If booking does not have a vendor assigned yet (Upfront pre-paid booking), dispatch to nearby vendors now!
+  // If booking does not have a vendor assigned yet, retry the zone broadcast.
+  // dispatchBookingToVendors has an atomic dispatchState guard, so this does
+  // not duplicate requests when the booking was already broadcast at creation.
   if (!booking.vendorId) {
     const { dispatchBookingToVendors } = require('../bookingControllers/userBookingController');
     if (typeof dispatchBookingToVendors === 'function') {
       setImmediate(() => {
-        console.log(`[Payment] Payment successful for booking ${booking.bookingNumber}. Alerting nearby vendors now!`);
+        console.log(`[Payment] Payment successful for booking ${booking.bookingNumber}. Retrying zone vendor dispatch if needed.`);
         dispatchBookingToVendors(booking._id);
       });
     }

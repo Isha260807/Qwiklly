@@ -19,7 +19,7 @@ const TermsConditions = () => {
     },
     {
       title: '4. Service Availability & Geofenced Zones',
-      content: 'Services are offered strictly within defined active zones and service radiuses. Entering an address outside active operational boundaries will result in a serviceability notice.'
+      content: 'Services are offered strictly within defined active zones. Entering an address outside active operational boundaries will result in a serviceability notice.'
     },
     {
       title: '5. Pricing & Itemized Billing',

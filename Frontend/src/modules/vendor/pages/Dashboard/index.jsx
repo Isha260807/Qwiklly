@@ -76,7 +76,7 @@ const Dashboard = memo(() => {
   const [pendingBookings, setPendingBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [globalConfig, setGlobalConfig] = useState({ maxSearchTime: 5, waveDuration: 60 });
+  const [globalConfig, setGlobalConfig] = useState({ maxSearchTime: 5 });
 
   const ignoredBookingIds = useRef(new Set());
 
@@ -120,22 +120,11 @@ const Dashboard = memo(() => {
 
     // Build pending bookings map
     const mergedMap = new Map();
-    const vendorData = JSON.parse(localStorage.getItem('vendorData') || '{}');
-    const vendorId = vendorData._id || vendorData.id;
-
     requestedBookings.forEach(b => {
       const id = String(b._id || b.id);
 
-      // Find distance for this vendor if available
-      let distance = 'N/A';
-      if (b.potentialVendors && vendorId) {
-        const potentialVendor = b.potentialVendors.find(pv =>
-          String(pv.vendorId?._id || pv.vendorId) === String(vendorId)
-        );
-        if (potentialVendor && potentialVendor.distance) {
-          distance = `${potentialVendor.distance.toFixed(1)} km`;
-        }
-      }
+      // Booking eligibility is zone-based; distance is intentionally not used.
+      const distance = 'In your service zone';
 
       mergedMap.set(id, {
         ...b, // Spread first!

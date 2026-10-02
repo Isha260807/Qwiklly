@@ -28,7 +28,7 @@ const getVendorBookings = async (req, res) => {
         {
           vendorId: null,
           status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
-          'potentialVendors.vendorId': vId, // Only show jobs where THIS vendor is within range
+          'potentialVendors.vendorId': vId, // Only show jobs broadcast to THIS zone-eligible vendor
           rejectedVendors: { $ne: vId },    // Exclude jobs this vendor has rejected
           $or: [
             { expiresAt: null },
@@ -213,8 +213,9 @@ const acceptBooking = async (req, res) => {
     const vendorId = req.user.id;
     const { id } = req.params;
 
-    // ATOMIC UPDATE: Check status and vendorId in query to prevent race conditions
-    // Accept if status is REQUESTED/SEARCHING and vendorId is null OR already assigned to this vendor
+    // ATOMIC UPDATE: Check status, vendor eligibility and vendorId in query to
+    // prevent race conditions. Only a vendor broadcast for this zone booking
+    // can accept it, and the first successful update wins.
     const vObjId = mongoose.Types.ObjectId.isValid(vendorId) ? new mongoose.Types.ObjectId(vendorId) : vendorId;
     const updatedBooking = await Booking.findOneAndUpdate(
       {
@@ -223,7 +224,8 @@ const acceptBooking = async (req, res) => {
         $or: [
           { vendorId: null },
           { vendorId: vObjId }
-        ]
+        ],
+        'potentialVendors.vendorId': vObjId
       },
       {
         $set: {

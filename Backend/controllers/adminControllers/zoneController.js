@@ -216,17 +216,26 @@ exports.deleteZone = catchAsync(async (req, res) => {
     return res.status(404).json({ success: false, message: 'Zone not found' });
   }
 
-  const [vendorCount, bookingCount] = await Promise.all([
-    Vendor.countDocuments({ zoneIds: zone._id }),
-    require('../../models/Booking').countDocuments({ zoneId: zone._id })
-  ]);
+  const Booking = require('../../models/Booking');
 
-  if (vendorCount > 0 || bookingCount > 0) {
+  // Only block on active/pending bookings — completed/cancelled are safe to keep as history
+  const activeBookingCount = await Booking.countDocuments({
+    zoneId: zone._id,
+    status: { $in: ['PENDING', 'SEARCHING', 'ACCEPTED', 'IN_PROGRESS', 'VENDOR_ARRIVED'] }
+  });
+
+  if (activeBookingCount > 0) {
     return res.status(400).json({
       success: false,
-      message: `Cannot delete zone: it has ${vendorCount} vendor(s) assigned and ${bookingCount} booking(s) referencing it. Deactivate it instead.`
+      message: `Cannot delete zone: it has ${activeBookingCount} active/ongoing booking(s). Complete or cancel them first.`
     });
   }
+
+  // Auto-unassign all vendors from this zone before deleting
+  await Vendor.updateMany(
+    { zoneIds: zone._id },
+    { $pull: { zoneIds: zone._id } }
+  );
 
   await zone.deleteOne();
   res.status(200).json({ success: true, message: 'Zone deleted successfully' });

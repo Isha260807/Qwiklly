@@ -3,9 +3,8 @@ const mongoose = require('mongoose');
 /**
  * Zone Model
  * GeoJSON Polygon based service boundary. A user's location must fall inside
- * an active zone for the location to be serviceable at all. Radius-based
- * vendor matching (Vendor.settings.serviceRange / service.serviceRadiusKm)
- * is applied AFTER zone resolution, never instead of it.
+ * an active zone for the location to be serviceable at all. Vendor matching
+ * is zone-scoped; the zone is the complete geographic boundary.
  *
  * IMPORTANT: GeoJSON coordinates are always [lng, lat], never [lat, lng].
  */

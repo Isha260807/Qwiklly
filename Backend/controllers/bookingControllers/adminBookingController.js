@@ -1,12 +1,9 @@
 const Booking = require('../../models/Booking');
 const Vendor = require('../../models/Vendor');
 const Zone = require('../../models/Zone');
-const Service = require('../../models/UserService');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, VENDOR_STATUS } = require('../../utils/constants');
-const { calculateDistance } = require('../../services/locationService');
-const { resolveRadiusKm } = require('../../services/serviceabilityService');
-const { findQualifiedVendors, findServiceVendorsInZone } = require('../../services/vendorMatchService');
+const { findQualifiedVendors } = require('../../services/vendorMatchService');
 
 /**
  * Get all bookings with filters and search
@@ -363,8 +360,8 @@ const getBookingAnalytics = async (req, res) => {
 };
 
 /**
- * Zone -> service -> radius candidate list for a specific booking, using
- * the SAME pipeline booking creation and wave dispatch use
+ * Zone -> service -> availability candidate list for a specific booking,
+ * using the SAME pipeline booking creation and dispatch use
  * (vendorMatchService.findQualifiedVendors). Lets an admin see exactly who
  * is eligible before manually assigning a vendor to a PENDING_ADMIN booking.
  */
@@ -383,24 +380,14 @@ const getEligibleVendorsForBooking = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Zone referenced by this booking no longer exists' });
     }
 
-    const serviceDoc = await Service.findById(booking.serviceId).select('serviceRadiusKm').lean();
-    const radiusKm = await resolveRadiusKm(serviceDoc || {});
-
-    if (typeof booking.address?.lat !== 'number' || typeof booking.address?.lng !== 'number') {
-      return res.status(400).json({ success: false, message: 'Booking has no valid coordinates to match vendors against' });
-    }
-
     const { vendors, reason, debug } = await findQualifiedVendors({
       zone,
-      serviceTitle: booking.serviceName || booking.serviceCategory,
-      location: { lat: booking.address.lat, lng: booking.address.lng },
-      radiusKm
+      serviceTitle: booking.serviceName || booking.serviceCategory
     });
 
     res.status(200).json({
       success: true,
       zone: { id: zone._id, name: zone.name },
-      radiusKm,
       reason,
       debug,
       vendors: vendors.map(v => ({
@@ -408,7 +395,6 @@ const getEligibleVendorsForBooking = async (req, res) => {
         name: v.name,
         businessName: v.businessName,
         phone: v.phone,
-        distance: v.distance,
         isOnline: v.isOnline,
         availability: v.availability,
         rating: v.rating
@@ -422,8 +408,8 @@ const getEligibleVendorsForBooking = async (req, res) => {
 
 /**
  * Manually assign a vendor to a booking (typically one parked as
- * PENDING_ADMIN because automatic zone/service/radius matching found no
- * candidates). Re-validates zone/service/radius/approval/active/conflict
+ * PENDING_ADMIN because automatic zone/service/availability matching found no
+ * candidates). Re-validates zone/service/approval/active/conflict
  * server-side - never trusts that the admin's UI list is still accurate.
  */
 const assignVendorToBooking = async (req, res) => {
@@ -467,29 +453,7 @@ const assignVendorToBooking = async (req, res) => {
       return res.status(400).json({ success: false, code: 'VENDOR_INACTIVE', message: 'Vendor is not active' });
     }
 
-    // 4. Radius (user booking location -> vendor location)
-    if (typeof booking.address?.lat === 'number' && typeof booking.address?.lng === 'number') {
-      const vLat = vendor.geoLocation?.coordinates?.[1] || vendor.location?.lat || vendor.address?.lat;
-      const vLng = vendor.geoLocation?.coordinates?.[0] || vendor.location?.lng || vendor.address?.lng;
-      if (typeof vLat === 'number' && typeof vLng === 'number') {
-        const serviceDoc = await Service.findById(booking.serviceId).select('serviceRadiusKm').lean();
-        const radiusKm = await resolveRadiusKm(serviceDoc || {});
-        const effectiveRadius = Math.min(radiusKm, vendor.settings?.serviceRange || radiusKm);
-        const distance = calculateDistance(
-          { lat: booking.address.lat, lng: booking.address.lng },
-          { lat: vLat, lng: vLng }
-        );
-        if (distance > effectiveRadius) {
-          return res.status(400).json({
-            success: false,
-            code: 'VENDOR_OUTSIDE_RADIUS',
-            message: `Vendor is ${distance.toFixed(1)}km away, outside the ${effectiveRadius}km matching radius`
-          });
-        }
-      }
-    }
-
-    // 5. Booking conflict - same vendor, same scheduled date, already committed elsewhere
+    // 4. Booking conflict - same vendor, same scheduled date, already committed elsewhere
     const conflict = await Booking.findOne({
       _id: { $ne: booking._id },
       vendorId: vendor._id,

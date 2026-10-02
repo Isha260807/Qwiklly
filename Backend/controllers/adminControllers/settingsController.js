@@ -49,7 +49,7 @@ exports.updateSettings = async (req, res, next) => {
       // Support Settings
       supportEmail, supportPhone, supportWhatsapp,
       // Booking Timing
-      maxSearchTime, waveDuration, searchRadius, paymentTimeoutMinutes,
+      maxSearchTime, paymentTimeoutMinutes,
       // Payment Control
       isOnlinePaymentEnabled,
       // Dynamic Booking Slots Configuration
@@ -78,8 +78,6 @@ exports.updateSettings = async (req, res, next) => {
         cloudinaryApiKey,
         cloudinaryApiSecret,
         maxSearchTime,
-        waveDuration,
-        searchRadius,
         paymentTimeoutMinutes,
         slotStartHour,
         slotEndHour,
@@ -129,8 +127,6 @@ exports.updateSettings = async (req, res, next) => {
 
       // Booking Timing update
       if (maxSearchTime !== undefined) settings.maxSearchTime = maxSearchTime;
-      if (waveDuration !== undefined) settings.waveDuration = waveDuration;
-      if (searchRadius !== undefined) settings.searchRadius = searchRadius;
       if (paymentTimeoutMinutes !== undefined) settings.paymentTimeoutMinutes = paymentTimeoutMinutes;
       if (isOnlinePaymentEnabled !== undefined) settings.isOnlinePaymentEnabled = isOnlinePaymentEnabled;
 
@@ -153,15 +149,6 @@ exports.updateSettings = async (req, res, next) => {
       await Vendor.updateMany(
         {},
         { $set: { 'wallet.cashLimit': vendorCashLimit } }
-      );
-    }
-
-    // Propagate searchRadius to all existing vendors if it was changed
-    if (searchRadius !== undefined) {
-      console.log(`Updating all vendors with new service range: ${searchRadius}`);
-      await Vendor.updateMany(
-        {},
-        { $set: { 'settings.serviceRange': searchRadius } }
       );
     }
 
