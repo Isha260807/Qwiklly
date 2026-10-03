@@ -4,6 +4,7 @@ import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiP
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus } from '../../services/settingsService';
 import { cityService } from '../../services/cityService';
 import ZoneManagement from '../Zones';
+import VendorSlotAvailabilityPanel from './VendorSlotAvailabilityPanel';
 import { toast } from 'react-hot-toast';
 
 const AdminSettings = () => {
@@ -1229,41 +1230,6 @@ const AdminSettings = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Advance Booking Window (Days)</label>
-                    <select
-                      name="maxDaysInAdvance"
-                      value={slotSettings.maxDaysInAdvance}
-                      onChange={handleSlotChange}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                    >
-                      <option value={3}>3 Days Ahead</option>
-                      <option value={5}>5 Days Ahead</option>
-                      <option value={7}>7 Days (1 Week - Default)</option>
-                      <option value={10}>10 Days Ahead</option>
-                      <option value={14}>14 Days (2 Weeks)</option>
-                      <option value={30}>30 Days (1 Month)</option>
-                    </select>
-                    <p className="text-[11px] text-gray-400 mt-1">Number of dates visible in user calendar</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Same-Day Minimum Notice (Hours)</label>
-                    <select
-                      name="leadTimeHours"
-                      value={slotSettings.leadTimeHours}
-                      onChange={handleSlotChange}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                    >
-                      <option value={0}>0 Hours (Immediate)</option>
-                      <option value={1}>1 Hour Notice (Default)</option>
-                      <option value={2}>2 Hours Notice</option>
-                      <option value={3}>3 Hours Notice</option>
-                      <option value={4}>4 Hours Notice</option>
-                    </select>
-                    <p className="text-[11px] text-gray-400 mt-1">Buffer before user can book a slot today</p>
-                  </div>
-
-                  <div>
                     <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Approx. Service Duration (Mins)</label>
                     <input
                       type="number"
@@ -1350,6 +1316,9 @@ const AdminSettings = () => {
                   })}
                 </div>
               </div>
+
+              {/* Per-vendor availability - driven by the slot setup above */}
+              <VendorSlotAvailabilityPanel slotSettings={slotSettings} />
             </motion.div>
           )
         }

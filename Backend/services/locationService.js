@@ -300,10 +300,35 @@ const findVendorsByCity = async (city, filters = {}) => {
   }
 };
 
+/**
+ * Straight-line distance (km, 1 decimal) from a vendor's last synced location to
+ * a booking address. Display-only: vendor matching stays zone-based and never
+ * uses this. Returns null when either side has no usable coordinates.
+ */
+const getVendorBookingDistanceKm = (vendor, address) => {
+  const toNum = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+
+  let vLat = toNum(vendor?.location?.lat);
+  let vLng = toNum(vendor?.location?.lng);
+  if ((vLat === null || vLng === null) && Array.isArray(vendor?.geoLocation?.coordinates)) {
+    vLng = toNum(vendor.geoLocation.coordinates[0]);
+    vLat = toNum(vendor.geoLocation.coordinates[1]);
+  }
+  const bLat = toNum(address?.lat);
+  const bLng = toNum(address?.lng);
+
+  // [0, 0] is the schema default for "never synced", not a real position.
+  if (vLat === null || vLng === null || bLat === null || bLng === null) return null;
+  if (vLat === 0 && vLng === 0) return null;
+
+  return Math.round(calculateDistance({ lat: vLat, lng: vLng }, { lat: bLat, lng: bLng }) * 10) / 10;
+};
+
 module.exports = {
   geocodeAddress,
   findNearbyVendors,
   findVendorsByCity,
   calculateDistance,
+  getVendorBookingDistanceKm,
   getDistanceMatrix
 };

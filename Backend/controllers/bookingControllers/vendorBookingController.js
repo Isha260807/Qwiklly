@@ -99,6 +99,7 @@ const getVendorBookings = async (req, res) => {
                   _id: 1,
                   bookingNumber: 1,
                   status: 1,
+                  vendorId: 1,
                   paymentMethod: 1,
                   finalAmount: 1,
                   scheduledDate: 1,
@@ -109,6 +110,8 @@ const getVendorBookings = async (req, res) => {
                   createdAt: 1,
                   'address.addressLine1': 1,
                   'address.city': 1,
+                  'address.lat': 1,
+                  'address.lng': 1,
                   userId: 1,
                   workerId: 1,
                   serviceId: 1,
@@ -128,6 +131,17 @@ const getVendorBookings = async (req, res) => {
       const result = (aggResult && aggResult[0]) || { data: [], total: [] };
       bookings = result.data || [];
       total = result.total?.[0]?.n || 0;
+
+      // Distance from this vendor's last synced location (display-only). Customer
+      // coordinates are not sent to the client.
+      const { getVendorBookingDistanceKm } = require('../../services/locationService');
+      bookings.forEach(b => {
+        b.distance = getVendorBookingDistanceKm(req.user, b.address);
+        if (b.address) {
+          delete b.address.lat;
+          delete b.address.lng;
+        }
+      });
 
       // ── Populate only required fields ──
       if (bookings.length > 0) {
@@ -375,11 +389,14 @@ const rejectBooking = async (req, res) => {
     const vendorId = req.user.id;
     const { id } = req.params;
     const { reason } = req.body;
+    const actionableStatuses = [BOOKING_STATUS.PENDING, BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING];
 
     // Find booking
     const vObjId = mongoose.Types.ObjectId.isValid(vendorId) ? new mongoose.Types.ObjectId(vendorId) : vendorId;
     const booking = await Booking.findOne({
       _id: id,
+      vendorId: null,
+      status: { $in: actionableStatuses },
       $or: [
         { vendorId: vObjId },
         { notifiedVendors: vObjId },
@@ -389,9 +406,14 @@ const rejectBooking = async (req, res) => {
     });
 
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found or not available for rejection'
+      // Decline is intentionally idempotent. A second click, a stale socket
+      // event, or another vendor accepting first should not make the client
+      // show/retry the same alert forever.
+      return res.status(200).json({
+        success: true,
+        ignored: true,
+        message: 'Booking is no longer available for rejection',
+        data: { bookingId: id }
       });
     }
 
@@ -590,6 +612,16 @@ const updateBookingStatus = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Booking not found'
+      });
+    }
+
+    // SLOT (scheduled, fixed-price) bookings are assigned by the system. Vendors
+    // cannot cancel/reject them - only admin or the system can reassign.
+    const isSlotBooking = booking.bookingType === 'scheduled' && !booking.acceptedAt;
+    if (isSlotBooking && [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED].includes(status)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Scheduled slot bookings cannot be cancelled by the vendor. Please contact support.'
       });
     }
 

@@ -9,6 +9,32 @@
 import api from '../../../services/api';
 
 const API_BASE_URL = '/api/vendors';
+const IGNORED_BOOKING_IDS_KEY = 'vendorIgnoredBookingIds';
+
+/**
+ * Booking alerts dismissed by this vendor must stay dismissed while the
+ * booking is still visible to the vendor API or another socket event arrives.
+ */
+export const getIgnoredBookingIds = () => {
+  try {
+    if (typeof localStorage === 'undefined') return new Set();
+    const ids = JSON.parse(localStorage.getItem(IGNORED_BOOKING_IDS_KEY) || '[]');
+    return new Set(Array.isArray(ids) ? ids.map(String) : []);
+  } catch {
+    return new Set();
+  }
+};
+
+export const rememberIgnoredBooking = (bookingId) => {
+  if (!bookingId || typeof localStorage === 'undefined') return;
+
+  const ids = getIgnoredBookingIds();
+  ids.add(String(bookingId));
+
+  // Keep this bounded; booking IDs are unique, so old entries are not useful.
+  const boundedIds = Array.from(ids).slice(-200);
+  localStorage.setItem(IGNORED_BOOKING_IDS_KEY, JSON.stringify(boundedIds));
+};
 
 /**
  * Get all bookings

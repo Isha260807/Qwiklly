@@ -471,6 +471,33 @@ bookingSchema.index({ vendorId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ scheduledDate: 1, status: 1 });
 bookingSchema.index({ paymentStatus: 1, status: 1 });
 
+// Prevent two active scheduled bookings from reserving the same vendor/date/
+// start slot. Instant bookings do not participate in this constraint.
+bookingSchema.index(
+  { vendorId: 1, scheduledDate: 1, 'timeSlot.start': 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      bookingType: 'scheduled',
+      'hourlyTracking.isHourly': false,
+      vendorId: { $type: 'objectId' },
+      status: {
+        $in: [
+          'pending',
+          'awaiting_payment',
+          'confirmed',
+          'accepted',
+          'assigned',
+          'journey_started',
+          'visited',
+          'in_progress',
+          'work_done'
+        ]
+      }
+    }
+  }
+);
+
 // ── PERFORMANCE INDEXES (added for wave-scheduler & dashboard queries) ──
 // Scheduler: Booking.find({ status: 'searching', waveStartedAt: { $ne: null } })
 bookingSchema.index({ status: 1, waveStartedAt: 1 });

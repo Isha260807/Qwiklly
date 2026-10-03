@@ -103,6 +103,7 @@ const getDashboardStats = async (req, res) => {
                     _id: 1,
                     bookingNumber: 1,
                     status: 1,
+                    vendorId: 1,
                     serviceName: 1,
                     scheduledDate: 1,
                     scheduledTime: 1,

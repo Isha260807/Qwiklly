@@ -10,9 +10,11 @@ const Coupon = require('../../models/Coupon');
 const CouponUsage = require('../../models/CouponUsage');
 const { calculateBookingPrice } = require('../../services/pricingService');
 const { validationResult } = require('express-validator');
-const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
+const { BOOKING_STATUS, PAYMENT_STATUS, MATCH_FAILURE_REASONS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { sendNotificationToUser, sendNotificationToVendor } = require('../../services/firebaseAdmin');
+const { findAvailableVendorForSlot, findSlotCandidateVendors } = require('../../services/vendorMatchService');
+const { getSlotRules, isDateWithinWindow, isSlotStartAllowed } = require('../../services/slotSettingsService');
 
 /**
  * Create a new booking
@@ -54,6 +56,21 @@ const createBooking = async (req, res) => {
       bookingType, // Extract bookingType
       couponCode // Extract optional coupon code
     } = req.body;
+
+    // This project represents the user-facing SLOT mode as `scheduled`.
+    // Keep the alias isolated here so all existing instant behavior remains
+    // unchanged.
+    const requestedBookingType = String(bookingType || 'instant').toLowerCase();
+    const effectiveBookingType = requestedBookingType === 'slot' ? 'scheduled' : requestedBookingType;
+    const isScheduledBooking = effectiveBookingType === 'scheduled';
+
+    if (isScheduledBooking && (!scheduledDate || !timeSlot?.start || !timeSlot?.end || Number.isNaN(new Date(scheduledDate).getTime()))) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_SLOT',
+        message: 'Please select a valid date and time slot.'
+      });
+    }
 
     let visitingCharges = reqVisitingCharges !== undefined ? reqVisitingCharges : (reqVisitationFee || 0);
 
@@ -97,6 +114,30 @@ const createBooking = async (req, res) => {
       });
     }
 
+    // Every scheduled booking (fixed-price or duration/hourly) is silently assigned
+    // from the admin-marked vendor slots. Duration/hourly bookings keep their timer
+    // and extra-time billing; they just occupy as many consecutive slots as their
+    // booked duration needs.
+    const hasHourlyPricing = ['HOURLY', 'DURATION'].includes(String(service.pricingType || '').toUpperCase())
+      || (Array.isArray(bookedItems) && bookedItems.some(item => {
+        const itemType = item.pricingType || item.card?.pricingType;
+        return ['HOURLY', 'DURATION'].includes(String(itemType || '').toUpperCase())
+          || Boolean(item.hours || item.card?.hours);
+      }));
+    const isSlotBooking = isScheduledBooking;
+    const itemMinutes = (item) => item.card?.durationMinutes || item.durationMinutes
+      || ((item.card?.hours || item.hours || 0) * 60);
+    let slotDurationMins = Array.isArray(bookedItems)
+      ? bookedItems.reduce((sum, item) => sum + itemMinutes(item) * (item.quantity || 1), 0)
+      : 0;
+    if (hasHourlyPricing && slotDurationMins === 0) {
+      slotDurationMins = service.minDurationMinutes || 30;
+    }
+    const requestedDateValue = new Date(scheduledDate);
+    const storedScheduledDate = isSlotBooking
+      ? new Date(`${requestedDateValue.toISOString().slice(0, 10)}T00:00:00.000Z`)
+      : requestedDateValue;
+
     // 2. Fetch Category if exists
     const categoryId = service.categoryId || service.categoryIds?.[0];
     const category = categoryId ? await Category.findById(categoryId).select('title icon image slug').lean() : null;
@@ -115,8 +156,6 @@ const createBooking = async (req, res) => {
     // the booking's own coordinates.
     const { geocodeAddress } = require('../../services/locationService');
     const { checkBookingServiceability } = require('../../services/serviceabilityService');
-    const { MATCH_FAILURE_REASONS } = require('../../utils/constants');
-
     let bookingLocation;
     if (typeof address.lat === 'number' && typeof address.lng === 'number') {
       bookingLocation = { lat: address.lat, lng: address.lng };
@@ -164,8 +203,54 @@ const createBooking = async (req, res) => {
     }
 
     const resolvedZone = serviceability.zone;
-    const nearbyVendors = serviceability.vendors; // zone + service + availability scoped candidates
-    const matchFailureReason = nearbyVendors.length === 0 ? serviceability.reason : null;
+    let nearbyVendors = serviceability.vendors; // zone + service + availability scoped candidates
+    let matchFailureReason = nearbyVendors.length === 0 ? serviceability.reason : null;
+    let assignedSlotVendor = null;
+    let reservedSlotEnd = null;
+
+    if (isSlotBooking) {
+      // SLOT bookings ignore live online/presence; availability comes from the
+      // admin-marked vendor slot schedule instead.
+      nearbyVendors = await findSlotCandidateVendors(resolvedZone);
+      matchFailureReason = nearbyVendors.length === 0 ? MATCH_FAILURE_REASONS.NO_ZONE_VENDOR : null;
+    }
+
+    if (isSlotBooking && !matchFailureReason) {
+      // The global slot setup (hours, interval, blocked slots, booking window) is
+      // the master list; vendor availability only narrows it down.
+      const slotRules = await getSlotRules();
+      if (!isDateWithinWindow(requestedDateValue.toISOString().slice(0, 10), slotRules)
+        || !isSlotStartAllowed(timeSlot.start, slotRules)) {
+        return res.status(409).json({
+          success: false,
+          code: 'SLOT_UNAVAILABLE',
+          message: 'This slot is currently unavailable. Please select another time slot.'
+        });
+      }
+
+      const slotMatch = await findAvailableVendorForSlot({
+        vendors: nearbyVendors,
+        scheduledDate,
+        timeSlot,
+        durationMins: hasHourlyPricing ? slotDurationMins : 0,
+        intervalMins: slotRules.intervalMins
+      });
+
+      if (slotMatch.reason === 'INVALID_SLOT') {
+        return res.status(400).json({
+          success: false,
+          code: 'INVALID_SLOT',
+          message: 'Please select a valid date and time slot.'
+        });
+      }
+
+      assignedSlotVendor = slotMatch.vendor;
+      // Duration/hourly bookings reserve every slot they span, so store the full range.
+      if (assignedSlotVendor && slotMatch.slotEnd) reservedSlotEnd = slotMatch.slotEnd;
+      if (!assignedSlotVendor) {
+        matchFailureReason = slotMatch.reason || MATCH_FAILURE_REASONS.NO_AVAILABLE_VENDOR;
+      }
+    }
 
     console.log(`[CreateBooking] Zone=${resolvedZone.name} (${resolvedZone._id}), available zone vendors=${nearbyVendors.length}, reason=${matchFailureReason}`);
     // --- END SERVICEABILITY BLOCK ---
@@ -180,7 +265,7 @@ const createBooking = async (req, res) => {
       couponCode: couponCode || null,
       address,
       paymentMethod,
-      bookingType: bookingType || 'instant',
+      bookingType: effectiveBookingType,
       visitingChargesOverride: reqVisitingCharges !== undefined ? reqVisitingCharges : (reqVisitationFee || null)
     });
 
@@ -212,14 +297,18 @@ const createBooking = async (req, res) => {
     // "wait for admin" case - the booking is created (for the user's
     // history/audit trail) but immediately auto-cancelled with a clear
     // reason, rather than being parked for manual assignment.
-    let bookingStatus = matchFailureReason ? BOOKING_STATUS.CANCELLED : BOOKING_STATUS.SEARCHING;
+    let bookingStatus = matchFailureReason
+      ? BOOKING_STATUS.CANCELLED
+      : (isSlotBooking ? BOOKING_STATUS.CONFIRMED : BOOKING_STATUS.SEARCHING);
     const NO_VENDOR_CANCELLATION_MESSAGES = {
       NO_ZONE_VENDOR: 'No service providers are currently registered in your area.',
       NO_SERVICE_VENDOR: 'No service providers in your area currently offer this service.',
       NO_AVAILABLE_VENDOR: 'No service providers are currently available in your area.'
     };
     const cancellationReason = matchFailureReason
-      ? (NO_VENDOR_CANCELLATION_MESSAGES[matchFailureReason] || 'No service providers are currently available for this booking.')
+      ? (isSlotBooking
+        ? 'This slot is currently unavailable. Please select another time slot.'
+        : (NO_VENDOR_CANCELLATION_MESSAGES[matchFailureReason] || 'No service providers are currently available for this booking.'))
       : null;
     let bookingPaymentStatus = pricing.isFreeUnderPlan
       ? (finalAmount > 0 ? PAYMENT_STATUS.PENDING : PAYMENT_STATUS.PLAN_COVERED)
@@ -315,7 +404,7 @@ const createBooking = async (req, res) => {
     const booking = await Booking.create({
       bookingNumber,
       userId,
-      vendorId: null, // Will be assigned when vendor accepts
+      vendorId: assignedSlotVendor?._id || null, // SLOT vendors are assigned silently; other types wait for acceptance
       serviceId,
       categoryId: finalCategory?._id || categoryId,
       zoneId: resolvedZone._id,
@@ -326,7 +415,7 @@ const createBooking = async (req, res) => {
       categoryIcon: reqCategoryIcon || categoryIcon,
       brandName: reqBrandName || brandName,
       brandIcon: reqBrandIcon || brandIcon,
-      bookingType: bookingType || 'instant',
+      bookingType: effectiveBookingType,
 
       description: service.description,
       serviceImages: service.images || [],
@@ -351,11 +440,11 @@ const createBooking = async (req, res) => {
         lat: address.lat || null,
         lng: address.lng || null
       },
-      scheduledDate: new Date(scheduledDate),
+      scheduledDate: storedScheduledDate,
       scheduledTime,
       timeSlot: {
         start: timeSlot.start,
-        end: timeSlot.end
+        end: (hasHourlyPricing && reservedSlotEnd) ? reservedSlotEnd : timeSlot.end
       },
       potentialVendors: nearbyVendors.map(v => ({
         vendorId: v._id,
@@ -363,6 +452,7 @@ const createBooking = async (req, res) => {
       })),
       paymentMethod: paymentMethod || null,
       status: bookingStatus,
+      assignedAt: assignedSlotVendor ? new Date() : null,
       paymentStatus: bookingPaymentStatus,
       hourlyTracking,
       ...(matchFailureReason ? {
@@ -403,12 +493,15 @@ const createBooking = async (req, res) => {
       success: true,
       message: matchFailureReason
         ? cancellationReason
-        : 'Booking created successfully. We are finding vendors for you.',
+        : (isSlotBooking
+          ? 'Booking created successfully. Please complete payment.'
+          : 'Booking created successfully. We are finding vendors for you.'),
       data: {
         _id: booking._id,
         bookingNumber: booking.bookingNumber,
         status: booking.status,
         paymentStatus: booking.paymentStatus,
+        vendorId: booking.vendorId || null,
         finalAmount: booking.finalAmount,
         scheduledDate: booking.scheduledDate,
         scheduledTime: booking.scheduledTime,
@@ -448,13 +541,14 @@ const createBooking = async (req, res) => {
           await userForBackground.save();
         }
 
-        // Payment now happens AFTER a vendor accepts, so vendors are dispatched
-        // immediately regardless of payment method/status. Skip dispatch when
-        // zone/service/availability matching already found zero candidates - the
-        // booking was already auto-cancelled instead of being dispatched.
         if (bookingForBackground.status !== BOOKING_STATUS.CANCELLED) {
-          console.log(`[CreateBooking] Broadcasting booking ${bookingForBackground.bookingNumber} to available vendors in its zone.`);
-          await dispatchBookingToVendors(bookingForBackground._id);
+          if (isSlotBooking && bookingForBackground.vendorId) {
+            console.log(`[CreateBooking] Notifying assigned SLOT vendor for ${bookingForBackground.bookingNumber}.`);
+            await notifyAssignedSlotVendor(bookingForBackground);
+          } else if (!isSlotBooking) {
+            console.log(`[CreateBooking] Broadcasting booking ${bookingForBackground.bookingNumber} to available vendors in its zone.`);
+            await dispatchBookingToVendors(bookingForBackground._id);
+          }
         } else {
           console.log(`[CreateBooking] Booking ${bookingForBackground.bookingNumber} auto-cancelled (reason=${bookingForBackground.matchFailureReason}).`);
         }
@@ -465,10 +559,65 @@ const createBooking = async (req, res) => {
 
   } catch (error) {
     console.error('Create booking error:', error);
+    const isSlotRequest = ['scheduled', 'slot'].includes(String(req.body?.bookingType || '').toLowerCase());
+    if (isSlotRequest && error?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        code: 'SLOT_UNAVAILABLE',
+        message: 'This slot is currently unavailable. Please select another time slot.'
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Failed to create booking. Please try again.'
     });
+  }
+};
+
+/**
+ * Notify the vendor selected for a SLOT booking. This reuses the existing
+ * notification/socket channels without creating a vendor-search request that
+ * would require customer-facing acceptance UI.
+ */
+const notifyAssignedSlotVendor = async (booking) => {
+  const vendorId = booking.vendorId?._id || booking.vendorId;
+  if (!vendorId) return;
+
+  try {
+    const { getIO } = require('../../sockets');
+    const io = getIO();
+    if (io) {
+      io.to(`vendor_${vendorId.toString()}`).emit('booking_updated', {
+        bookingId: booking._id,
+        status: booking.status,
+        message: 'A scheduled booking has been assigned to you.'
+      });
+    }
+
+    await createNotification({
+      vendorId,
+      type: 'booking_request',
+      title: 'Scheduled Booking Assigned',
+      message: `A scheduled booking for ${booking.serviceName} has been assigned to you.`,
+      relatedId: booking._id,
+      relatedType: 'booking',
+      data: {
+        bookingId: booking._id,
+        serviceName: booking.serviceName,
+        scheduledDate: booking.scheduledDate,
+        scheduledTime: booking.scheduledTime,
+        location: booking.address,
+        price: booking.finalAmount,
+        paymentStatus: booking.paymentStatus
+      },
+      pushData: {
+        type: 'booking_request',
+        link: `/vendor/booking/${booking._id}`
+      }
+    });
+  } catch (error) {
+    console.error('[CreateBooking] SLOT vendor notification failed:', error);
   }
 };
 
@@ -1132,9 +1281,14 @@ const dispatchBookingToVendors = async (bookingId) => {
     const overallExpiryDate = new Date(now + 5 * 60 * 1000);
     const vendorIds = eligibleVendors.map(vendor => vendor._id);
 
+    // Display-only distance (vendor's last synced location -> booking address).
+    // Matching remains zone-based; distance never filters or orders vendors.
+    const { getVendorBookingDistanceKm } = require('../../services/locationService');
+    const distanceFor = (vendor) => getVendorBookingDistanceKm(vendor, booking.address);
+
     booking.potentialVendors = eligibleVendors.map(vendor => ({
       vendorId: vendor._id,
-      distance: null
+      distance: distanceFor(vendor)
     }));
     booking.currentWave = 1;
     booking.waveStartedAt = new Date(now);
@@ -1175,7 +1329,7 @@ const dispatchBookingToVendors = async (bookingId) => {
         vendorId: vendor._id,
         status: 'PENDING',
         wave: 1,
-        distance: null,
+        distance: distanceFor(vendor),
         sentAt: new Date(now),
         expiresAt: overallExpiryDate
       }));
@@ -1200,7 +1354,7 @@ const dispatchBookingToVendors = async (bookingId) => {
             scheduledTime: booking.scheduledTime,
             price: booking.finalAmount,
             address: booking.address,
-            distance: null,
+            distance: distanceFor(vendor),
             serviceCategory: booking.serviceCategory,
             brandName: booking.brandName,
             brandIcon: booking.brandIcon,
@@ -1231,7 +1385,7 @@ const dispatchBookingToVendors = async (bookingId) => {
             scheduledTime: booking.scheduledTime,
             location: booking.address,
             price: booking.finalAmount,
-            distance: null
+            distance: distanceFor(vendor)
           },
           pushData: {
             type: 'new_booking',

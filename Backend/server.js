@@ -198,6 +198,7 @@ app.use('/api/admin', require('./routes/admin-routes/zoneManagement.routes.js'))
 app.use('/api/admin', require('./routes/admin-routes/dashboard.routes'));
 app.use('/api/admin', require('./routes/admin-routes/userManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/vendorManagement.routes'));
+app.use('/api/admin', require('./routes/admin-routes/vendorSlotAvailability.routes'));
 app.use('/api/admin', require('./routes/admin-routes/categoryManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/brandManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/serviceManagement.routes'));
@@ -238,6 +239,7 @@ app.use('/api/notifications', require('./routes/notification.routes'));
 app.use('/api/public', require('./routes/public-routes/catalog.routes'));
 app.use('/api/public', require('./routes/public-routes/plan.routes'));
 app.use('/api/public', require('./routes/public-routes/config.routes'));
+app.use('/api/public', require('./routes/public-routes/slotAvailability.routes'));
 
 // 404 handler
 app.use((req, res) => {

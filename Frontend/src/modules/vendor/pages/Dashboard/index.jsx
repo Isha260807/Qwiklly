@@ -5,7 +5,13 @@ import { FaWallet } from 'react-icons/fa';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import { vendorDashboardService } from '../../services/dashboardService';
-import { acceptBooking, rejectBooking, assignWorker } from '../../services/bookingService';
+import {
+  acceptBooking,
+  rejectBooking,
+  assignWorker,
+  getIgnoredBookingIds,
+  rememberIgnoredBooking
+} from '../../services/bookingService';
 // Booking alert handled globally
 import { toast } from 'react-hot-toast';
 import { io } from 'socket.io-client';
@@ -78,7 +84,7 @@ const Dashboard = memo(() => {
   const [error, setError] = useState('');
   const [globalConfig, setGlobalConfig] = useState({ maxSearchTime: 5 });
 
-  const ignoredBookingIds = useRef(new Set());
+  const ignoredBookingIds = useRef(getIgnoredBookingIds());
 
   // Set background gradient
   useLayoutEffect(() => {
@@ -119,12 +125,30 @@ const Dashboard = memo(() => {
     });
 
     // Build pending bookings map
+    const vendorId = (() => {
+      try {
+        const vendorData = JSON.parse(localStorage.getItem('vendorData') || '{}');
+        return vendorData._id || vendorData.id || null;
+      } catch (e) {
+        return null;
+      }
+    })();
     const mergedMap = new Map();
     requestedBookings.forEach(b => {
       const id = String(b._id || b.id);
 
-      // Booking eligibility is zone-based; distance is intentionally not used.
-      const distance = 'In your service zone';
+      if (ignoredBookingIds.current.has(id)) return;
+
+      // Find distance for this vendor if available
+      let distance = 'In your service zone';
+      if (b.potentialVendors && vendorId) {
+        const potentialVendor = b.potentialVendors.find(pv =>
+          String(pv.vendorId?._id || pv.vendorId) === String(vendorId)
+        );
+        if (potentialVendor && potentialVendor.distance) {
+          distance = `${potentialVendor.distance.toFixed(1)} km`;
+        }
+      }
 
       mergedMap.set(id, {
         ...b, // Spread first!
@@ -326,9 +350,11 @@ const Dashboard = memo(() => {
     const handleShowAlert = (e) => {
       // e.detail contains the new booking job
       if (e.detail) {
+        const bookingId = String(e.detail.id || e.detail._id || '');
+        if (!bookingId || ignoredBookingIds.current.has(bookingId)) return;
         // Also add to pending if not present
         setPendingBookings(prev => {
-          if (prev.find(b => b.id === e.detail.id)) return prev;
+          if (prev.find(b => String(b.id || b._id) === bookingId)) return prev;
           return [e.detail, ...prev];
         });
       }
@@ -340,6 +366,7 @@ const Dashboard = memo(() => {
 
         // Add to ignored list so it doesn't come back on next fetch
         ignoredBookingIds.current.add(idToRemove);
+        rememberIgnoredBooking(idToRemove);
 
         // Remove from pending bookings state immediately
         setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== idToRemove));
@@ -373,6 +400,8 @@ const Dashboard = memo(() => {
     try {
       const response = await acceptBooking(bookingId);
       if (response.success) {
+        ignoredBookingIds.current.add(String(bookingId));
+        rememberIgnoredBooking(bookingId);
         toast.success('Booking accepted successfully!');
         setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== String(bookingId)));
 
@@ -391,22 +420,25 @@ const Dashboard = memo(() => {
   };
 
   const handleRejectAlert = async (bookingId) => {
+    ignoredBookingIds.current.add(String(bookingId));
+    rememberIgnoredBooking(bookingId);
     try {
       const response = await rejectBooking(bookingId);
       if (response.success) {
         toast.success('Booking rejected');
-        setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== String(bookingId)));
-
-        // Sync localStorage
-        const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
-        const updated = pendingJobs.filter(b => String(b.id || b._id) !== String(bookingId));
-        localStorage.setItem('vendorPendingJobs', JSON.stringify(updated));
-
-        window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: bookingId } }));
       }
     } catch (error) {
       console.error('Error rejecting:', error);
       toast.error('Failed to reject booking');
+    } finally {
+      setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== String(bookingId)));
+
+      // Sync localStorage and remove the alert from every vendor surface.
+      const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
+      const updated = pendingJobs.filter(b => String(b.id || b._id) !== String(bookingId));
+      localStorage.setItem('vendorPendingJobs', JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: bookingId } }));
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
     }
   };
 

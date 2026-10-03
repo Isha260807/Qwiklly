@@ -6,7 +6,13 @@ import Header from '../../components/layout/Header';
 import { vendorTheme as themeColors } from '../../../../theme';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import { vendorDashboardService } from '../../services/dashboardService';
-import { acceptBooking, rejectBooking, getBookings } from '../../services/bookingService';
+import {
+  acceptBooking,
+  rejectBooking,
+  getBookings,
+  getIgnoredBookingIds,
+  rememberIgnoredBooking
+} from '../../services/bookingService';
 import { useSocket } from '../../../../context/SocketContext';
 
 import PendingJobCard from '../../components/bookings/PendingJobCard';
@@ -36,6 +42,7 @@ const BookingAlerts = () => {
 
         if (response.success && response.data) {
           let bookings = [];
+          const ignoredBookingIds = getIgnoredBookingIds();
           const vendorData = JSON.parse(localStorage.getItem('vendorData') || '{}');
           const currentVendorId = String(vendorData._id || vendorData.id || '');
 
@@ -44,7 +51,7 @@ const BookingAlerts = () => {
             const isRelevantStatus = status === 'searching' || status === 'requested';
             const bVendorId = b.vendorId?._id || b.vendorId;
             const isAssignedToMe = !bVendorId || String(bVendorId) === currentVendorId;
-            return isRelevantStatus && isAssignedToMe;
+            return isRelevantStatus && isAssignedToMe && !ignoredBookingIds.has(String(b._id || b.id));
           });
 
           // Merge logic: Keep if in API OR if added recently (last 2 mins)
@@ -65,6 +72,7 @@ const BookingAlerts = () => {
 
           localPending.forEach(localB => {
             const id = String(localB.id || localB._id);
+            if (ignoredBookingIds.has(id)) return;
             if (!apiIds.has(id)) {
               const createdAt = localB.createdAt ? new Date(localB.createdAt).getTime() : Date.now();
               const expiresAt = localB.expiresAt || (localB.createdAt && localConfig ? new Date(createdAt + (localConfig.maxSearchTime || 5) * 60000).toISOString() : null);
@@ -118,6 +126,7 @@ const BookingAlerts = () => {
     const handleBookingTaken = (data) => {
       console.log('[BookingAlerts] booking_taken event received:', data);
       const takenBookingId = String(data.bookingId);
+      rememberIgnoredBooking(takenBookingId);
 
       // Remove from state immediately
       setAlerts(prev => prev.filter(a => {
@@ -154,6 +163,8 @@ const BookingAlerts = () => {
       const idToRemove = String(e.detail?.id);
       if (!idToRemove) return;
 
+      rememberIgnoredBooking(idToRemove);
+
       setAlerts(prev => prev.filter(a => String(a._id || a.id) !== idToRemove));
 
       // Also clean up localStorage
@@ -173,6 +184,7 @@ const BookingAlerts = () => {
     setLoadingAction({ id: bookingId, type: 'accept' });
     try {
       await acceptBooking(bookingId);
+      rememberIgnoredBooking(bookingId);
       toast.success('Booking accepted!');
       // Remove from list
       setAlerts(prev => prev.filter(a => (a._id || a.id) !== bookingId));
@@ -201,19 +213,20 @@ const BookingAlerts = () => {
     try {
       await rejectBooking(bookingId);
       toast.success('Booking rejected');
-      setAlerts(prev => prev.filter(a => (a._id || a.id) !== bookingId));
-
-      // Remove from localStorage
-      const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
-      const updatedPending = pendingJobs.filter(job => (job.id || job._id) !== bookingId);
-      localStorage.setItem('vendorPendingJobs', JSON.stringify(updatedPending));
-
-      window.dispatchEvent(new Event('vendorStatsUpdated'));
-      window.dispatchEvent(new Event('vendorJobsUpdated'));
     } catch (error) {
       console.error('Reject error:', error);
       toast.error('Failed to reject booking');
     } finally {
+      rememberIgnoredBooking(bookingId);
+      setAlerts(prev => prev.filter(a => String(a._id || a.id) !== String(bookingId)));
+
+      // Remove from localStorage and notify the global alert component too.
+      const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
+      const updatedPending = pendingJobs.filter(job => String(job.id || job._id) !== String(bookingId));
+      localStorage.setItem('vendorPendingJobs', JSON.stringify(updatedPending));
+      window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: bookingId } }));
+      window.dispatchEvent(new Event('vendorStatsUpdated'));
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
       setLoadingAction({ id: null, type: null });
     }
   };

@@ -95,6 +95,22 @@ const adminVendorService = {
   getVendorAnalytics: async (params = {}) => {
     const response = await api.get('/admin/reports/vendors', { params });
     return response.data;
+  },
+
+  /**
+   * Admin-marked slot availability for a vendor (SLOT bookings only)
+   */
+  getSlotAvailability: async (vendorId, from, to) => {
+    const response = await api.get(`/admin/vendors/${vendorId}/slot-availability`, { params: { from, to } });
+    return response.data;
+  },
+
+  /**
+   * Replace available slots for the given dates (empty slots = unavailable)
+   */
+  setSlotAvailability: async (vendorId, dates, slots) => {
+    const response = await api.put(`/admin/vendors/${vendorId}/slot-availability`, { dates, slots });
+    return response.data;
   }
 };
 

@@ -41,12 +41,13 @@ class BookingScheduler {
   scheduleNext(intervalMs) {
     if (this.intervalId) clearTimeout(this.intervalId);
     this.intervalId = setTimeout(async () => {
-      const [hadWaveWork, hadTimeoutWork] = await Promise.all([
+      const [hadWaveWork, hadTimeoutWork, hadSlotWork] = await Promise.all([
         this.processWaves(),
-        this.processPaymentTimeouts()
+        this.processPaymentTimeouts(),
+        this.processSlotPaymentTimeouts()
       ]);
       // Adaptive interval: if idle, slow down; if active, stay fast
-      this.scheduleNext((hadWaveWork || hadTimeoutWork) ? ACTIVE_INTERVAL_MS : IDLE_INTERVAL_MS);
+      this.scheduleNext((hadWaveWork || hadTimeoutWork || hadSlotWork) ? ACTIVE_INTERVAL_MS : IDLE_INTERVAL_MS);
     }, intervalMs);
   }
 
@@ -247,6 +248,84 @@ class BookingScheduler {
       return true;
     } catch (error) {
       console.error('[BookingScheduler] Error processing payment timeouts:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Cancel SLOT bookings (system-assigned scheduled bookings) whose online
+   * payment was not completed within the admin-configured window, so the
+   * vendor's slot becomes bookable again. Bookings a vendor accepted manually
+   * are handled by processPaymentTimeouts (they always have acceptedAt set).
+   * @returns {boolean} true if any booking was cancelled
+   */
+  async processSlotPaymentTimeouts() {
+    try {
+      const globalSettings = await Settings.findOne({ type: 'global' }).select('paymentTimeoutMinutes').lean();
+      const timeoutMs = (globalSettings?.paymentTimeoutMinutes || 15) * 60 * 1000;
+      const cutoff = new Date(Date.now() - timeoutMs);
+
+      const unpaid = await Booking.find({
+        bookingType: 'scheduled',
+        status: BOOKING_STATUS.CONFIRMED,
+        vendorId: { $ne: null },
+        acceptedAt: null,
+        paymentMethod: 'online',
+        paymentStatus: PAYMENT_STATUS.PENDING,
+        createdAt: { $lte: cutoff }
+      }).select('_id');
+
+      if (unpaid.length === 0) return false;
+
+      await Promise.all(unpaid.map(async ({ _id }) => {
+        try {
+          // Conditional update: skip if payment landed in the meantime
+          const cancelled = await Booking.findOneAndUpdate(
+            { _id, status: BOOKING_STATUS.CONFIRMED, paymentStatus: PAYMENT_STATUS.PENDING },
+            {
+              $set: {
+                status: BOOKING_STATUS.CANCELLED,
+                cancelledAt: new Date(),
+                cancelledBy: 'system',
+                cancellationReason: 'Payment was not completed in time'
+              }
+            },
+            { new: true }
+          ).lean();
+
+          if (!cancelled) return;
+
+          await createNotification({
+            userId: cancelled.userId,
+            type: 'booking_updated',
+            title: 'Booking Cancelled',
+            message: `Booking ${cancelled.bookingNumber} was cancelled because payment was not completed in time.`,
+            relatedId: cancelled._id,
+            relatedType: 'booking'
+          });
+
+          if (this.io) {
+            this.io.to(`user_${cancelled.userId}`).emit('booking_updated', {
+              bookingId: cancelled._id,
+              status: BOOKING_STATUS.CANCELLED,
+              message: 'Booking cancelled - payment not completed in time'
+            });
+            this.io.to(`vendor_${cancelled.vendorId}`).emit('booking_updated', {
+              bookingId: cancelled._id,
+              status: BOOKING_STATUS.CANCELLED,
+              message: 'An unpaid scheduled booking was released'
+            });
+          }
+
+          console.log(`[BookingScheduler] ${cancelled.bookingNumber}: Slot booking unpaid after timeout — cancelled, slot released.`);
+        } catch (err) {
+          console.error(`[BookingScheduler] Error cancelling unpaid slot booking ${_id}:`, err);
+        }
+      }));
+
+      return true;
+    } catch (error) {
+      console.error('[BookingScheduler] Error processing slot payment timeouts:', error);
       return false;
     }
   }

@@ -12,6 +12,7 @@ const TimeSlotModal = ({
   onSave,
   getDates,
   getTimeSlots,
+  slotStatusMessage = null,
   formatDate,
   isDateSelected,
   isTimeSelected,
@@ -145,8 +146,14 @@ const TimeSlotModal = ({
               <h3 className="text-base font-semibold text-black mb-3">Select start time of service</h3>
               {getTimeSlots().length === 0 ? (
                 <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                  <p className="text-gray-500 font-medium mb-1">No time slots available</p>
-                  <p className="text-sm text-gray-400">Please select a different date</p>
+                  {slotStatusMessage ? (
+                    <p className="text-gray-500 font-medium">{slotStatusMessage}</p>
+                  ) : (
+                    <>
+                      <p className="text-gray-500 font-medium mb-1">No slots available</p>
+                      <p className="text-sm text-gray-400">Please select a different date</p>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div

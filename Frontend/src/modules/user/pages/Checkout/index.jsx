@@ -13,10 +13,15 @@ import { bookingService } from '../../../../services/bookingService';
 import { paymentService } from '../../../../services/paymentService';
 import { cartService } from '../../../../services/cartService';
 import { configService } from '../../../../services/configService';
+import api from '../../../../services/api';
 import { getPlans } from '../../services/planService';
 import { userAuthService } from '../../../../services/authService';
 import { useCart } from '../../../../context/CartContext';
 import LiveBookingCard from '../../components/booking/LiveBookingCard';
+
+// Scheduled bookings can be made up to one month ahead (vendor availability is
+// marked by admin for the same window).
+const BOOKING_WINDOW_DAYS = 30;
 
 // Zone/serviceability errors from the backend (see MATCH_FAILURE_REASONS in
 // Backend/utils/constants.js) carry a `code` + friendly `message` - surface
@@ -102,6 +107,8 @@ const Checkout = () => {
   const [instantBookingCharges, setInstantBookingCharges] = useState(0);
   const [gstPercentage, setGstPercentage] = useState(0);
   const [bookingType, setBookingType] = useState('instant'); // 'instant' | 'scheduled'
+  // Admin-marked vendor availability for the selected date (SLOT bookings only)
+  const [slotAvailability, setSlotAvailability] = useState({ key: null, map: {} });
 
   // Coupon State
   const [appliedCoupon, setAppliedCoupon] = useState(null);
@@ -595,6 +602,9 @@ const Checkout = () => {
   // Search for nearby vendors
   // Unified Upfront Booking & Online Payment Handler
   const handleBookAndPay = async () => {
+    // Every scheduled booking (fixed-price or duration/hourly) is assigned to a vendor silently.
+    const isSlotBooking = bookingType === 'scheduled';
+
     // 1. Validation
     if (!addressDetails) {
       setShowAddressModal(true);
@@ -707,18 +717,29 @@ const Checkout = () => {
       const booking = bookingResponse.data;
       setBookingRequest(booking);
 
-      try {
-        if (category) await removeCategoryGlobal(category);
-        else await clearCartGlobal();
-        setCartItems([]);
-      } catch (e) { }
+      // Keep the cart intact when a SLOT is unavailable so the user can
+      // choose another time without rebuilding the booking.
+      if (!(isSlotBooking && booking.status === 'cancelled')) {
+        try {
+          if (category) await removeCategoryGlobal(category);
+          else await clearCartGlobal();
+          setCartItems([]);
+        } catch { /* Cart synchronization is best effort. */ }
+      }
 
       if (booking.status === 'cancelled') {
-        // Zone/service/radius matching found zero candidate vendors - the
-        // booking was auto-cancelled server-side, so don't show the
-        // searching modal for it.
-        toast.error(booking.cancellationReason || 'No professionals available right now in your area. Booking has been cancelled.');
+        // SLOT availability is resolved silently by the backend. Keep the
+        // user-facing failure limited to the selected slot's availability.
+        toast.error(isSlotBooking
+          ? 'This slot is currently unavailable. Please select another time slot.'
+          : (booking.cancellationReason || 'No professionals available right now in your area. Booking has been cancelled.'));
         setSearchingVendors(false);
+        return;
+      }
+
+      if (isSlotBooking) {
+        setSearchingVendors(false);
+        navigate(`/user/booking-confirmation/${booking._id}`, { replace: true });
         return;
       }
 
@@ -957,24 +978,80 @@ const Checkout = () => {
   const displaySavings = totalAmount === 0 ? (totalOriginalPrice + displayTax + displayFee + displayInstantFee) : (planSavings + couponDiscount);
   const savings = displaySavings;
 
-  // Date and time slot helper functions
+  // Scheduled bookings are auto-assigned from the admin-marked vendor schedule, so
+  // only the dates/slots a vendor is actually available for (the union across
+  // zone vendors) are offered. Duration/hourly services need that many consecutive
+  // slots, so their booked duration is sent along.
+  const isSlotBookingMode = bookingType === 'scheduled';
+  const hasHourlyItems = cartItems.some(item => {
+    const itemType = item.pricingType || item.card?.pricingType;
+    return ['HOURLY', 'DURATION'].includes(String(itemType || '').toUpperCase())
+      || Boolean(item.hours || item.card?.hours);
+  });
+  // Fixed-price services always take one slot; only duration/hourly ones span several.
+  const slotDurationMins = hasHourlyItems
+    ? cartItems.reduce((sum, item) => {
+      const mins = item.durationMinutes || item.card?.durationMinutes
+        || ((item.hours || item.card?.hours || 0) * 60);
+      return sum + mins * (item.serviceCount || 1);
+    }, 0)
+    : 0;
+  const hasAddressCoords = typeof addressDetails?.lat === 'number' && typeof addressDetails?.lng === 'number';
+  const slotServiceId = cartItems[0]
+    ? (typeof cartItems[0].serviceId === 'object'
+      ? cartItems[0].serviceId?._id || cartItems[0].serviceId?.id
+      : cartItems[0].serviceId)
+    : null;
+  const slotAvailabilityKey = (isSlotBookingMode && hasAddressCoords && slotServiceId)
+    ? `${slotServiceId}|${addressDetails.lat}|${addressDetails.lng}|${slotDurationMins}`
+    : null;
+  const slotsLoaded = slotAvailabilityKey !== null && slotAvailability.key === slotAvailabilityKey;
+  const toDateKey = (date) => date.toISOString().slice(0, 10);
+
+  useEffect(() => {
+    if (!slotAvailabilityKey) return;
+    let cancelled = false;
+
+    api.get('/public/slot-availability', {
+      params: {
+        serviceId: slotServiceId,
+        lat: addressDetails.lat,
+        lng: addressDetails.lng,
+        ...(slotDurationMins > 0 ? { durationMins: slotDurationMins } : {})
+      }
+    })
+      .then(res => {
+        if (!cancelled) setSlotAvailability({ key: slotAvailabilityKey, map: res.data?.availability || {} });
+      })
+      .catch(() => {
+        if (!cancelled) setSlotAvailability({ key: slotAvailabilityKey, map: {} });
+      });
+
+    return () => { cancelled = true; };
+  }, [slotAvailabilityKey]);
+
   const getDates = () => {
     const dates = [];
     const today = new Date();
-    const daysCount = slotConfig.maxDaysInAdvance || 7;
-    for (let i = 0; i < daysCount; i++) {
+    for (let i = 0; i < BOOKING_WINDOW_DAYS; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
       dates.push(date);
     }
-    return dates;
+    // Slot bookings: only dates on which at least one slot can be booked
+    return (isSlotBookingMode && slotsLoaded)
+      ? dates.filter(date => getTimeSlots(date).length > 0)
+      : dates;
   };
 
-  const getTimeSlots = () => {
+  const getTimeSlots = (forDate = selectedDate) => {
     const startHour = Number(slotConfig.slotStartHour ?? 9);
     const endHour = Number(slotConfig.slotEndHour ?? 21);
     const interval = Number(slotConfig.slotIntervalMins || 60);
     const disabled = slotConfig.disabledSlots || [];
+    const vendorSlots = (isSlotBookingMode && slotsLoaded && forDate)
+      ? (slotAvailability.map[toDateKey(forDate)] || [])
+      : [];
 
     const allSlots = [];
     let currentTotalMinutes = startHour * 60;
@@ -995,8 +1072,10 @@ const Checkout = () => {
       const displayM = m === 0 ? '00' : String(m).padStart(2, '0');
       const display = `${displayH}:${displayM} ${ampm}`;
 
-      // Only include active / enabled slots
-      if (!disabled.includes(valStr)) {
+      // Slot bookings list exactly the vendor-available slots; other bookings use
+      // the global slot setup (hours/interval minus blocked slots).
+      const isListed = isSlotBookingMode ? vendorSlots.includes(valStr) : !disabled.includes(valStr);
+      if (isListed) {
         allSlots.push({
           value: valStr,
           end: endStr,
@@ -1010,7 +1089,7 @@ const Checkout = () => {
 
     // If today is selected, filter out slots within the minimum lead time
     const now = new Date();
-    const isToday = selectedDate && selectedDate.toDateString() === now.toDateString();
+    const isToday = forDate && forDate.toDateString() === now.toDateString();
 
     if (!isToday) {
       return allSlots;
@@ -1021,6 +1100,20 @@ const Checkout = () => {
 
     return allSlots.filter(slot => slot.startMinutes >= currentMinutes);
   };
+
+  // Shown instead of the generic empty state while vendor slots can't be listed yet
+  const slotStatusMessage = !isSlotBookingMode ? null
+    : !hasAddressCoords ? 'Select your address to see available slots'
+      : !slotsLoaded ? 'Checking available slots...'
+        : getDates().length === 0 ? 'No slots available'
+          : !selectedDate ? 'Select a date to see available slots'
+            : null;
+
+  // Drop a previously picked time that isn't bookable on the selected date
+  useEffect(() => {
+    if (!isSlotBookingMode || !slotsLoaded || !selectedTime) return;
+    if (!getTimeSlots().some(slot => slot.value === selectedTime)) setSelectedTime(null);
+  }, [slotAvailability, selectedDate]);
 
   const formatDate = (date) => {
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1665,6 +1758,7 @@ const Checkout = () => {
         onSave={handleTimeSlotSave}
         getDates={getDates}
         getTimeSlots={getTimeSlots}
+        slotStatusMessage={slotStatusMessage}
         formatDate={formatDate}
         isDateSelected={isDateSelected}
         isTimeSelected={isTimeSelected}

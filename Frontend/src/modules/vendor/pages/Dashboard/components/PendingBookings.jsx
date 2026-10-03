@@ -2,7 +2,11 @@ import React, { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { vendorTheme as themeColors } from '../../../../../theme';
 import { toast } from 'react-hot-toast';
-import { acceptBooking, rejectBooking } from '../../../services/bookingService';
+import {
+  acceptBooking,
+  rejectBooking,
+  rememberIgnoredBooking
+} from '../../../services/bookingService';
 import PendingJobCard from '../../../components/bookings/PendingJobCard';
 
 const PendingBookings = memo(({ bookings, setPendingBookings, setActiveAlertBooking, maxSearchTimeMins = 5 }) => {
@@ -22,6 +26,7 @@ const PendingBookings = memo(({ bookings, setPendingBookings, setActiveAlertBook
       const response = await acceptBooking(bId);
 
       if (response.success) {
+        rememberIgnoredBooking(bId);
         setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== String(bId)));
 
         const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
@@ -45,23 +50,23 @@ const PendingBookings = memo(({ bookings, setPendingBookings, setActiveAlertBook
     const bId = booking.id || booking._id;
     if (loadingAction.id) return;
     setLoadingAction({ id: bId, type: 'reject' });
+    rememberIgnoredBooking(bId);
     try {
       const response = await rejectBooking(bId, 'Vendor Dashboard Reject');
 
       if (response.success) {
-        setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== String(bId)));
-
-        const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
-        const updated = pendingJobs.filter(b => String(b.id || b._id) !== String(bId));
-        localStorage.setItem('vendorPendingJobs', JSON.stringify(updated));
-
-        window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: bId } }));
         toast.success('Booking rejected');
       }
     } catch (error) {
       console.error('Error rejecting:', error);
       toast.error('Failed to reject booking');
     } finally {
+      setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== String(bId)));
+
+      const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
+      const updated = pendingJobs.filter(b => String(b.id || b._id) !== String(bId));
+      localStorage.setItem('vendorPendingJobs', JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: bId } }));
       setLoadingAction({ id: null, type: null });
     }
   };

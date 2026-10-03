@@ -93,6 +93,9 @@ const BookingTimeline = () => {
 
         // Custom logic for later stages
         let stage = statusMap[apiData.status] || 2;
+        // Scheduled (slot) bookings are assigned to the vendor at creation, so they
+        // skip the "Assign Worker" step and go straight to starting the journey.
+        if (apiData.status === 'confirmed' && isSelfJob) stage = 3;
         if (apiData.status === 'completed') {
           if (isSettled) stage = 10; // Booking Complete
           else if (isActuallyPaid || isSelfJob) stage = 9; // Final Settlement (Skip Pay Worker for self)

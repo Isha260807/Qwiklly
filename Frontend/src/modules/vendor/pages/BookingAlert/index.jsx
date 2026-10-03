@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { acceptBooking, rejectBooking, assignWorker } from '../../services/bookingService';
+import {
+  acceptBooking,
+  rejectBooking,
+  assignWorker,
+  rememberIgnoredBooking
+} from '../../services/bookingService';
 import BookingAlertModal from '../../components/bookings/BookingAlertModal';
 import { toast } from 'react-hot-toast';
 import { useSocket } from '../../../../context/SocketContext'; // Import socket context
@@ -66,6 +71,7 @@ const BookingAlert = () => {
   const handleAccept = async () => {
     try {
       await acceptBooking(id);
+      rememberIgnoredBooking(id);
 
       // Update local storage states
       const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
@@ -83,6 +89,7 @@ const BookingAlert = () => {
   };
 
   const handleReject = async () => {
+    rememberIgnoredBooking(id);
     try {
       await rejectBooking(id, 'Vendor rejected');
 
@@ -90,10 +97,12 @@ const BookingAlert = () => {
       const updated = pendingJobs.filter(job => String(job.id || job._id) !== String(id));
       localStorage.setItem('vendorPendingJobs', JSON.stringify(updated));
 
+      window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id } }));
       window.dispatchEvent(new Event('vendorJobsUpdated'));
       navigate('/vendor/dashboard', { replace: true });
     } catch (error) {
       console.error('Error rejecting:', error);
+      window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id } }));
       navigate('/vendor/dashboard', { replace: true });
     }
   };

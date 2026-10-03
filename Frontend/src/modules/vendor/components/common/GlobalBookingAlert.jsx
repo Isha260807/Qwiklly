@@ -2,12 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { BookingAlertModal } from '../bookings';
-import { acceptBooking, rejectBooking, assignWorker } from '../../services/bookingService';
+import {
+  acceptBooking,
+  rejectBooking,
+  assignWorker,
+  getIgnoredBookingIds,
+  rememberIgnoredBooking
+} from '../../services/bookingService';
 import { playAlertRing, stopAlertRing } from '../../../../utils/notificationSound';
 
 export default function GlobalBookingAlert() {
   const [activeAlertBookings, setActiveAlertBookings] = useState([]);
-  const ignoredBookingIds = useRef(new Set());
+  const ignoredBookingIds = useRef(getIgnoredBookingIds());
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -19,6 +25,14 @@ export default function GlobalBookingAlert() {
       try {
         const now = Date.now();
         let pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
+        const pendingBeforeIgnoreFilter = pendingJobs.length;
+        pendingJobs = pendingJobs.filter(job => {
+          const id = String(job.id || job._id || '');
+          return id && !ignoredBookingIds.current.has(id);
+        });
+        if (pendingJobs.length !== pendingBeforeIgnoreFilter) {
+          localStorage.setItem('vendorPendingJobs', JSON.stringify(pendingJobs));
+        }
         const vendorData = JSON.parse(localStorage.getItem('vendorData') || '{}');
         if (vendorData.approvalStatus && vendorData.approvalStatus.toLowerCase() !== 'approved') {
           setActiveAlertBookings([]);
@@ -39,7 +53,8 @@ export default function GlobalBookingAlert() {
                   const status = b.status?.toLowerCase();
                   const isRelevant = status === 'searching' || status === 'requested' || (status === 'confirmed' && !b.vendorId);
                   const isMine = !b.vendorId || String(b.vendorId?._id || b.vendorId) === vId;
-                  return isRelevant && isMine;
+                  const bookingId = String(b._id || b.id || '');
+                  return bookingId && isRelevant && isMine && !ignoredBookingIds.current.has(bookingId);
                 })
                 .map(b => ({
                   ...b,
@@ -120,6 +135,7 @@ export default function GlobalBookingAlert() {
       if (e.detail) {
         setActiveAlertBookings(prev => {
           const bId = String(e.detail.id || e.detail._id);
+          if (!bId || ignoredBookingIds.current.has(bId)) return prev;
           if (prev.find(b => String(b.id || b._id) === bId)) return prev;
           return [e.detail, ...prev];
         });
@@ -130,6 +146,7 @@ export default function GlobalBookingAlert() {
       if (e.detail?.id) {
         const idToRemove = String(e.detail.id);
         ignoredBookingIds.current.add(idToRemove);
+        rememberIgnoredBooking(idToRemove);
         setActiveAlertBookings(prev => prev.filter(b => String(b.id || b._id) !== idToRemove));
       }
     };
@@ -167,6 +184,8 @@ export default function GlobalBookingAlert() {
         try {
           await acceptBooking(id);
           await assignWorker(id, 'SELF');
+          ignoredBookingIds.current.add(String(id));
+          rememberIgnoredBooking(id);
 
           // Remove from local storage
           const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
@@ -187,6 +206,9 @@ export default function GlobalBookingAlert() {
       onReject={async (id) => {
         const idStr = String(id);
         ignoredBookingIds.current.add(idStr);
+        if (typeof rememberIgnoredBooking === 'function') {
+          rememberIgnoredBooking(id);
+        }
         try {
           // Reject via API
           await rejectBooking(id);
