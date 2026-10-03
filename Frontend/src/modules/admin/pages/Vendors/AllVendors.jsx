@@ -1,14 +1,30 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiCheck, FiX, FiEye, FiSearch, FiFilter, FiDownload, FiLoader, FiPower, FiTrash2, FiCopy, FiCreditCard, FiSmartphone } from 'react-icons/fi';
+import {
+  FiCheck,
+  FiX,
+  FiEye,
+  FiSearch,
+  FiFilter,
+  FiPower,
+  FiTrash2,
+  FiCopy,
+  FiCreditCard,
+  FiSmartphone,
+  FiMapPin,
+  FiLoader,
+  FiDownload
+} from 'react-icons/fi';
 import { FaQrcode } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 import CardShell from '../UserCategories/components/CardShell';
 import Modal from '../UserCategories/components/Modal';
 import adminVendorService from '../../../../services/adminVendorService';
 import { zoneService } from '../../../../services/zoneService';
+import { useSocket } from '../../../../context/SocketContext';
 
 const AllVendors = () => {
+  const socket = useSocket();
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'pending', 'approved', 'rejected'
@@ -24,6 +40,34 @@ const AllVendors = () => {
     loadVendors();
     loadZones();
   }, []);
+
+  // Listen for real-time vendor zone & online status changes
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleZoneStatusChange = (data) => {
+      if (!data || !data.vendorId) return;
+      setVendors(prev =>
+        prev.map(v => {
+          if (String(v.id) === String(data.vendorId)) {
+            return {
+              ...v,
+              currentZoneIds: (data.currentZoneIds || []).map(z => (typeof z === 'object' ? z._id : z)),
+              lastLocationSyncAt: data.lastLocationSyncAt || new Date(),
+              isOnline: data.isOnline !== undefined ? Boolean(data.isOnline) : v.isOnline,
+              availability: data.availability || v.availability
+            };
+          }
+          return v;
+        })
+      );
+    };
+
+    socket.on('vendor_zone_status_changed', handleZoneStatusChange);
+    return () => {
+      socket.off('vendor_zone_status_changed', handleZoneStatusChange);
+    };
+  }, [socket]);
 
   const loadZones = async () => {
     try {
@@ -62,7 +106,9 @@ const AllVendors = () => {
           bankDetails: vendor.bankDetails || {},
           createdAt: vendor.createdAt,
           isActive: vendor.isActive,
-          zoneIds: (vendor.zoneIds || []).map(z => (typeof z === 'object' ? z._id : z))
+          zoneIds: (vendor.zoneIds || []).map(z => (typeof z === 'object' ? z._id : z)),
+          currentZoneIds: (vendor.currentZoneIds || []).map(z => (typeof z === 'object' ? z._id : z)),
+          lastLocationSyncAt: vendor.lastLocationSyncAt || null
         }));
         setVendors(transformedVendors);
       } else {
@@ -80,6 +126,37 @@ const AllVendors = () => {
     if (!text) return;
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard!`);
+  };
+
+  const timeAgo = (date) => {
+    if (!date) return null;
+    const mins = Math.floor((Date.now() - new Date(date).getTime()) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+
+  // Live zone presence derived from the vendor's last GPS sync
+  const getZoneStatus = (vendor) => {
+    const zoneName = (id) => zones.find(z => String(z._id) === String(id))?.name;
+    if (!vendor.zoneIds?.length) {
+      return { key: 'unassigned', label: 'No Zone Assigned', cls: 'bg-gray-50 text-gray-500 border-gray-200', dot: 'bg-gray-400' };
+    }
+    if (!vendor.lastLocationSyncAt) {
+      return { key: 'unknown', label: 'Location Unknown', cls: 'bg-slate-50 text-slate-500 border-slate-200', dot: 'bg-slate-400' };
+    }
+    if (vendor.currentZoneIds?.length) {
+      const names = vendor.currentZoneIds.map(zoneName).filter(Boolean);
+      return {
+        key: 'inside',
+        label: `In Zone${names.length ? `: ${names.join(', ')}` : ''}`,
+        cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        dot: 'bg-emerald-500'
+      };
+    }
+    return { key: 'outside', label: 'Outside Zone', cls: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' };
   };
 
   const filteredVendors = useMemo(() => {
@@ -186,7 +263,7 @@ const AllVendors = () => {
 
   const toggleZoneSelection = (zoneId) => {
     setSelectedZoneIds(prev =>
-      prev.includes(zoneId) ? prev.filter(id => id !== zoneId) : [...prev, zoneId]
+      prev.includes(zoneId) ? [] : [zoneId] // Single zone selection in UI (1 Vendor = 1 Zone)
     );
   };
 
@@ -314,17 +391,18 @@ const AllVendors = () => {
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Business Info</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Payout Details (UPI / Bank)</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Approval & Duty Status</th>
+                  <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Live Zone Status</th>
                   <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   <tr>
-                    <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-500">Loading vendors...</td>
+                    <td colSpan="6" className="px-4 py-8 text-center text-xs text-gray-500">Loading vendors...</td>
                   </tr>
                 ) : filteredVendors.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="px-4 py-8 text-center text-xs text-gray-500">No vendors found</td>
+                    <td colSpan="6" className="px-4 py-8 text-center text-xs text-gray-500">No vendors found</td>
                   </tr>
                 ) : (
                   filteredVendors.map((vendor) => (
@@ -418,6 +496,26 @@ const AllVendors = () => {
                             </div>
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const zs = getZoneStatus(vendor);
+                          return (
+                            <div className="space-y-0.5">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border max-w-[170px] ${zs.cls}`}
+                                title={zs.label}
+                              >
+                                <FiMapPin className="w-2.5 h-2.5 shrink-0" />
+                                <span className="truncate">{zs.label}</span>
+                                {zs.key === 'outside' && <span className={`w-1.5 h-1.5 rounded-full shrink-0 animate-pulse ${zs.dot}`}></span>}
+                              </span>
+                              {vendor.lastLocationSyncAt && (
+                                <p className="text-[9px] text-gray-400">Location updated {timeAgo(vendor.lastLocationSyncAt)}</p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
@@ -547,37 +645,48 @@ const AllVendors = () => {
               </div>
             </div>
 
-            {/* Zone Assignment - controls which zones this vendor receives bookings from */}
+            {/* Zone Assignment - controls which zone this vendor receives bookings from */}
             <div className="bg-rose-50/60 rounded-xl p-4 border border-rose-100 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-xs font-bold text-gray-900">Zone Assignment</h4>
-                  <p className="text-[10px] text-gray-500">Vendor only receives bookings from selected zones</p>
+                  <h4 className="text-xs font-bold text-gray-900">Assigned Zone</h4>
+                  <p className="text-[10px] text-gray-500">Select 1 operational zone for this vendor</p>
                 </div>
                 <button
                   type="button"
                   onClick={handleSaveVendorZones}
                   disabled={savingZones}
-                  className="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-medium hover:bg-rose-700 disabled:opacity-60"
+                  className="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-medium hover:bg-rose-700 disabled:opacity-60 cursor-pointer shadow-xs"
                 >
-                  {savingZones ? 'Saving...' : 'Save Zones'}
+                  {savingZones ? 'Saving...' : 'Save Zone'}
                 </button>
               </div>
               {zones.length === 0 ? (
-                <p className="text-xs text-gray-400">No zones configured yet. Add zones under Settings &gt; Zone Management.</p>
+                <p className="text-xs text-gray-400">No zones configured yet. Add zones under Zone Management.</p>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
-                  {zones.map(zone => (
-                    <label key={zone._id} className="flex items-center gap-2 text-xs bg-white rounded-lg px-2 py-1.5 border border-gray-200 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedZoneIds.includes(zone._id)}
-                        onChange={() => toggleZoneSelection(zone._id)}
-                        className="w-3.5 h-3.5 text-rose-600 rounded focus:ring-rose-500"
-                      />
-                      <span className="truncate">{zone.name}</span>
-                    </label>
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pt-1">
+                  {zones.map(zone => {
+                    const isSelected = selectedZoneIds.includes(zone._id);
+                    return (
+                      <label
+                        key={zone._id}
+                        className={`flex items-center gap-2 text-xs rounded-xl px-3 py-2 border cursor-pointer transition-all select-none ${
+                          isSelected
+                            ? 'bg-white border-rose-600 text-rose-900 font-bold shadow-xs ring-2 ring-rose-500/20'
+                            : 'bg-white/80 border-gray-200 text-gray-700 hover:bg-white hover:border-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="vendorSingleZone"
+                          checked={isSelected}
+                          onChange={() => toggleZoneSelection(zone._id)}
+                          className="w-3.5 h-3.5 text-rose-600 focus:ring-rose-500"
+                        />
+                        <span className="truncate">{zone.name}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </div>

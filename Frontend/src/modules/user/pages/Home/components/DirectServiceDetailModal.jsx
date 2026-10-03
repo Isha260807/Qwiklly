@@ -74,6 +74,15 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
       toast.error('This service is not available at your location yet.');
       return;
     }
+
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    if (!token) {
+      toast.error('Please login to book this service');
+      onClose();
+      navigate('/user/login');
+      return;
+    }
+
     try {
       setAddingToCart(true);
       const cartItemData = {

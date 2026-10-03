@@ -256,6 +256,14 @@ const ServiceDetails = () => {
       toast.error('This service is not available at your location yet.');
       return;
     }
+
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    if (!token) {
+      toast.error('Please login to book this service');
+      navigate('/user/login', { state: { from: location } });
+      return;
+    }
+
     try {
       setAddingToCart(true);
       const cartItemData = {

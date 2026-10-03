@@ -7,6 +7,12 @@ const vendorService = {
     return response.data;
   },
 
+  // Get vendor assigned zones with polygon boundaries
+  getAssignedZones: async () => {
+    const response = await api.get('/vendors/assigned-zones');
+    return response.data;
+  },
+
   // Update vendor profile
   updateProfile: async (profileData) => {
     const response = await api.put('/vendors/profile', profileData);
@@ -24,9 +30,21 @@ const vendorService = {
     return api.put('/vendors/profile/location', { lat, lng });
   },
 
-  // Toggle online/offline status
-  toggleOnlineStatus: async (isOnline) => {
-    const response = await api.put('/vendors/profile/status', { isOnline });
+  // Sync live GPS + resolve zone presence (auto-offline outside assigned zones)
+  syncLocation: async ({ lat, lng, accuracy }) => {
+    const response = await api.post('/vendors/profile/sync-location', { lat, lng, accuracy });
+    return response.data;
+  },
+
+  // Toggle online/offline status. Going online should include fresh coords
+  // ({ lat, lng }) so the backend can verify the vendor is inside an assigned zone.
+  toggleOnlineStatus: async (isOnline, coords = null) => {
+    const payload = { isOnline };
+    if (coords && typeof coords.lat === 'number' && typeof coords.lng === 'number') {
+      payload.lat = coords.lat;
+      payload.lng = coords.lng;
+    }
+    const response = await api.put('/vendors/profile/status', payload);
     return response.data;
   },
 

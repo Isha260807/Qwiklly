@@ -1,6 +1,6 @@
 import React, { memo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiBell, FiSearch, FiUser, FiAlertTriangle } from 'react-icons/fi';
+import { FiArrowLeft, FiBell, FiSearch, FiUser, FiAlertTriangle, FiMapPin } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Logo from '../../../../components/common/Logo';
@@ -8,6 +8,7 @@ import api from '../../../../services/api';
 import vendorService from '../../../../services/vendorService';
 import { toast } from 'react-hot-toast';
 import SOSModal from '../common/SOSModal';
+import { useZonePresence, getCurrentCoords, syncZonePresence } from '../../hooks/useVendorZonePresence';
 
 const Header = memo(({
   title,
@@ -27,6 +28,10 @@ const Header = memo(({
     return profile.isOnline !== undefined ? Boolean(profile.isOnline) : true;
   });
   const [togglingStatus, setTogglingStatus] = useState(false);
+  const presence = useZonePresence();
+  // Toggle can be switched ON only when inside an assigned zone (null = not yet known)
+  const zoneBlocked = !isOnline && presence.canGoOnline === false;
+  const currentZoneName = presence.currentZones?.[0]?.name;
 
   // Listen for global SOS trigger event
   useEffect(() => {
@@ -76,25 +81,67 @@ const Header = memo(({
 
   const handleToggleOnline = async () => {
     if (togglingStatus) return;
+    const newStatus = !isOnline;
+
+    // Going OFFLINE: always allowed, optimistic
+    if (!newStatus) {
+      try {
+        setTogglingStatus(true);
+        setIsOnline(false);
+        localStorage.setItem('vendorIsOnline', 'false');
+        const res = await vendorService.toggleOnlineStatus(false);
+        if (res.success) {
+          toast.success('⚪ You are now OFFLINE', { duration: 3000 });
+          window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: false } }));
+        }
+      } catch (err) {
+        console.error('Failed to toggle status:', err);
+        setIsOnline(true);
+        localStorage.setItem('vendorIsOnline', 'true');
+        toast.error('Failed to update status. Please try again.');
+      } finally {
+        setTogglingStatus(false);
+      }
+      return;
+    }
+
+    // Going ONLINE: needs live GPS inside an assigned zone (verified by backend)
     try {
       setTogglingStatus(true);
-      const newStatus = !isOnline;
-      setIsOnline(newStatus);
-      localStorage.setItem('vendorIsOnline', String(newStatus));
 
-      const res = await vendorService.toggleOnlineStatus(newStatus);
-      if (res.success) {
-        toast.success(
-          newStatus ? '🟢 You are now ONLINE & ready for bookings' : '⚪ You are now OFFLINE',
-          { duration: 3000 }
+      let coords;
+      try {
+        coords = await getCurrentCoords({ maximumAge: 10000 });
+      } catch (geoErr) {
+        toast.error(
+          geoErr?.code === 1
+            ? 'Location permission is blocked. Allow location to go online.'
+            : 'Unable to get your location. Turn on GPS and try again.',
+          { id: 'zone-toggle-error' }
         );
-        window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: newStatus } }));
+        syncZonePresence();
+        return;
+      }
+
+      const res = await vendorService.toggleOnlineStatus(true, coords);
+      if (res.success) {
+        setIsOnline(true);
+        localStorage.setItem('vendorIsOnline', 'true');
+        toast.success('🟢 You are now ONLINE & ready for bookings', { duration: 3000 });
+        window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: true } }));
+        syncZonePresence(); // refresh zone badge
       }
     } catch (err) {
-      console.error('Failed to toggle status:', err);
-      setIsOnline(isOnline);
-      localStorage.setItem('vendorIsOnline', String(isOnline));
-      toast.error('Failed to update status. Please try again.');
+      const data = err?.response?.data;
+      if (err?.response?.status === 403 && data?.reason) {
+        toast.error(data.message || 'You cannot go online right now.', { id: 'zone-toggle-error', duration: 5000 });
+        syncZonePresence();
+      } else {
+        console.error('Failed to toggle status:', err);
+        toast.error('Failed to update status. Please try again.');
+      }
+      setIsOnline(false);
+      localStorage.setItem('vendorIsOnline', 'false');
     } finally {
       setTogglingStatus(false);
     }
@@ -172,7 +219,12 @@ const Header = memo(({
             <button
               onClick={handleToggleOnline}
               disabled={togglingStatus}
-              className="flex flex-row items-center gap-1 sm:gap-1.5 cursor-pointer select-none"
+              title={
+                zoneBlocked
+                  ? (presence.message || 'You are outside your assigned zone')
+                  : currentZoneName ? `In zone: ${currentZoneName}` : undefined
+              }
+              className={`flex flex-row items-center gap-1 sm:gap-1.5 cursor-pointer select-none ${zoneBlocked ? 'opacity-50' : ''} ${togglingStatus ? 'opacity-70' : ''}`}
             >
               {/* Toggle Track */}
               <div
@@ -259,6 +311,22 @@ const Header = memo(({
       </header>
       {/* Spacer to push content below fixed header */}
       <div className="h-[57px]" />
+
+      {/* Zone presence strip */}
+      {presence.canGoOnline === false && !isOnline && (
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-[11px] sm:text-xs font-semibold">
+          <FiMapPin className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="truncate">
+            {presence.message || 'You are outside your assigned zone. Move inside your zone to go online.'}
+          </span>
+        </div>
+      )}
+      {presence.canGoOnline && currentZoneName && (
+        <div className="flex items-center gap-1.5 px-3 sm:px-4 py-1 bg-emerald-50 border-b border-emerald-100 text-emerald-700 text-[10px] sm:text-[11px] font-semibold">
+          <FiMapPin className="w-3 h-3 flex-shrink-0" />
+          <span className="truncate">In zone: {currentZoneName}</span>
+        </div>
+      )}
 
       {/* Emergency SOS Modal */}
       <SOSModal isOpen={showSOSModal} onClose={() => setShowSOSModal(false)} />

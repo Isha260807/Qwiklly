@@ -234,6 +234,15 @@ const updateVendorOnlineStatus = async (vendorId, isOnline, socketId) => {
     };
 
     if (isOnline) {
+      // Zone gate: a vendor whose last GPS sync placed them outside all of
+      // their assigned zones must not be auto-marked online on connect.
+      const current = await Vendor.findById(vendorId).select('currentZoneIds').lean();
+      const inAssignedZone = Array.isArray(current?.currentZoneIds) && current.currentZoneIds.length > 0;
+      if (!inAssignedZone) {
+        await Vendor.findByIdAndUpdate(vendorId, { currentSocketId: socketId });
+        console.log(`[Socket] Vendor ${vendorId} connected but is outside assigned zones - kept OFFLINE`);
+        return;
+      }
       updateData.availability = 'AVAILABLE';
     } else {
       updateData.lastSeenAt = new Date();

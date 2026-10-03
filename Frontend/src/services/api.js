@@ -179,21 +179,21 @@ export const handleLogout = (role = null) => {
     localStorage.removeItem(`${prefix}Data`);
   };
 
+  const dispatchRedirect = (targetPath) => {
+    if (window.location.pathname !== targetPath) {
+      window.dispatchEvent(new CustomEvent('auth_redirect', { detail: { path: targetPath } }));
+    }
+  };
+
   if (role === 'vendor') {
     clearTokens('vendor');
-    if (window.location.pathname !== '/vendor/login') {
-      window.location.href = '/vendor/login';
-    }
+    dispatchRedirect('/vendor/login');
   } else if (role === 'worker') {
     clearTokens('worker');
-    if (window.location.pathname !== '/worker/login') {
-      window.location.href = '/worker/login';
-    }
+    dispatchRedirect('/worker/login');
   } else if (role === 'admin') {
     clearTokens('admin');
-    if (window.location.pathname !== '/admin/login') {
-      window.location.href = '/admin/login';
-    }
+    dispatchRedirect('/admin/login');
   } else {
     // User
     localStorage.removeItem('accessToken');
@@ -201,6 +201,8 @@ export const handleLogout = (role = null) => {
     localStorage.removeItem('userData');
     sessionStorage.removeItem('accessToken');
     sessionStorage.removeItem('refreshToken');
+    sessionStorage.removeItem('userData');
+
     const isGuestAllowedPage =
       window.location.pathname === '/user' ||
       window.location.pathname === '/user/' ||
@@ -208,7 +210,7 @@ export const handleLogout = (role = null) => {
       window.location.pathname.includes('/login');
 
     if (!isGuestAllowedPage) {
-      window.location.href = '/user/login';
+      dispatchRedirect('/user/login');
     }
   }
 };

@@ -1,7 +1,18 @@
 const mongoose = require('mongoose');
 const Vendor = require('../../models/Vendor');
-const { validationResult } = require('express-validator');
 const cloudinaryService = require('../../services/cloudinaryService');
+const {
+  PRESENCE_REASONS,
+  syncVendorLocation,
+  checkCanGoOnline
+} = require('../../services/vendorZonePresenceService');
+
+const PRESENCE_MESSAGES = {
+  [PRESENCE_REASONS.NO_ZONE_ASSIGNED]: 'No service zone is assigned to you yet. Please contact admin.',
+  [PRESENCE_REASONS.OUTSIDE_ASSIGNED_ZONE]: 'You are outside your assigned zone. Move inside your zone to go online.',
+  [PRESENCE_REASONS.LOCATION_REQUIRED]: 'Please enable location (GPS) to go online.',
+  [PRESENCE_REASONS.INVALID_LOCATION]: 'Could not read a valid location. Please try again.'
+};
 
 /**
  * Get vendor profile
@@ -81,6 +92,8 @@ const toggleOnlineStatus = async (req, res) => {
   try {
     const vendorId = req.user.id;
     const { isOnline } = req.body;
+    const lat = req.body.lat !== undefined ? parseFloat(req.body.lat) : undefined;
+    const lng = req.body.lng !== undefined ? parseFloat(req.body.lng) : undefined;
 
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) {
@@ -88,6 +101,29 @@ const toggleOnlineStatus = async (req, res) => {
     }
 
     const newStatus = isOnline !== undefined ? Boolean(isOnline) : !vendor.isOnline;
+
+    // Zone gate: going ONLINE requires being physically inside an assigned,
+    // active zone. Going OFFLINE is always allowed.
+    if (newStatus) {
+      const gate = await checkCanGoOnline(vendor, { lat, lng });
+      if (!gate.allowed) {
+        return res.status(403).json({
+          success: false,
+          reason: gate.reason,
+          message: PRESENCE_MESSAGES[gate.reason] || 'You cannot go online right now.',
+          isOnline: vendor.isOnline,
+          availability: vendor.availability
+        });
+      }
+      if (gate.freshReading) {
+        vendor.location = { lat, lng, updatedAt: new Date() };
+        vendor.geoLocation = { type: 'Point', coordinates: [lng, lat] };
+        vendor.currentZoneIds = gate.zones.map(z => z._id);
+        vendor.lastLocationSyncAt = new Date();
+        vendor.zoneExitStrikes = 0;
+      }
+    }
+
     vendor.isOnline = newStatus;
     vendor.availability = newStatus ? 'AVAILABLE' : 'OFFLINE';
     vendor.lastSeenAt = new Date();
@@ -361,6 +397,13 @@ const updateAddress = async (req, res) => {
 
     await vendor.save();
 
+    // Immediately resolve zone presence with new address coordinates
+    try {
+      await syncVendorLocation(vendorId, { lat: parseFloat(lat), lng: parseFloat(lng) });
+    } catch (zoneErr) {
+      console.warn('Zone presence sync on address update failed:', zoneErr.message);
+    }
+
     res.status(200).json({
       success: true,
       message: 'Address updated successfully',
@@ -387,19 +430,85 @@ const updateLocation = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Latitude and Longitude are required' });
     }
 
-    // Update only the location field
-    await Vendor.findByIdAndUpdate(vendorId, {
-      location: { lat, lng, updatedAt: new Date() },
-      geoLocation: {
-        type: 'Point',
-        coordinates: [lng, lat]
-      }
-    });
+    // Sync zone presence & location
+    const presence = await syncVendorLocation(vendorId, { lat: parseFloat(lat), lng: parseFloat(lng) });
 
-    res.status(200).json({ success: true, message: 'Location updated' });
+    res.status(200).json({ success: true, message: 'Location updated', presence });
   } catch (error) {
     console.error('Vendor location update error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Sync live GPS and resolve zone presence.
+ * Called by the vendor app on entry, on foreground and periodically.
+ * Auto-offlines an idle vendor who has left all of their assigned zones.
+ */
+const syncLocation = async (req, res) => {
+  try {
+    const lat = parseFloat(req.body.lat);
+    const lng = parseFloat(req.body.lng);
+    const accuracy = req.body.accuracy !== undefined ? parseFloat(req.body.accuracy) : undefined;
+
+    const presence = await syncVendorLocation(req.user.id, { lat, lng, accuracy });
+
+    res.status(200).json({
+      success: true,
+      ...presence,
+      message: presence.message || null
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        reason: error.reason || null,
+        message: error.message
+      });
+    }
+    console.error('Vendor sync location error:', error);
+    res.status(500).json({ success: false, message: 'Failed to sync location' });
+  }
+};
+
+/**
+ * Get assigned zones with full polygon coordinates and current presence status
+ */
+const getAssignedZones = async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+    const vendor = await Vendor.findById(vendorId).select('zoneIds currentZoneIds location address isOnline availability').lean();
+    if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found' });
+
+    const Zone = require('../../models/Zone');
+    const { findZoneByLocation } = require('../../services/zoneService');
+    const zones = await Zone.find({ _id: { $in: vendor.zoneIds || [] }, isActive: true })
+      .select('name coordinates approxArea isActive')
+      .lean();
+
+    let physicalZone = null;
+    if (vendor.location?.lat && vendor.location?.lng) {
+      physicalZone = await findZoneByLocation(vendor.location.lat, vendor.location.lng);
+    }
+
+    res.status(200).json({
+      success: true,
+      zones: zones.map(z => ({
+        id: z._id,
+        name: z.name,
+        coordinates: z.coordinates,
+        approxArea: z.approxArea
+      })),
+      currentZoneIds: (vendor.currentZoneIds || []).map(id => String(id)),
+      currentPhysicalZone: physicalZone ? { id: physicalZone._id, name: physicalZone.name } : null,
+      location: vendor.location || null,
+      address: vendor.address || null,
+      isOnline: Boolean(vendor.isOnline),
+      availability: vendor.availability
+    });
+  } catch (error) {
+    console.error('Get assigned zones error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch assigned zones' });
   }
 };
 
@@ -408,6 +517,8 @@ module.exports = {
   updateProfile,
   updateAddress,
   updateLocation,
+  syncLocation,
+  getAssignedZones,
   toggleOnlineStatus
 };
 

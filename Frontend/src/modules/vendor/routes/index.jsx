@@ -8,6 +8,7 @@ import PublicRoute from '../../../components/auth/PublicRoute';
 import CashLimitModal from '../components/common/CashLimitModal'; // Import
 import GlobalBookingAlert from '../components/common/GlobalBookingAlert';
 import VendorUnderReviewModal from '../components/common/VendorUnderReviewModal';
+import { useVendorZonePresenceTracker } from '../hooks/useVendorZonePresence';
 // import useAppNotifications from '../../../hooks/useAppNotifications.jsx'; // Handled globally
 
 // Lazy load wrapper with error handling (same as user app)
@@ -82,6 +83,10 @@ const VendorRoutes = () => {
     location.pathname.includes('/booking-alert/');
 
   const shouldShowBottomNav = !shouldHideBottomNav;
+
+  // Live GPS + zone presence tracking for authenticated vendor screens
+  const isAuthRoute = location.pathname === '/vendor/login' || location.pathname === '/vendor/signup';
+  useVendorZonePresenceTracker(!isAuthRoute);
 
   // Only show booking alerts for fully approved vendors
   const vendorApprovalStatus = (() => {

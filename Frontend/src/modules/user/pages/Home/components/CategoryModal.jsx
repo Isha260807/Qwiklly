@@ -107,6 +107,14 @@ const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCou
   };
 
   const handleServiceClick = async (service) => {
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    if (!token) {
+      toast.error('Please login to book this service');
+      onClose();
+      navigate('/user/login');
+      return;
+    }
+
     // Add to cart logic
     try {
       const cartItemData = {

@@ -228,6 +228,25 @@ const vendorSchema = new mongoose.Schema({
     type: { type: String, enum: ['Point'], default: 'Point' },
     coordinates: { type: [Number], default: [0, 0] } // [lng, lat]
   },
+  // Live zone presence (set by /vendors/profile/sync-location).
+  // ASSIGNED + active zones whose polygon contains the vendor's live GPS
+  // position right now (array because zones may overlap/nest). Empty = vendor
+  // is outside all of their assigned zones. Booking dispatch only goes to
+  // vendors whose currentZoneIds contains the booking's zone.
+  currentZoneIds: {
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Zone' }],
+    default: [],
+    index: true
+  },
+  lastLocationSyncAt: {
+    type: Date,
+    default: null
+  },
+  // Consecutive out-of-zone GPS readings (debounce against boundary jitter)
+  zoneExitStrikes: {
+    type: Number,
+    default: 0
+  },
   // Real-time Online Status
   isOnline: {
     type: Boolean,
