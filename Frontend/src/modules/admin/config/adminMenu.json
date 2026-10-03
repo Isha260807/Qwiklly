@@ -103,6 +103,15 @@
     "children": []
   },
   {
+    "section": "ZONE MANAGEMENT",
+    "title": "Zone Management",
+    "route": "/admin/zones",
+    "allowedRoles": [
+      "super_admin"
+    ],
+    "children": []
+  },
+  {
     "section": "FINANCE & SETTLEMENTS",
     "title": "Payments",
     "route": "/admin/payments",
