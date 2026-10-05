@@ -16,6 +16,32 @@ const { sendNotificationToUser, sendNotificationToVendor } = require('../../serv
 const { findAvailableVendorForSlot, findSlotCandidateVendors } = require('../../services/vendorMatchService');
 const { getSlotRules, isDateWithinWindow, isSlotStartAllowed } = require('../../services/slotSettingsService');
 
+const NORMAL_SLOT_BLOCKING_STATUSES = [
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.AWAITING_PAYMENT,
+  BOOKING_STATUS.CONFIRMED,
+  BOOKING_STATUS.ACCEPTED,
+  BOOKING_STATUS.ASSIGNED,
+  BOOKING_STATUS.JOURNEY_STARTED,
+  BOOKING_STATUS.VISITED,
+  BOOKING_STATUS.IN_PROGRESS,
+  BOOKING_STATUS.WORK_DONE
+];
+
+const isVendorSlotReservationDuplicate = (error) => {
+  if (error?.code !== 11000) return false;
+  if (error.keyPattern?.vendorId || error.keyPattern?.scheduledDate || error.keyPattern?.['timeSlot.start']) return true;
+  const duplicateIndex = String(error.index || error.message || '');
+  return duplicateIndex.includes('vendorId_1_scheduledDate_1_timeSlot.start_1');
+};
+
+const isUserSlotReservationDuplicate = (error) => {
+  if (error?.code !== 11000) return false;
+  if (error.keyPattern?.userId && error.keyPattern?.scheduledDate) return true;
+  const duplicateIndex = String(error.index || error.message || '');
+  return duplicateIndex.includes('userId_1_serviceId_1_scheduledDate_1_timeSlot.start_1');
+};
+
 /**
  * Create a new booking
  */
@@ -125,6 +151,9 @@ const createBooking = async (req, res) => {
           || Boolean(item.hours || item.card?.hours);
       }));
     const isSlotBooking = isScheduledBooking;
+    // This is the only branch that owns the NORMAL SERVICE -> SLOT behavior.
+    // Duration-based and hourly scheduled bookings keep their existing path.
+    const isNormalSlotBooking = isSlotBooking && !hasHourlyPricing;
     const itemMinutes = (item) => item.card?.durationMinutes || item.durationMinutes
       || ((item.card?.hours || item.hours || 0) * 60);
     let slotDurationMins = Array.isArray(bookedItems)
@@ -228,6 +257,27 @@ const createBooking = async (req, res) => {
         });
       }
 
+      if (isNormalSlotBooking) {
+        const duplicateDateEnd = new Date(storedScheduledDate);
+        duplicateDateEnd.setUTCDate(duplicateDateEnd.getUTCDate() + 1);
+        const duplicateBooking = await Booking.exists({
+          userId,
+          serviceId,
+          bookingType: 'scheduled',
+          scheduledDate: { $gte: storedScheduledDate, $lt: duplicateDateEnd },
+          'timeSlot.start': timeSlot.start,
+          status: { $in: NORMAL_SLOT_BLOCKING_STATUSES }
+        });
+
+        if (duplicateBooking) {
+          return res.status(409).json({
+            success: false,
+            code: 'DUPLICATE_BOOKING',
+            message: 'You already have a booking for this service and slot.'
+          });
+        }
+      }
+
       const slotMatch = await findAvailableVendorForSlot({
         vendors: nearbyVendors,
         scheduledDate,
@@ -250,6 +300,16 @@ const createBooking = async (req, res) => {
       if (!assignedSlotVendor) {
         matchFailureReason = slotMatch.reason || MATCH_FAILURE_REASONS.NO_AVAILABLE_VENDOR;
       }
+    }
+
+    // NORMAL SLOT requests must fail cleanly when the slot is gone. They must
+    // never create a cancelled/unassigned booking that could enter dispatch.
+    if (isNormalSlotBooking && matchFailureReason) {
+      return res.status(409).json({
+        success: false,
+        code: 'SLOT_UNAVAILABLE',
+        message: 'This slot is currently unavailable. Please select another time slot.'
+      });
     }
 
     console.log(`[CreateBooking] Zone=${resolvedZone.name} (${resolvedZone._id}), available zone vendors=${nearbyVendors.length}, reason=${matchFailureReason}`);
@@ -401,10 +461,10 @@ const createBooking = async (req, res) => {
       brandIcon = formattedBookedItems[0].brandIcon || null;
     }
 
-    const booking = await Booking.create({
+    const bookingData = {
       bookingNumber,
       userId,
-      vendorId: assignedSlotVendor?._id || null, // SLOT vendors are assigned silently; other types wait for acceptance
+      vendorId: assignedSlotVendor?._id || null, // NORMAL SLOT vendors are assigned silently; other types wait for acceptance
       serviceId,
       categoryId: finalCategory?._id || categoryId,
       zoneId: resolvedZone._id,
@@ -444,15 +504,19 @@ const createBooking = async (req, res) => {
       scheduledTime,
       timeSlot: {
         start: timeSlot.start,
-        end: (hasHourlyPricing && reservedSlotEnd) ? reservedSlotEnd : timeSlot.end
+        end: reservedSlotEnd || timeSlot.end
       },
-      potentialVendors: nearbyVendors.map(v => ({
+      // Do not persist a vendor list for NORMAL SLOT bookings. The user only
+      // receives the selected vendor after assignment, never the availability
+      // union used to make the slot bookable.
+      potentialVendors: isNormalSlotBooking ? [] : nearbyVendors.map(v => ({
         vendorId: v._id,
         distance: null
       })),
       paymentMethod: paymentMethod || null,
       status: bookingStatus,
       assignedAt: assignedSlotVendor ? new Date() : null,
+      ...(isNormalSlotBooking && assignedSlotVendor ? { vendorAssignmentStatus: 'ACCEPTED' } : {}),
       paymentStatus: bookingPaymentStatus,
       hourlyTracking,
       ...(matchFailureReason ? {
@@ -460,7 +524,48 @@ const createBooking = async (req, res) => {
         cancelledBy: 'system',
         cancellationReason
       } : {})
-    });
+    };
+
+    // The unique vendor/date/start index is the atomic reservation gate. If a
+    // concurrent request wins the first candidate, re-read availability and
+    // try the next eligible vendor before reporting that the slot is gone.
+    let booking;
+    const maxSlotAttempts = isNormalSlotBooking ? Math.max(1, nearbyVendors.length) : 1;
+    for (let attempt = 0; attempt < maxSlotAttempts; attempt += 1) {
+      try {
+        booking = await Booking.create(bookingData);
+        break;
+      } catch (error) {
+        if (isNormalSlotBooking && isUserSlotReservationDuplicate(error)) {
+          const duplicateError = new Error('You already have a booking for this service and slot.');
+          duplicateError.code = 'DUPLICATE_BOOKING';
+          throw duplicateError;
+        }
+
+        if (!isNormalSlotBooking || !isVendorSlotReservationDuplicate(error) || attempt >= maxSlotAttempts - 1) {
+          throw error;
+        }
+
+        const retryMatch = await findAvailableVendorForSlot({
+          vendors: nearbyVendors,
+          scheduledDate,
+          timeSlot,
+          durationMins: 0,
+          intervalMins: (await getSlotRules()).intervalMins
+        });
+
+        if (!retryMatch.vendor) {
+          const unavailableError = new Error('This slot is currently unavailable. Please select another time slot.');
+          unavailableError.code = 'SLOT_UNAVAILABLE';
+          throw unavailableError;
+        }
+
+        assignedSlotVendor = retryMatch.vendor;
+        bookingData.vendorId = assignedSlotVendor._id;
+        bookingData.timeSlot.end = retryMatch.slotEnd || timeSlot.end;
+        bookingData.assignedAt = new Date();
+      }
+    }
 
     // Create Audit / Coupon Usage Record if a coupon was used - skipped when
     // the booking was immediately auto-cancelled (no vendor available), so
@@ -560,11 +665,13 @@ const createBooking = async (req, res) => {
   } catch (error) {
     console.error('Create booking error:', error);
     const isSlotRequest = ['scheduled', 'slot'].includes(String(req.body?.bookingType || '').toLowerCase());
-    if (isSlotRequest && error?.code === 11000) {
+    if (isSlotRequest && (error?.code === 11000 || error?.code === 'SLOT_UNAVAILABLE' || error?.code === 'DUPLICATE_BOOKING')) {
       return res.status(409).json({
         success: false,
-        code: 'SLOT_UNAVAILABLE',
-        message: 'This slot is currently unavailable. Please select another time slot.'
+        code: error.code === 'DUPLICATE_BOOKING' ? 'DUPLICATE_BOOKING' : 'SLOT_UNAVAILABLE',
+        message: error.code === 'DUPLICATE_BOOKING'
+          ? 'You already have a booking for this service and slot.'
+          : 'This slot is currently unavailable. Please select another time slot.'
       });
     }
 

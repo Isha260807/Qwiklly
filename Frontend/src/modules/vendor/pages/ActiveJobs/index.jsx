@@ -63,6 +63,7 @@ const ActiveJobs = memo(() => {
         price: (job.finalAmount ? job.finalAmount * 0.9 : 0).toFixed(2),
         status: job.status,
         assignedTo: job.workerId ? { name: job.workerId.name } : (job.assignedAt ? { name: 'You (Self)' } : null),
+        bookingType: job.bookingType,
         timeSlot: {
           date: job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : 'Date',
           time: job.scheduledTime || 'Time'
@@ -252,6 +253,13 @@ const ActiveJobs = memo(() => {
                           }}
                         >
                           {job.status.replace('_', ' ')}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${job.bookingType === 'scheduled'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                            : 'bg-orange-50 text-orange-700 border border-orange-100'}`}
+                        >
+                          {job.bookingType === 'scheduled' ? 'SLOT BOOKING' : 'INSTANT BOOKING'}
                         </span>
                       </div>
                       <div

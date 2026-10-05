@@ -498,6 +498,33 @@ bookingSchema.index(
   }
 );
 
+// A user cannot submit the same NORMAL SLOT booking more than once. This is
+// separate from the vendor reservation index because two vendors may otherwise
+// allow a concurrent duplicate request to land on different vendors.
+bookingSchema.index(
+  { userId: 1, serviceId: 1, scheduledDate: 1, 'timeSlot.start': 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      bookingType: 'scheduled',
+      'hourlyTracking.isHourly': false,
+      status: {
+        $in: [
+          'pending',
+          'awaiting_payment',
+          'confirmed',
+          'accepted',
+          'assigned',
+          'journey_started',
+          'visited',
+          'in_progress',
+          'work_done'
+        ]
+      }
+    }
+  }
+);
+
 // ── PERFORMANCE INDEXES (added for wave-scheduler & dashboard queries) ──
 // Scheduler: Booking.find({ status: 'searching', waveStartedAt: { $ne: null } })
 bookingSchema.index({ status: 1, waveStartedAt: 1 });

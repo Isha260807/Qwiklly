@@ -121,6 +121,7 @@ export default function BookingDetails() {
           date: apiData.scheduledDate ? new Date(apiData.scheduledDate).toLocaleDateString() : 'Today',
           time: apiData.scheduledTime || apiData.timeSlot?.start ? `${apiData.timeSlot.start} - ${apiData.timeSlot.end}` : 'Flexible'
         },
+        bookingType: apiData.bookingType,
         status: apiData.status,
         description: apiData.description || apiData.notes || 'No description provided',
         assignedTo: apiData.workerId ? { name: apiData.workerId.name } : (apiData.assignedAt ? { name: 'You (Self)' } : null),
@@ -626,6 +627,11 @@ export default function BookingDetails() {
               <p className="text-base font-bold text-[#720C3E] leading-tight mt-0.5">
                 {booking.serviceType}
               </p>
+              <span className={`inline-flex mt-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md border ${booking.bookingType === 'scheduled'
+                ? 'bg-blue-50 text-blue-700 border-blue-100'
+                : 'bg-orange-50 text-orange-700 border-orange-100'}`}>
+                {booking.bookingType === 'scheduled' ? 'Slot Booking' : 'Instant Booking'}
+              </span>
             </div>
             <div className="flex flex-col items-end gap-1">
               <div

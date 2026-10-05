@@ -99,6 +99,7 @@ const getVendorBookings = async (req, res) => {
                   _id: 1,
                   bookingNumber: 1,
                   status: 1,
+                  bookingType: 1,
                   vendorId: 1,
                   paymentMethod: 1,
                   finalAmount: 1,

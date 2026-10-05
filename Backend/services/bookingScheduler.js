@@ -172,6 +172,13 @@ class BookingScheduler {
         status: BOOKING_STATUS.CONFIRMED,
         vendorId: { $ne: null },
         paymentStatus: PAYMENT_STATUS.PENDING,
+        // Fixed NORMAL SLOT bookings keep acceptedAt null and must never enter
+        // the vendor re-dispatch path. Preserve the existing timeout behavior
+        // for instant and Duration/Hourly scheduled bookings.
+        $or: [
+          { bookingType: { $ne: 'scheduled' } },
+          { bookingType: 'scheduled', 'hourlyTracking.isHourly': true }
+        ],
         acceptedAt: { $lte: cutoff }
       });
 

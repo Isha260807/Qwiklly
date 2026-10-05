@@ -27,6 +27,12 @@ const vendorSlotAvailabilitySchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  // Length (minutes) of each marked slot when admin saved it. Keeps existing
+  // availability valid if the global slot interval is changed later.
+  slotMinutes: {
+    type: Number,
+    default: null
+  },
   updatedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin',

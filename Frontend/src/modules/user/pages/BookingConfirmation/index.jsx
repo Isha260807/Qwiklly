@@ -97,7 +97,9 @@ const BookingConfirmation = () => {
   const { id } = useParams();
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isSearching, setIsSearching] = useState(!location.state?.noVendorsFound); // Respect passed state
+  const [isSearching, setIsSearching] = useState(
+    !location.state?.noVendorsFound && !location.state?.normalSlotBooking
+  ); // Normal SLOT bookings are already assigned at creation.
   const [confirmDialog, setConfirmDialog] = useState(false);
   const [paying, setPaying] = useState(false);
 

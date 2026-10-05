@@ -230,10 +230,11 @@ const Dashboard = memo(() => {
       location: booking.address?.addressLine1 || 'Address not available',
       price: (booking.vendorEarnings > 0 ? booking.vendorEarnings : (booking.finalAmount ? booking.finalAmount * 0.9 : 0)).toFixed(2),
       vendorEarnings: booking.vendorEarnings,
-      timeSlot: {
-        date: new Date(booking.scheduledDate).toLocaleDateString(),
-        time: booking.scheduledTime || 'Time not set'
-      },
+        timeSlot: {
+          date: new Date(booking.scheduledDate).toLocaleDateString(),
+          time: booking.scheduledTime || 'Time not set'
+        },
+      bookingType: booking.bookingType,
       status: booking.status,
       assignedTo: booking.workerId ? { name: booking.workerId.name } : null,
     }));
@@ -672,6 +673,13 @@ const Dashboard = memo(() => {
                               <p className="text-xs font-bold text-[#24151D]">{job.customerName}</p>
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 bg-[#FCEBF3] text-[#720C3E]">
                                 {job.serviceType || 'Service'}
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${job.bookingType === 'scheduled'
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                  : 'bg-orange-50 text-orange-700 border border-orange-100'}`}
+                              >
+                                {job.bookingType === 'scheduled' ? 'SLOT BOOKING' : 'INSTANT BOOKING'}
                               </span>
                             </div>
 

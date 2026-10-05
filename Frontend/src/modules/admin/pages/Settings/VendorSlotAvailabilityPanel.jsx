@@ -52,6 +52,7 @@ const VendorSlotAvailabilityPanel = ({ slotSettings }) => {
   const [vendors, setVendors] = useState([]);
   const [vendorId, setVendorId] = useState('');
   const [saved, setSaved] = useState({}); // dateKey -> slots[]
+  const [booked, setBooked] = useState({}); // dateKey -> occupied slot details[]
   const [selectedDates, setSelectedDates] = useState([]);
   const [selectedSlots, setSelectedSlots] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -72,6 +73,7 @@ const VendorSlotAvailabilityPanel = ({ slotSettings }) => {
     setSelectedSlots([]);
     if (!id) {
       setSaved({});
+      setBooked({});
       return;
     }
     try {
@@ -79,6 +81,7 @@ const VendorSlotAvailabilityPanel = ({ slotSettings }) => {
       const map = {};
       (res.availability || []).forEach(a => { map[a.date] = a.slots; });
       setSaved(map);
+      setBooked(res.bookedSlots || {});
     } catch (error) {
       toast.error('Failed to load availability');
     }
@@ -90,6 +93,11 @@ const VendorSlotAvailabilityPanel = ({ slotSettings }) => {
   const staleDates = useMemo(() => (
     Object.entries(saved).filter(([, list]) => list.some(s => !activeValues.has(s)))
   ), [saved, activeValues]);
+
+  const bookedForSelectedDate = useMemo(() => {
+    if (selectedDates.length !== 1) return new Set();
+    return new Set((booked[selectedDates[0]] || []).map(slot => slot.start));
+  }, [booked, selectedDates]);
 
   const toggleDate = (key) => {
     const next = selectedDates.includes(key)
@@ -218,6 +226,7 @@ const VendorSlotAvailabilityPanel = ({ slotSettings }) => {
               {dates.map(d => {
                 const isSelected = selectedDates.includes(d.key);
                 const count = (saved[d.key] || []).filter(s => activeValues.has(s)).length;
+                const bookedCount = (booked[d.key] || []).length;
                 return (
                   <button
                     key={d.key}
@@ -233,6 +242,7 @@ const VendorSlotAvailabilityPanel = ({ slotSettings }) => {
                     <div className="text-base font-bold leading-tight">{d.date}</div>
                     <div className="text-[10px]">{d.month}</div>
                     <div className="text-[10px] mt-0.5">{count > 0 ? `${count} slots` : 'Off'}</div>
+                    {bookedCount > 0 && <div className="text-[10px] text-amber-700 font-semibold">{bookedCount} booked</div>}
                   </button>
                 );
               })}
@@ -243,6 +253,7 @@ const VendorSlotAvailabilityPanel = ({ slotSettings }) => {
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <FiClock /> Available time slots
+                {selectedDates.length !== 1 && <span className="text-[10px] font-normal text-gray-400">Select one date to see occupied slots</span>}
               </h4>
               <div className="flex gap-1">
                 <button
@@ -266,16 +277,19 @@ const VendorSlotAvailabilityPanel = ({ slotSettings }) => {
                 <button
                   key={s.value}
                   type="button"
-                  disabled={s.blocked}
+                  disabled={s.blocked || bookedForSelectedDate.has(s.value)}
                   onClick={() => toggleSlot(s)}
-                  title={s.blocked ? 'Blocked in the slot setup above' : ''}
+                  title={s.blocked ? 'Blocked in the slot setup above' : bookedForSelectedDate.has(s.value) ? 'Already occupied by a booking' : ''}
                   className={`rounded-lg border px-2 py-2 text-sm font-medium transition-colors ${s.blocked
                     ? 'bg-gray-100 border-gray-200 text-gray-400 line-through cursor-not-allowed'
+                    : bookedForSelectedDate.has(s.value)
+                      ? 'bg-amber-50 border-amber-300 text-amber-800 cursor-not-allowed'
                     : selectedSlots.includes(s.value)
                       ? 'bg-[#720C3E] text-white border-[#720C3E]'
                       : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
                 >
-                  {s.label}
+                  <span>{s.label}</span>
+                  {bookedForSelectedDate.has(s.value) && <span className="block text-[10px] font-bold mt-0.5">Booked</span>}
                 </button>
               ))}
             </div>

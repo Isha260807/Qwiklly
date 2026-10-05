@@ -180,17 +180,32 @@ const pad2 = (n) => String(n).padStart(2, '0');
 const minutesToHHMM = (minutes) => `${pad2(Math.floor(minutes / 60))}:${pad2(minutes % 60)}`;
 
 /**
- * Slots a booking occupies, in whole slot intervals. Fixed-price services
- * occupy one slot; duration/hourly services occupy as many consecutive slots
- * as their booked duration needs.
+ * Slots a booking occupies, in whole slot units. Fixed-price services occupy one
+ * slot; duration/hourly services occupy as many consecutive slots as their
+ * booked duration needs (e.g. 90 min on 60-min slots = 2 slots).
  */
-const getSlotSpan = (startMinutes, durationMins, intervalMins) => {
-  const slotCount = Math.max(1, Math.ceil((Number(durationMins) || 0) / intervalMins));
+const getSlotSpan = (startMinutes, durationMins, unitMins) => {
+  const slotCount = Math.max(1, Math.ceil((Number(durationMins) || 0) / unitMins));
   return {
     slotCount,
-    starts: Array.from({ length: slotCount }, (_, i) => startMinutes + i * intervalMins),
-    range: { start: startMinutes, end: startMinutes + slotCount * intervalMins }
+    starts: Array.from({ length: slotCount }, (_, i) => startMinutes + i * unitMins),
+    range: { start: startMinutes, end: startMinutes + slotCount * unitMins }
   };
+};
+
+/**
+ * Length (minutes) of the slots admin marked on a vendor-day. New records store
+ * it (`slotMinutes`), so later changes to the global slot interval never change
+ * what an already-marked slot means. Older records without it fall back to
+ * 60 min when every marked slot starts on the hour, otherwise to the current
+ * global interval.
+ */
+const resolveSlotUnit = (doc, markedStarts, fallbackMins) => {
+  const stored = Number(doc.slotMinutes);
+  if (stored > 0) return stored;
+  const starts = [...markedStarts];
+  if (starts.length > 0 && starts.every(start => start % 60 === 0)) return 60;
+  return fallbackMins || 60;
 };
 
 /**
@@ -201,42 +216,20 @@ const getSlotSpan = (startMinutes, durationMins, intervalMins) => {
  */
 const findSlotCandidateVendors = async (zone) => {
   const zoneVendorIds = await findVendorsByZone(zone);
-  return findServiceVendorsInZone(zoneVendorIds);
+  const vendors = await findServiceVendorsInZone(zoneVendorIds);
+  // Stable ordering keeps assignment deterministic while the unique booking
+  // index still provides the atomic first-wins reservation under concurrency.
+  return vendors.sort((a, b) => a._id.toString().localeCompare(b._id.toString()));
 };
-
-/**
- * Slot starts (as minutes from midnight) the admin marked for each vendor on a
- * date. Returns Map<vendorId string, Set<minutes>>.
- */
-const getAdminMarkedSlots = async (vendorIds, dateKey) => {
-  const docs = await VendorSlotAvailability.find({
-    vendorId: { $in: vendorIds },
-    date: dateKey
-  }).select('vendorId slots').lean();
-
-  const marked = new Map();
-  docs.forEach(doc => {
-    const minutes = new Set(
-      (doc.slots || []).map(parseSlotTime).filter(value => value !== null)
-    );
-    marked.set(doc.vendorId.toString(), minutes);
-  });
-  return marked;
-};
-
-const getBlockingBookings = (vendorIds, dayRange) => Booking.find({
-  vendorId: { $in: vendorIds },
-  scheduledDate: { $gte: dayRange.start, $lt: dayRange.end },
-  status: { $in: SLOT_BLOCKING_STATUSES }
-}).select('vendorId timeSlot').lean();
 
 const rangesOverlap = (a, b) => a.start < b.end && b.start < a.end;
 
 /**
  * Select an assignable vendor for a scheduled/SLOT booking.
- * A vendor qualifies only if the admin marked EVERY slot the booking needs
- * (one for fixed-price, several consecutive ones for duration/hourly) for that
- * date AND the vendor has no overlapping active booking.
+ * A vendor qualifies only if admin marked EVERY slot the booking needs (one for
+ * fixed-price, several consecutive ones for duration/hourly) for that date AND
+ * the vendor has no overlapping active booking. The booking's duration is
+ * counted in that vendor's own slot length automatically.
  */
 const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, durationMins = 0, intervalMins = 60 }) => {
   const requestedStart = parseSlotTime(timeSlot?.start);
@@ -247,42 +240,57 @@ const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, du
     return { vendor: null, reason: 'INVALID_SLOT' };
   }
 
-  const span = getSlotSpan(requestedStart, durationMins, intervalMins);
-
   const candidateIds = (vendors || []).map(vendor => vendor._id);
   if (candidateIds.length === 0) {
     return { vendor: null, reason: MATCH_FAILURE_REASONS.NO_AVAILABLE_VENDOR };
   }
 
-  const marked = await getAdminMarkedSlots(candidateIds, dateKey);
-  const availableCandidates = vendors.filter(vendor => {
-    const vendorSlots = marked.get(vendor._id.toString());
-    return vendorSlots && span.starts.every(start => vendorSlots.has(start));
+  const docs = await VendorSlotAvailability.find({
+    vendorId: { $in: candidateIds },
+    date: dateKey
+  }).select('vendorId slots slotMinutes').lean();
+
+  const markedByVendor = new Map();
+  docs.forEach(doc => {
+    const starts = new Set((doc.slots || []).map(parseSlotTime).filter(value => value !== null));
+    markedByVendor.set(doc.vendorId.toString(), { starts, unit: resolveSlotUnit(doc, starts, intervalMins) });
   });
 
-  if (availableCandidates.length === 0) {
+  // Candidates that have every needed slot marked, each with its own span
+  const qualified = [];
+  vendors.forEach(vendor => {
+    const marked = markedByVendor.get(vendor._id.toString());
+    if (!marked) return;
+    const span = getSlotSpan(requestedStart, durationMins, marked.unit);
+    if (span.starts.every(start => marked.starts.has(start))) qualified.push({ vendor, span });
+  });
+
+  if (qualified.length === 0) {
     return { vendor: null, reason: MATCH_FAILURE_REASONS.NO_AVAILABLE_VENDOR };
   }
 
-  const existingBookings = await getBlockingBookings(availableCandidates.map(v => v._id), dayRange);
+  const existingBookings = await Booking.find({
+    vendorId: { $in: qualified.map(item => item.vendor._id) },
+    scheduledDate: { $gte: dayRange.start, $lt: dayRange.end },
+    status: { $in: SLOT_BLOCKING_STATUSES }
+  }).select('vendorId timeSlot').lean();
 
-  const hasConflict = (booking) => {
-    const bookingRange = getSlotRange(booking.timeSlot);
+  const bookedByVendor = new Map();
+  existingBookings.forEach(booking => {
+    const key = booking.vendorId.toString();
+    if (!bookedByVendor.has(key)) bookedByVendor.set(key, []);
     // An existing active booking without a parseable slot is safest treated as
     // blocking the vendor for that day rather than risking an overlap.
-    if (!bookingRange) return true;
-    return rangesOverlap(span.range, bookingRange);
-  };
+    bookedByVendor.get(key).push(getSlotRange(booking.timeSlot) || { start: 0, end: 24 * 60 });
+  });
 
-  const blockedVendorIds = new Set(
-    existingBookings
-      .filter(hasConflict)
-      .map(booking => booking.vendorId.toString())
-  );
+  const match = qualified.find(({ vendor, span }) => {
+    const booked = bookedByVendor.get(vendor._id.toString()) || [];
+    return !booked.some(existing => rangesOverlap(span.range, existing));
+  });
 
-  const vendor = availableCandidates.find(candidate => !blockedVendorIds.has(candidate._id.toString()));
-  return vendor
-    ? { vendor, reason: null, slotEnd: minutesToHHMM(span.range.end) }
+  return match
+    ? { vendor: match.vendor, reason: null, slotEnd: minutesToHHMM(match.span.range.end) }
     : { vendor: null, reason: MATCH_FAILURE_REASONS.NO_AVAILABLE_VENDOR };
 };
 
@@ -292,7 +300,7 @@ const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, du
  * marked by admin and no overlapping active booking. Returns
  * { 'YYYY-MM-DD': ['09:00', ...] } and omits dates with no bookable start.
  */
-const getBookableSlotMap = async ({ vendors, dateKeys, intervalMins, durationMins = 0 }) => {
+const getBookableSlotMap = async ({ vendors, dateKeys, intervalMins = 60, durationMins = 0 }) => {
   const candidateIds = (vendors || []).map(vendor => vendor._id);
   if (candidateIds.length === 0 || !dateKeys || dateKeys.length === 0) return {};
 
@@ -304,7 +312,7 @@ const getBookableSlotMap = async ({ vendors, dateKeys, intervalMins, durationMin
   const docs = await VendorSlotAvailability.find({
     vendorId: { $in: candidateIds },
     date: { $in: dateKeys }
-  }).select('vendorId date slots').lean();
+  }).select('vendorId date slots slotMinutes').lean();
   if (docs.length === 0) return {};
 
   const bookings = await Booking.find({
@@ -324,9 +332,10 @@ const getBookableSlotMap = async ({ vendors, dateKeys, intervalMins, durationMin
   const byDate = {}; // dateKey -> Set<start minutes>
   docs.forEach(doc => {
     const markedStarts = new Set((doc.slots || []).map(parseSlotTime).filter(start => start !== null));
+    const unit = resolveSlotUnit(doc, markedStarts, intervalMins);
     const booked = bookedRanges.get(`${doc.vendorId}|${doc.date}`) || [];
     markedStarts.forEach(start => {
-      const span = getSlotSpan(start, durationMins, intervalMins);
+      const span = getSlotSpan(start, durationMins, unit);
       if (!span.starts.every(s => markedStarts.has(s))) return;
       if (booked.some(existing => rangesOverlap(span.range, existing))) return;
       if (!byDate[doc.date]) byDate[doc.date] = new Set();

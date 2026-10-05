@@ -739,7 +739,10 @@ const Checkout = () => {
 
       if (isSlotBooking) {
         setSearchingVendors(false);
-        navigate(`/user/booking-confirmation/${booking._id}`, { replace: true });
+        navigate(`/user/booking-confirmation/${booking._id}`, {
+          replace: true,
+          state: { normalSlotBooking: !hasHourlyItems }
+        });
         return;
       }
 
