@@ -231,15 +231,6 @@ const getPublicServices = async (req, res) => {
 
     const query = { status: 'active' };
 
-    if (cityId) {
-      query.$or = [
-        { cityId: cityId },
-        { cityIds: cityId },
-        { cityIds: { $size: 0 } },
-        { cityIds: { $exists: false } }
-      ];
-    }
-
     if (brandId) {
       query.brandId = brandId;
     } else if (brandSlug) {
@@ -427,15 +418,6 @@ const getPublicHomeData = async (req, res) => {
     const { cityId, zoneId } = req.query;
 
     const serviceQuery = { status: 'active' };
-    if (cityId) {
-      serviceQuery.$or = [
-        { cityId: cityId },
-        { cityIds: cityId },
-        { cityIds: { $size: 0 } },
-        { cityIds: { $exists: false } }
-      ];
-    }
-
     // Banners are zone-based - empty/missing zoneIds means shown everywhere
     const bannerQuery = { isActive: true };
     if (zoneId) {
@@ -447,7 +429,7 @@ const getPublicHomeData = async (req, res) => {
     }
 
     // Fetch all in parallel
-    const [categoriesRes, servicesRes, homeContent, bannersRes] = await Promise.all([
+    const [categoriesRes, servicesRes, homeContent, globalHomeContent, bannersRes] = await Promise.all([
       Category.find({ status: 'active', cityIds: cityId ? cityId : { $exists: true } })
         .select('title slug homeIconUrl homeBadge hasSaleBadge')
         .sort({ homeOrder: 1 })
@@ -456,6 +438,7 @@ const getPublicHomeData = async (req, res) => {
         .sort({ displayOrder: 1, createdAt: -1 })
         .lean(),
       HomeContent.getHomeContent(cityId),
+      cityId ? HomeContent.getHomeContent(null) : null,
       Banner.find(bannerQuery)
         .populate('targetCategoryId', 'title slug homeIconUrl')
         .populate('targetServiceId', 'title slug iconUrl')
@@ -519,6 +502,7 @@ const getPublicHomeData = async (req, res) => {
     let formattedContent = null;
     if (homeContent) {
       const contentObj = homeContent.toObject();
+      const globalContentObj = globalHomeContent?.toObject?.() || contentObj;
       formattedContent = {
         banners: formattedBanners.length > 0 ? formattedBanners : (contentObj.banners || []).map(item => ({
           imageUrl: item.imageUrl,
@@ -564,6 +548,17 @@ const getPublicHomeData = async (req, res) => {
           })),
           order: section.order
         })),
+        trustSection: {
+          isVisible: globalContentObj.trustSection?.isVisible ?? true,
+          title: globalContentObj.trustSection?.title || 'Relax, your home is in professional hands',
+          trustedBy: globalContentObj.trustSection?.trustedBy || '15 lakh',
+          trustedLabel: globalContentObj.trustSection?.trustedLabel || 'Families',
+          rating: globalContentObj.trustSection?.rating || '',
+          ratingLabel: globalContentObj.trustSection?.ratingLabel || '3 Lakh+ Ratings',
+          imageUrl: globalContentObj.trustSection?.imageUrl || '/Homster xpert .png',
+          cartCta: globalContentObj.trustSection?.cartCta || 'Go to cart',
+          emptyCartCta: globalContentObj.trustSection?.emptyCartCta || 'Browse services'
+        },
         isBannersVisible: contentObj.isBannersVisible ?? true,
         isPromosVisible: contentObj.isPromosVisible ?? true,
         isCuratedVisible: contentObj.isCuratedVisible ?? true,

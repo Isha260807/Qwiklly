@@ -17,6 +17,7 @@ import { FiMapPin, FiBell } from 'react-icons/fi';
 import PromoCarousel from './components/PromoCarousel';
 import TopHeroBanner from './components/TopHeroBanner';
 import ServicesWeOffer from './components/ServicesWeOffer';
+import TrustFooterSection from './components/TrustFooterSection';
 import DirectServiceDetailModal from './components/DirectServiceDetailModal';
 // Lazy load OTHER heavy components
 const NewAndNoteworthy = lazy(() => import('./components/NewAndNoteworthy'));
@@ -558,7 +559,7 @@ const Home = () => {
   }
 
   return (
-    <div className="min-h-screen pb-20 relative bg-white">
+    <div className="min-h-screen relative bg-white">
       {/* Refined Brand Mesh Gradient Background */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0"
@@ -641,7 +642,7 @@ const Home = () => {
           </motion.div>
         )}
 
-        <main className="pt-2 sm:pt-3 space-y-4 sm:space-y-6 pb-24 max-w-screen-xl mx-auto w-full">
+        <main className="pt-2 sm:pt-3 space-y-4 sm:space-y-6 max-w-screen-xl mx-auto w-full">
           <>
             {/* Top Hero Banner Carousel */}
               {banners.filter(b => b.bannerType === 'top' || b.bannerType === 'hero' || (!b.bannerType && b.bannerType !== 'footer' && b.bannerType !== 'bottom')).length > 0 && (
@@ -891,6 +892,10 @@ const Home = () => {
                   ))}
                 </motion.section>
               )}
+          <TrustFooterSection
+            config={homeContent ? homeContent.trustSection : undefined}
+            services={services}
+          />
           </>
         </main>
       </motion.div>

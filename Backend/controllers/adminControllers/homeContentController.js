@@ -22,6 +22,7 @@ const getHomeContent = async (req, res) => {
         noteworthy: homeContent.noteworthy || [],
         booked: homeContent.booked || [],
         categorySections: homeContent.categorySections || [],
+        trustSection: homeContent.trustSection || {},
         categorySections: homeContent.categorySections || [],
         isActive: homeContent.isActive,
         isBannersVisible: homeContent.isBannersVisible ?? true,
@@ -118,6 +119,13 @@ const updateHomeContent = async (req, res) => {
       homeContent.categorySections = sanitizeItems(req.body.categorySections);
       homeContent.markModified('categorySections');
     }
+    if (req.body.trustSection !== undefined && req.body.trustSection !== null) {
+      homeContent.trustSection = {
+        ...homeContent.trustSection?.toObject?.(),
+        ...req.body.trustSection
+      };
+      homeContent.markModified('trustSection');
+    }
     if (req.body.isActive !== undefined) homeContent.isActive = req.body.isActive;
     if (req.body.isBannersVisible !== undefined) homeContent.isBannersVisible = req.body.isBannersVisible;
     if (req.body.isPromosVisible !== undefined) homeContent.isPromosVisible = req.body.isPromosVisible;
@@ -141,6 +149,7 @@ const updateHomeContent = async (req, res) => {
         noteworthy: homeContent.noteworthy,
         booked: homeContent.booked,
         categorySections: homeContent.categorySections,
+        trustSection: homeContent.trustSection,
         categorySections: homeContent.categorySections,
         isActive: homeContent.isActive,
         isBannersVisible: homeContent.isBannersVisible,

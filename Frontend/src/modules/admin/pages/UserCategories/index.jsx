@@ -8,6 +8,7 @@ import BrandsPage from "./pages/BrandsPage";
 import VendorServicesPage from "./pages/VendorServicesPage";
 import VendorPartsPage from "./pages/VendorPartsPage";
 import ServicePageBuilder from "./pages/ServicePageBuilder";
+import HomeContentPage from "./pages/HomeContentPage";
 
 const UserCategories = () => {
   const [catalog, setCatalog] = useState(() => ensureIds(loadCatalog()));
@@ -27,6 +28,7 @@ const UserCategories = () => {
           <Route path="sections" element={<ServicesPage />} />
           <Route path="services" element={<ServicesPage />} />
           <Route path="page-builder" element={<ServicePageBuilder />} />
+          <Route path="home-content" element={<HomeContentPage />} />
           <Route path="page-builder/:serviceId" element={<ServicePageBuilder />} />
           <Route path="categories" element={<Navigate to="services" replace />} />
           <Route path="brands" element={<Navigate to="services" replace />} />

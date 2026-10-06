@@ -33,6 +33,7 @@ const iconMap = {
   Bookings: FiShoppingBag,
   "User Catalog": FiGrid,
   "Page Builder": FiLayout,
+  "Home Content": FiHome,
   Banners: FiImage,
   Coupons: FiTag,
   "Vendor Services": FiGrid,
@@ -70,6 +71,7 @@ const getChildRoute = (parentRoute, childName) => {
     "/admin/user-categories": {
       "Manage Services": "/admin/user-categories/sections",
       "Page Builder": "/admin/user-categories/page-builder",
+      "Home Content": "/admin/user-categories/home-content",
     },
     "/admin/payments": {
       "Payment Overview": "/admin/payments/overview",

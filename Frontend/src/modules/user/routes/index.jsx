@@ -143,7 +143,7 @@ const UserRoutes = () => {
       </div>
 
       {/* Main content area - leaves space for bottom nav when needed */}
-      <div className={`relative z-10 ${shouldShowBottomNav ? "pb-14" : ""}`}>
+      <div className={`relative z-10 ${shouldShowBottomNav ? "pb-10 sm:pb-12" : ""}`}>
         <Suspense fallback={<LoadingFallback />}>
           <PageTransition>
             <Routes>
