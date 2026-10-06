@@ -356,6 +356,59 @@ const Checkout = () => {
     }, 200);
   };
 
+  // Duration services use the configured billing unit instead of quantity.
+  const handleDurationChange = (itemId, direction) => {
+    const item = cartItems.find(i => (i._id || i.id) === itemId);
+    if (!item) return;
+
+    const unit = Number(item.billingUnitMinutes || item.card?.billingUnitMinutes || 30);
+    const minDuration = Number(item.minDurationMinutes || item.card?.minDurationMinutes || unit);
+    const maxDuration = Number(item.maxDurationMinutes || item.card?.maxDurationMinutes || 480);
+    const currentDuration = Number(item.durationMinutes || item.card?.durationMinutes || ((item.hours || 0) * 60) || minDuration);
+    const nextDuration = Math.max(minDuration, Math.min(maxDuration, currentDuration + (direction * unit)));
+    if (nextDuration === currentDuration) return;
+
+    const pricePerUnit = Number(
+      item.pricePerUnit
+      || item.card?.pricePerUnit
+      || item.pricePer30Minutes
+      || item.card?.pricePer30Minutes
+      || item.unitPrice
+      || 0
+    );
+    const nextPrice = (nextDuration / unit) * pricePerUnit;
+
+    setCartItems(prev => prev.map(it => {
+      if ((it._id || it.id) !== itemId) return it;
+      return {
+        ...it,
+        durationMinutes: nextDuration,
+        hours: nextDuration / 60,
+        serviceCount: 1,
+        price: nextPrice,
+        ...(it.card ? {
+          card: {
+            ...it.card,
+            durationMinutes: nextDuration,
+            duration: `${nextDuration} mins`,
+            hours: nextDuration / 60,
+            price: nextPrice
+          }
+        } : {})
+      };
+    }));
+
+    if (updateTimerRef.current[itemId]) clearTimeout(updateTimerRef.current[itemId]);
+    updateTimerRef.current[itemId] = setTimeout(async () => {
+      try {
+        await cartService.updateItem(itemId, undefined, nextDuration);
+        fetchCartGlobal();
+      } catch (error) {
+        console.error('Failed to sync duration update:', error);
+        toast.error('Failed to sync duration');
+      }
+    }, 200);
+  };
   const handleRemoveItem = async (itemId) => {
     // 1. Instant Optimistic Removal (0ms)
     setCartItems(prev => prev.filter(item => (item._id || item.id) !== itemId));
@@ -415,6 +468,8 @@ const Checkout = () => {
         serviceId: (typeof item.serviceId === 'object' ? (item.serviceId?._id || item.serviceId?.id) : item.serviceId) || undefined,
         pricingType: item.pricingType || item.card?.pricingType || undefined,
         durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+        pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
+        billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
         pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
         hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined),
         card: {
@@ -428,6 +483,8 @@ const Checkout = () => {
           features: item.card?.features || [],
           pricingType: item.pricingType || item.card?.pricingType || undefined,
           durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+          pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
+          billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
           pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
           hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined)
         },
@@ -633,6 +690,8 @@ const Checkout = () => {
         serviceId: (typeof item.serviceId === 'object' ? (item.serviceId?._id || item.serviceId?.id) : item.serviceId) || undefined,
         pricingType: item.pricingType || item.card?.pricingType || undefined,
         durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+        pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
+        billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
         pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
         hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined),
         card: {
@@ -646,6 +705,8 @@ const Checkout = () => {
           features: item.card?.features || [],
           pricingType: item.pricingType || item.card?.pricingType || undefined,
           durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+          pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
+          billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
           pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
           hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined)
         },
@@ -1237,6 +1298,10 @@ const Checkout = () => {
               const itemKey = item._id || item.id || `co-item-${index}`;
               const img = item.sectionIcon || item.icon || item.iconUrl || item.image || item.imageUrl;
               const imgUrl = img ? toAssetUrl(img) : null;
+              const itemType = String(item.pricingType || item.card?.pricingType || '').toUpperCase();
+              const isDurationItem = itemType === 'DURATION' || Boolean(item.durationMinutes || item.card?.durationMinutes);
+              const durationUnit = Number(item.billingUnitMinutes || item.card?.billingUnitMinutes || 30);
+              const shownDuration = Number(item.durationMinutes || item.card?.durationMinutes || ((item.hours || 0) * 60) || durationUnit);
               return (
                 <div key={itemKey} className="flex items-start gap-3 px-4 py-3">
                   {/* Icon */}
@@ -1258,10 +1323,33 @@ const Checkout = () => {
                     </p>
                   </div>
 
-                  {/* Right: controls on top, price below */}
+                  {/* Right: duration/quantity controls on top, price below */}
                   <div className="shrink-0 flex flex-col items-end gap-1.5">
                     <div className="flex items-center gap-1.5">
-                      {!item.isPlan && (
+                      {!item.isPlan && (isDurationItem ? (
+                        <div className="flex items-center gap-1 rounded-lg border border-[#E8D9DF] bg-[#FFF7FA] px-1 py-1">
+                          <button
+                            onClick={() => handleDurationChange(item._id, -1)}
+                            disabled={shownDuration <= Number(item.minDurationMinutes || item.card?.minDurationMinutes || durationUnit)}
+                            className="w-7 h-7 rounded-md text-[#831843] text-lg leading-none hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label={`Decrease duration by ${durationUnit} minutes`}
+                          >
+                            −
+                          </button>
+                          <div className="min-w-[46px] text-center leading-none">
+                            <div className="text-sm font-black text-[#831843]">{shownDuration}</div>
+                            <div className="text-[9px] font-semibold text-slate-400 mt-0.5">Minutes</div>
+                          </div>
+                          <button
+                            onClick={() => handleDurationChange(item._id, 1)}
+                            disabled={shownDuration >= Number(item.maxDurationMinutes || item.card?.maxDurationMinutes || 480)}
+                            className="w-7 h-7 rounded-md bg-[#831843] text-white text-lg leading-none hover:bg-[#720C3E] disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label={`Increase duration by ${durationUnit} minutes`}
+                          >
+                            +
+                          </button>
+                        </div>
+                      ) : (
                         <div className="flex items-center bg-[#FFF7FA] border border-[#E8D9DF] rounded-lg overflow-hidden">
                           <button onClick={() => handleQuantityChange(item._id, -1)}
                             className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all">
@@ -1273,7 +1361,7 @@ const Checkout = () => {
                             <FiPlus className="w-2.5 h-2.5" />
                           </button>
                         </div>
-                      )}
+                      ))}
                       {!item.isPlan && (
                         <button onClick={() => handleRemoveItem(item._id)}
                           className="p-1 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg transition-colors">

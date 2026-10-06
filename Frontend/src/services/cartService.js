@@ -19,8 +19,8 @@ export const cartService = {
   },
 
   // Update cart item quantity
-  updateItem: async (itemId, serviceCount) => {
-    const response = await api.put(`/users/cart/${itemId}`, { serviceCount });
+  updateItem: async (itemId, serviceCount, durationMinutes) => {
+    const response = await api.put(`/users/cart/${itemId}`, { serviceCount, durationMinutes });
     return response.data;
   },
 

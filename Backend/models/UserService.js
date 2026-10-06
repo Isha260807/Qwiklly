@@ -66,7 +66,19 @@ const userServiceSchema = new mongoose.Schema({
     default: 30,
     min: 1
   },
-  // Duration-based pricing (per 30-min block)
+  // Duration-based pricing. `pricePer30Minutes` remains for backwards
+  // compatibility with older services; new services use the generic
+  // billing-unit fields below.
+  pricePerUnit: {
+    type: Number,
+    default: null,
+    min: [0, 'Price per billing unit cannot be negative']
+  },
+  billingUnitMinutes: {
+    type: Number,
+    default: 30,
+    min: [1, 'Billing unit must be at least 1 minute']
+  },
   pricePer30Minutes: {
     type: Number,
     default: null,
@@ -75,18 +87,20 @@ const userServiceSchema = new mongoose.Schema({
   minDurationMinutes: {
     type: Number,
     default: 30,
-    min: 30
+    min: 1
   },
   maxDurationMinutes: {
     type: Number,
     default: 180,
-    min: 30
+    min: 1
   },
   durationStepMinutes: {
     type: Number,
     default: 30
   },
   durationPricing: {
+    pricePerUnit: { type: Number, default: null },
+    billingUnitMinutes: { type: Number, default: 30 },
     pricePer30Minutes: { type: Number, default: null },
     minDurationMinutes: { type: Number, default: 30 },
     maxDurationMinutes: { type: Number, default: 180 },

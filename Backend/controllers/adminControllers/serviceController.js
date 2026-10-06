@@ -3,6 +3,8 @@ const Brand = require('../../models/Brand');
 const { validationResult } = require('express-validator');
 const { SERVICE_STATUS } = require('../../utils/constants');
 
+const SUPPORTED_BILLING_UNITS = [15, 30, 60];
+
 /**
  * Get all services (with optional filters)
  * GET /api/admin/services
@@ -107,6 +109,9 @@ const createService = async (req, res) => {
       fixedPrice,
       estimatedDurationMinutes,
       pricePer30Minutes,
+      pricePerUnit,
+      billingUnitMinutes,
+      durationStepMinutes,
       minDurationMinutes,
       maxDurationMinutes,
       hourlyRate,
@@ -148,35 +153,43 @@ const createService = async (req, res) => {
 
     let resolvedFixedPrice = null;
     let resolvedEstimatedDuration = 30;
-    let resolvedPricePer30 = null;
+    let resolvedPricePerUnit = null;
+    let resolvedBillingUnit = 30;
     let resolvedMinDuration = 30;
     let resolvedMaxDuration = 180;
     let resolvedBasePrice = 0;
 
     if (resolvedPricingType === 'DURATION') {
-      resolvedPricePer30 = Number(pricePer30Minutes || (hourlyRate ? hourlyRate / 2 : 0) || basePrice || 0);
-      resolvedMinDuration = Number(minDurationMinutes || (minHours ? minHours * 60 : 30) || 30);
+      resolvedBillingUnit = Number(billingUnitMinutes || 30);
+      resolvedPricePerUnit = Number(pricePerUnit || pricePer30Minutes || (hourlyRate ? hourlyRate * (resolvedBillingUnit / 60) : 0) || basePrice || 0);
+      resolvedMinDuration = Number(minDurationMinutes || (minHours ? minHours * 60 : resolvedBillingUnit) || resolvedBillingUnit);
       resolvedMaxDuration = Number(maxDurationMinutes || (maxHours ? maxHours * 60 : 180) || 180);
 
-      if (!resolvedPricePer30 || resolvedPricePer30 <= 0) {
+      if (!SUPPORTED_BILLING_UNITS.includes(resolvedBillingUnit)) {
         return res.status(400).json({
           success: false,
-          message: 'Price per 30 minutes must be greater than 0 for duration-based services'
+          message: `Billing unit must be one of: ${SUPPORTED_BILLING_UNITS.join(', ')} minutes`
         });
       }
-      if (resolvedMinDuration < 30 || resolvedMinDuration % 30 !== 0) {
+      if (!resolvedPricePerUnit || resolvedPricePerUnit <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'Minimum duration must be at least 30 minutes and divisible by 30 (e.g., 30, 60, 90, 120)'
+          message: 'Price per billing unit must be greater than 0 for duration-based services'
         });
       }
-      if (resolvedMaxDuration < resolvedMinDuration || resolvedMaxDuration % 30 !== 0) {
+      if (resolvedMinDuration < resolvedBillingUnit || resolvedMinDuration % resolvedBillingUnit !== 0) {
         return res.status(400).json({
           success: false,
-          message: 'Maximum duration must be greater than or equal to minimum duration and divisible by 30'
+          message: `Minimum duration must be at least ${resolvedBillingUnit} minutes and divisible by the billing unit`
         });
       }
-      resolvedBasePrice = resolvedPricePer30;
+      if (resolvedMaxDuration < resolvedMinDuration || resolvedMaxDuration % resolvedBillingUnit !== 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Maximum duration must be greater than or equal to minimum duration and divisible by ${resolvedBillingUnit}`
+        });
+      }
+      resolvedBasePrice = resolvedPricePerUnit;
     } else {
       resolvedFixedPrice = Number(fixedPrice !== undefined && fixedPrice !== null && fixedPrice !== '' ? fixedPrice : (basePrice || 0));
       resolvedEstimatedDuration = Number(estimatedDurationMinutes || 30);
@@ -199,18 +212,23 @@ const createService = async (req, res) => {
       pricingType: resolvedPricingType,
       fixedPrice: resolvedFixedPrice,
       estimatedDurationMinutes: resolvedEstimatedDuration,
-      pricePer30Minutes: resolvedPricePer30,
+      pricePerUnit: resolvedPricePerUnit,
+      billingUnitMinutes: resolvedBillingUnit,
+      // Backward compatibility fields
+      pricePer30Minutes: resolvedBillingUnit === 30 ? resolvedPricePerUnit : null,
       minDurationMinutes: resolvedMinDuration,
       maxDurationMinutes: resolvedMaxDuration,
-      durationStepMinutes: 30,
+      durationStepMinutes: resolvedBillingUnit,
       durationPricing: {
-        pricePer30Minutes: resolvedPricePer30,
+        pricePerUnit: resolvedPricePerUnit,
+        billingUnitMinutes: resolvedBillingUnit,
+        pricePer30Minutes: resolvedBillingUnit === 30 ? resolvedPricePerUnit : null,
         minDurationMinutes: resolvedMinDuration,
         maxDurationMinutes: resolvedMaxDuration,
-        durationStepMinutes: 30
+        durationStepMinutes: resolvedBillingUnit
       },
       // Backward compatibility fields
-      hourlyRate: resolvedPricingType === 'DURATION' ? resolvedPricePer30 * 2 : null,
+      hourlyRate: resolvedPricingType === 'DURATION' ? resolvedPricePerUnit * (60 / resolvedBillingUnit) : null,
       minHours: resolvedMinDuration / 60,
       maxHours: resolvedMaxDuration / 60,
       allowCustomHours: !!allowCustomHours,
@@ -278,10 +296,17 @@ const updateService = async (req, res) => {
     service.pricingType = resolvedPricingType;
 
     if (resolvedPricingType === 'DURATION') {
-      const pricePer30 = Number(
-        updates.pricePer30Minutes !== undefined
-          ? updates.pricePer30Minutes
-          : (updates.hourlyRate ? updates.hourlyRate / 2 : (service.pricePer30Minutes || (service.hourlyRate ? service.hourlyRate / 2 : service.basePrice)))
+      const billingUnit = Number(
+        updates.billingUnitMinutes !== undefined
+          ? updates.billingUnitMinutes
+          : (service.billingUnitMinutes || 30)
+      );
+      const pricePerUnit = Number(
+        updates.pricePerUnit !== undefined
+          ? updates.pricePerUnit
+          : (updates.pricePer30Minutes !== undefined
+            ? updates.pricePer30Minutes
+            : (updates.hourlyRate ? updates.hourlyRate * (billingUnit / 60) : (service.pricePerUnit || service.pricePer30Minutes || (service.hourlyRate ? service.hourlyRate * (billingUnit / 60) : service.basePrice))))
       );
       const minDuration = Number(
         updates.minDurationMinutes !== undefined
@@ -294,37 +319,47 @@ const updateService = async (req, res) => {
           : (updates.maxHours ? updates.maxHours * 60 : (service.maxDurationMinutes || (service.maxHours ? service.maxHours * 60 : 180)))
       );
 
-      if (!pricePer30 || pricePer30 <= 0) {
+      if (!SUPPORTED_BILLING_UNITS.includes(billingUnit)) {
         return res.status(400).json({
           success: false,
-          message: 'Price per 30 minutes must be greater than 0 for duration-based services'
+          message: `Billing unit must be one of: ${SUPPORTED_BILLING_UNITS.join(', ')} minutes`
         });
       }
-      if (minDuration < 30 || minDuration % 30 !== 0) {
+      if (!pricePerUnit || pricePerUnit <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'Minimum duration must be at least 30 minutes and divisible by 30 (e.g., 30, 60, 90, 120)'
+          message: 'Price per billing unit must be greater than 0 for duration-based services'
         });
       }
-      if (maxDuration < minDuration || maxDuration % 30 !== 0) {
+      if (minDuration < billingUnit || minDuration % billingUnit !== 0) {
         return res.status(400).json({
           success: false,
-          message: 'Maximum duration must be greater than or equal to minimum duration and divisible by 30'
+          message: `Minimum duration must be at least ${billingUnit} minutes and divisible by the billing unit`
+        });
+      }
+      if (maxDuration < minDuration || maxDuration % billingUnit !== 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Maximum duration must be greater than or equal to minimum duration and divisible by ${billingUnit}`
         });
       }
 
-      service.basePrice = pricePer30;
-      service.pricePer30Minutes = pricePer30;
+      service.basePrice = pricePerUnit;
+      service.pricePerUnit = pricePerUnit;
+      service.billingUnitMinutes = billingUnit;
+      service.pricePer30Minutes = billingUnit === 30 ? pricePerUnit : null;
       service.minDurationMinutes = minDuration;
       service.maxDurationMinutes = maxDuration;
-      service.durationStepMinutes = 30;
+      service.durationStepMinutes = billingUnit;
       service.durationPricing = {
-        pricePer30Minutes: pricePer30,
+        pricePerUnit,
+        billingUnitMinutes: billingUnit,
+        pricePer30Minutes: billingUnit === 30 ? pricePerUnit : null,
         minDurationMinutes: minDuration,
         maxDurationMinutes: maxDuration,
-        durationStepMinutes: 30
+        durationStepMinutes: billingUnit
       };
-      service.hourlyRate = pricePer30 * 2;
+      service.hourlyRate = pricePerUnit * (60 / billingUnit);
       service.minHours = minDuration / 60;
       service.maxHours = maxDuration / 60;
     } else {

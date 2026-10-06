@@ -1,4 +1,5 @@
 const { checkBookingServiceability } = require('../../services/serviceabilityService');
+const Service = require('../../models/UserService');
 const { findSlotCandidateVendors, getBookableSlotMap } = require('../../services/vendorMatchService');
 const { getSlotRules, isDateWithinWindow, isSlotStartAllowed } = require('../../services/slotSettingsService');
 const { MATCH_FAILURE_REASONS } = require('../../utils/constants');
@@ -40,7 +41,20 @@ exports.getAvailableSlots = async (req, res) => {
       return res.status(200).json({ success: true, availability: {}, reason: serviceability.reason });
     }
 
-    const rules = await getSlotRules();
+    const [rules, service] = await Promise.all([
+      getSlotRules(),
+      Service.findById(serviceId).select('pricingType').lean()
+    ]);
+
+    // The global approximate duration is only the occupancy duration for
+    // fixed-price NORMAL scheduled bookings. Duration/hourly services use the
+    // customer-selected durationMins query value exactly as before.
+    const isDurationBased = ['HOURLY', 'DURATION'].includes(
+      String(service?.pricingType || '').toUpperCase()
+    );
+    const effectiveDurationMins = durationMins > 0 || isDurationBased
+      ? durationMins
+      : rules.slotServiceDurationMins;
 
     // Window = today .. today + rules.maxDaysInAdvance (UTC date keys, same as bookings)
     const dateKeys = [];
@@ -52,7 +66,12 @@ exports.getAvailableSlots = async (req, res) => {
     }
 
     const vendors = await findSlotCandidateVendors(serviceability.zone);
-    const slotMap = await getBookableSlotMap({ vendors, dateKeys, intervalMins: rules.intervalMins, durationMins });
+    const slotMap = await getBookableSlotMap({
+      vendors,
+      dateKeys,
+      intervalMins: rules.intervalMins,
+      durationMins: effectiveDurationMins
+    });
 
     const availability = {};
     Object.entries(slotMap).forEach(([dateKey, starts]) => {

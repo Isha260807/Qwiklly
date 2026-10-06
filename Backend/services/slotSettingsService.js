@@ -11,13 +11,16 @@ const BOOKING_WINDOW_DAYS = 30;
  */
 const getSlotRules = async () => {
   const settings = await Settings.findOne({ type: 'global' })
-    .select('slotStartHour slotEndHour slotIntervalMins disabledSlots')
+    .select('slotStartHour slotEndHour slotIntervalMins slotServiceDurationMins disabledSlots')
     .lean();
 
   return {
     startMinutes: Number(settings?.slotStartHour ?? 9) * 60,
     endMinutes: Number(settings?.slotEndHour ?? 21) * 60,
     intervalMins: Number(settings?.slotIntervalMins) || 60,
+    // Used only by fixed-price NORMAL scheduled bookings. Duration/hourly
+    // services provide their own selected duration and must not use this.
+    slotServiceDurationMins: Number(settings?.slotServiceDurationMins) || 45,
     maxDaysInAdvance: BOOKING_WINDOW_DAYS,
     disabledSlots: settings?.disabledSlots || []
   };

@@ -180,25 +180,31 @@ const Cart = () => {
                       </p>
                     </div>
 
-                    {/* Right: count controls on top, price below */}
+                    {/* Right: quantity for fixed items; duration items are selected on the service page */}
                     <div className="shrink-0 flex flex-col items-end gap-1.5">
-                      {/* Row 1: [- qty +] + [🗑] */}
+                      {/* Row 1: quantity/delete */}
                       <div className="flex items-center gap-1.5">
-                        <div className="flex items-center bg-[#FFF7FA] border border-[#E8D9DF] rounded-lg overflow-hidden">
-                          <button
-                            onClick={() => handleQuantityChange(item._id || item.id, -1)}
-                            className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all"
-                          >
-                            <FiMinus className="w-2.5 h-2.5" />
-                          </button>
-                          <span className="text-[11px] font-extrabold text-[#720C3E] min-w-[14px] text-center px-0.5">{qty}</span>
-                          <button
-                            onClick={() => handleQuantityChange(item._id || item.id, +1)}
-                            className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all"
-                          >
-                            <FiPlus className="w-2.5 h-2.5" />
-                          </button>
-                        </div>
+                        {item.pricingType === 'DURATION' || item.pricingType === 'HOURLY' ? (
+                          <span className="text-[11px] font-extrabold text-[#720C3E] px-1">
+                            {item.durationMinutes ? `${item.durationMinutes} mins` : `${item.hours || 0} hr`}
+                          </span>
+                        ) : (
+                          <div className="flex items-center bg-[#FFF7FA] border border-[#E8D9DF] rounded-lg overflow-hidden">
+                            <button
+                              onClick={() => handleQuantityChange(item._id || item.id, -1)}
+                              className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all"
+                            >
+                              <FiMinus className="w-2.5 h-2.5" />
+                            </button>
+                            <span className="text-[11px] font-extrabold text-[#720C3E] min-w-[14px] text-center px-0.5">{qty}</span>
+                            <button
+                              onClick={() => handleQuantityChange(item._id || item.id, +1)}
+                              className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all"
+                            >
+                              <FiPlus className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        )}
                         <button
                           onClick={() => handleDelete(item._id || item.id)}
                           className="p-1 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg transition-colors"

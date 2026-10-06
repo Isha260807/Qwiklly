@@ -226,10 +226,10 @@ const rangesOverlap = (a, b) => a.start < b.end && b.start < a.end;
 
 /**
  * Select an assignable vendor for a scheduled/SLOT booking.
- * A vendor qualifies only if admin marked EVERY slot the booking needs (one for
- * fixed-price, several consecutive ones for duration/hourly) for that date AND
- * the vendor has no overlapping active booking. The booking's duration is
- * counted in that vendor's own slot length automatically.
+ * A vendor qualifies only if admin marked EVERY slot the booking needs for
+ * that date AND the vendor has no overlapping active booking. Fixed-price
+ * NORMAL scheduled services receive the global approximate duration from the
+ * caller; duration/hourly services receive the customer's selected duration.
  */
 const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, durationMins = 0, intervalMins = 60 }) => {
   const requestedStart = parseSlotTime(timeSlot?.start);

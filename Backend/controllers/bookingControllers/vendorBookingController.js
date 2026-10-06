@@ -542,6 +542,13 @@ const assignWorker = async (req, res) => {
       });
     }
 
+    if ([BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED].includes(booking.status)) {
+      return res.status(409).json({
+        success: false,
+        message: 'Cancelled or rejected bookings cannot have a worker assigned.'
+      });
+    }
+
     booking.assignedAt = new Date();
 
     if (booking.status === BOOKING_STATUS.CONFIRMED || booking.status === BOOKING_STATUS.ACCEPTED) {
