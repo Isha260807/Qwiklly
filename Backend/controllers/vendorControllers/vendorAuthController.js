@@ -111,10 +111,12 @@ const verifyLogin = async (req, res) => {
         return res.status(403).json({ success: false, message: 'Your vendor account has been deactivated. Please contact support.' });
       }
 
-      // SINGLE DEVICE LOGIN: Update Session ID & Clear OLD FCM tokens
+      // SINGLE DEVICE LOGIN: Update Session ID & Clear OLD FCM tokens & Set Online
       const loginSessionId = Date.now().toString();
       await Vendor.findByIdAndUpdate(vendor._id, { 
         loginSessionId,
+        isOnline: true,
+        availability: 'AVAILABLE',
         $set: { fcmTokens: [], fcmTokenMobile: [] } // Clear all old tokens to prevent ghost notifications
       });
 
@@ -359,10 +361,12 @@ const login = async (req, res) => {
       });
     }
 
-    // SINGLE DEVICE LOGIN: Update Session ID & Clear OLD FCM tokens
+    // SINGLE DEVICE LOGIN: Update Session ID & Clear OLD FCM tokens & Set Online
     const loginSessionId = Date.now().toString();
     await Vendor.findByIdAndUpdate(vendor._id, { 
       loginSessionId,
+      isOnline: true,
+      availability: 'AVAILABLE',
       $set: { fcmTokens: [], fcmTokenMobile: [] } // Clear all old tokens to prevent ghost notifications
     });
 
@@ -383,7 +387,9 @@ const login = async (req, res) => {
         phone: vendor.phone,
         businessName: vendor.businessName,
         service: vendor.service,
-        approvalStatus: vendor.approvalStatus
+        approvalStatus: vendor.approvalStatus,
+        isOnline: true,
+        availability: 'AVAILABLE'
       },
       ...tokens
     });
@@ -403,14 +409,14 @@ const logout = async (req, res) => {
   try {
     const { platform = 'web' } = req.body;
 
-    // Clear FCM tokens based on platform and reset Session ID
+    // Clear FCM tokens based on platform, reset Session ID and set OFFLINE
     if (req.user && req.user.id) {
       const updateQuery = platform === 'mobile'
-        ? { $set: { fcmTokenMobile: [], loginSessionId: null } }
-        : { $set: { fcmTokens: [], loginSessionId: null } };
+        ? { $set: { fcmTokenMobile: [], loginSessionId: null, isOnline: false, availability: 'OFFLINE' } }
+        : { $set: { fcmTokens: [], loginSessionId: null, isOnline: false, availability: 'OFFLINE' } };
 
       await Vendor.findByIdAndUpdate(req.user.id, updateQuery);
-      console.log(`[AUTH] ✅ ${platform} session & tokens cleared for vendor: ${req.user.id}`);
+      console.log(`[AUTH] ✅ ${platform} session, tokens & status set to OFFLINE for vendor: ${req.user.id}`);
     }
 
     res.status(200).json({

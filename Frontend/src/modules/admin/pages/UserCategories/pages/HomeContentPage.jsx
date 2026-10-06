@@ -12,8 +12,6 @@ const defaultTrustSection = {
   rating: "",
   ratingLabel: "3 Lakh+ Ratings",
   imageUrl: "/Homster xpert .png",
-  cartCta: "Go to cart",
-  emptyCartCta: "Browse services",
 };
 
 const HomeContentPage = () => {
@@ -154,14 +152,6 @@ const HomeContentPage = () => {
               <label>
                 <span className={labelClass}>Rating label</span>
                 <input name="ratingLabel" value={formData.ratingLabel} onChange={handleChange} className={fieldClass} placeholder="3 Lakh+ Ratings" />
-              </label>
-              <label>
-                <span className={labelClass}>Cart button text</span>
-                <input name="cartCta" value={formData.cartCta} onChange={handleChange} className={fieldClass} placeholder="Go to cart" />
-              </label>
-              <label>
-                <span className={labelClass}>Empty cart button text</span>
-                <input name="emptyCartCta" value={formData.emptyCartCta} onChange={handleChange} className={fieldClass} placeholder="Browse services" />
               </label>
             </div>
           </div>
