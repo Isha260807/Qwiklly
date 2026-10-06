@@ -272,7 +272,7 @@ const calculateBookingPrice = async ({
     let serviceMap = new Map();
     if (itemServiceIds.length > 0) {
       const referencedServices = await Service.find({ _id: { $in: itemServiceIds } })
-        .select('pricingType pricePer30Minutes minDurationMinutes maxDurationMinutes durationPricing hourlyRate minHours maxHours basePrice')
+        .select('pricingType pricePerUnit billingUnitMinutes durationStepMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationPricing hourlyRate minHours maxHours basePrice')
         .lean();
       serviceMap = new Map(referencedServices.map(s => [String(s._id), s]));
     }
@@ -282,20 +282,21 @@ const calculateBookingPrice = async ({
       const effectiveType = refSvc?.pricingType || item.pricingType || item.card?.pricingType || (item.hours ? 'HOURLY' : 'FIXED');
 
       if (effectiveType === 'DURATION' && refSvc) {
-        const pricePer30 = Number(refSvc.pricePer30Minutes ?? refSvc.durationPricing?.pricePer30Minutes ?? refSvc.basePrice ?? 0);
-        const minMins = Number(refSvc.minDurationMinutes ?? refSvc.durationPricing?.minDurationMinutes ?? 30);
+        const billingUnit = Number(refSvc.billingUnitMinutes ?? refSvc.durationPricing?.billingUnitMinutes ?? 30);
+        const pricePerUnit = Number(refSvc.pricePerUnit ?? refSvc.durationPricing?.pricePerUnit ?? refSvc.pricePer30Minutes ?? refSvc.basePrice ?? 0);
+        const minMins = Number(refSvc.minDurationMinutes ?? refSvc.durationPricing?.minDurationMinutes ?? billingUnit);
         const maxMins = Number(refSvc.maxDurationMinutes ?? refSvc.durationPricing?.maxDurationMinutes ?? 480);
         
         const durationMins = Number(item.durationMinutes ?? item.card?.durationMinutes ?? (item.hours ? item.hours * 60 : minMins));
 
-        if (!durationMins || durationMins < minMins || durationMins > maxMins || durationMins % 30 !== 0) {
+        if (!durationMins || durationMins < minMins || durationMins > maxMins || durationMins % billingUnit !== 0) {
           hourlyValidationError = {
             code: 'INVALID_DURATION',
-            error: `Duration must be between ${minMins} and ${maxMins} minutes in 30-minute intervals.`
+            error: `Duration must be between ${minMins} and ${maxMins} minutes in ${billingUnit}-minute intervals.`
           };
           break;
         }
-        basePrice += (durationMins / 30) * pricePer30;
+        basePrice += (durationMins / billingUnit) * pricePerUnit;
       } else if (effectiveType === 'HOURLY' && refSvc) {
         const hours = Number(item.hours ?? item.card?.hours);
         const minHours = refSvc.minHours || 1;

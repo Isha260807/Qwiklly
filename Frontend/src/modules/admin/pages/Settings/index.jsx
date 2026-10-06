@@ -1220,6 +1220,7 @@ const AdminSettings = () => {
                       onChange={handleSlotChange}
                       className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
                     >
+                      <option value={15}>15 Minutes</option>
                       <option value={30}>30 Minutes</option>
                       <option value={45}>45 Minutes</option>
                       <option value={60}>60 Minutes (1 Hour)</option>

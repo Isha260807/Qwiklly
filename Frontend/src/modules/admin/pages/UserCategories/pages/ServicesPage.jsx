@@ -30,7 +30,8 @@ const initialServiceForm = {
   originalPrice: "",
   discountPrice: "",
   pricingType: "FIXED",
-  pricePer30Minutes: "",
+  pricePerUnit: "",
+  billingUnitMinutes: 30,
   minDurationMinutes: 30,
   maxDurationMinutes: 240,
   hourlyRate: "",
@@ -131,8 +132,9 @@ const ServicesPage = () => {
   const handleOpenEdit = (service) => {
     setEditingServiceId(service._id || service.id);
     const pType = service.pricingType === "DURATION" ? "DURATION" : (service.pricingType === "HOURLY" ? "DURATION" : "FIXED");
-    const p30 = service.pricePer30Minutes ?? service.durationPricing?.pricePer30Minutes ?? (service.hourlyRate ? Math.round(service.hourlyRate / 2) : (service.basePrice || ""));
-    const minM = service.minDurationMinutes ?? service.durationPricing?.minDurationMinutes ?? (service.minHours ? service.minHours * 60 : 30);
+    const billingUnit = Number(service.billingUnitMinutes ?? service.durationPricing?.billingUnitMinutes ?? 30);
+    const pUnit = service.pricePerUnit ?? service.durationPricing?.pricePerUnit ?? service.pricePer30Minutes ?? (service.hourlyRate ? service.hourlyRate * (billingUnit / 60) : (service.basePrice || ""));
+    const minM = service.minDurationMinutes ?? service.durationPricing?.minDurationMinutes ?? (service.minHours ? service.minHours * 60 : billingUnit);
     const maxM = service.maxDurationMinutes ?? service.durationPricing?.maxDurationMinutes ?? (service.maxHours ? service.maxHours * 60 : 240);
 
     setFormData({
@@ -145,7 +147,8 @@ const ServicesPage = () => {
       originalPrice: service.originalPrice ?? "",
       discountPrice: service.discountPrice ?? "",
       pricingType: pType,
-      pricePer30Minutes: p30,
+      pricePerUnit: pUnit,
+      billingUnitMinutes: billingUnit,
       minDurationMinutes: minM,
       maxDurationMinutes: maxM,
       hourlyRate: service.hourlyRate ?? "",
@@ -204,18 +207,19 @@ const ServicesPage = () => {
     }
 
     if (formData.pricingType === "DURATION") {
-      if (formData.pricePer30Minutes === "" || isNaN(formData.pricePer30Minutes) || Number(formData.pricePer30Minutes) <= 0) {
-        toast.error("Valid Price per 30 minutes is required");
+      const unit = Number(formData.billingUnitMinutes) || 30;
+      if (formData.pricePerUnit === "" || isNaN(formData.pricePerUnit) || Number(formData.pricePerUnit) <= 0) {
+        toast.error("Valid price per billing unit is required");
         return;
       }
-      const minM = Number(formData.minDurationMinutes) || 30;
+      const minM = Number(formData.minDurationMinutes) || unit;
       const maxM = Number(formData.maxDurationMinutes) || 240;
-      if (minM < 30 || minM % 30 !== 0) {
-        toast.error("Minimum duration must be at least 30 minutes and a multiple of 30");
+      if (minM < unit || minM % unit !== 0) {
+        toast.error(`Minimum duration must be at least ${unit} minutes and a multiple of the billing unit`);
         return;
       }
-      if (maxM < minM || maxM % 30 !== 0) {
-        toast.error("Maximum duration must be greater than or equal to minimum duration and a multiple of 30");
+      if (maxM < minM || maxM % unit !== 0) {
+        toast.error(`Maximum duration must be greater than or equal to minimum duration and a multiple of ${unit}`);
         return;
       }
     } else {
@@ -228,8 +232,9 @@ const ServicesPage = () => {
     try {
       setSaving(true);
       const isDur = formData.pricingType === "DURATION";
-      const p30 = isDur ? Number(formData.pricePer30Minutes) : null;
-      const minM = isDur ? (Number(formData.minDurationMinutes) || 30) : 30;
+      const unit = isDur ? (Number(formData.billingUnitMinutes) || 30) : 30;
+      const pUnit = isDur ? Number(formData.pricePerUnit) : null;
+      const minM = isDur ? (Number(formData.minDurationMinutes) || unit) : 30;
       const maxM = isDur ? (Number(formData.maxDurationMinutes) || 240) : 240;
 
       const payload = {
@@ -238,23 +243,28 @@ const ServicesPage = () => {
         description: formData.description?.trim(),
         badge: formData.badge?.trim() || null,
         iconUrl: formData.iconUrl || null,
-        basePrice: isDur ? (p30 * (minM / 30)) : Number(formData.basePrice),
+        basePrice: isDur ? pUnit : Number(formData.basePrice),
         fixedPrice: isDur ? null : Number(formData.basePrice),
         originalPrice: formData.originalPrice ? Number(formData.originalPrice) : 0,
         discountPrice: formData.discountPrice ? Number(formData.discountPrice) : null,
         pricingType: isDur ? "DURATION" : "FIXED",
-        pricePer30Minutes: p30,
+        pricePerUnit: pUnit,
+        billingUnitMinutes: unit,
+        // Legacy 30-minute fields for older consumers.
+        pricePer30Minutes: isDur && unit === 30 ? pUnit : null,
         minDurationMinutes: minM,
         maxDurationMinutes: maxM,
-        durationStepMinutes: 30,
+        durationStepMinutes: unit,
         durationPricing: isDur ? {
-          pricePer30Minutes: p30,
+          pricePerUnit: pUnit,
+          billingUnitMinutes: unit,
+          pricePer30Minutes: unit === 30 ? pUnit : null,
           minDurationMinutes: minM,
           maxDurationMinutes: maxM,
-          stepMinutes: 30
+          durationStepMinutes: unit
         } : undefined,
         // Legacy hourly rate bridge for vendor timers
-        hourlyRate: isDur ? (p30 * 2) : null,
+        hourlyRate: isDur ? (pUnit * (60 / unit)) : null,
         minHours: isDur ? (minM / 60) : 1,
         maxHours: isDur ? (maxM / 60) : 8,
         allowCustomHours: !!formData.allowCustomHours,
@@ -487,9 +497,9 @@ const ServicesPage = () => {
                       {service.pricingType === "DURATION" || service.pricingType === "HOURLY" ? (
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-lg font-black text-slate-900">
-                            ₹{service.pricePer30Minutes ?? service.durationPricing?.pricePer30Minutes ?? (service.hourlyRate ? Math.round(service.hourlyRate / 2) : service.basePrice)}
+                            ₹{service.pricePerUnit ?? service.durationPricing?.pricePerUnit ?? service.pricePer30Minutes ?? (service.hourlyRate ? service.hourlyRate * ((service.billingUnitMinutes ?? 30) / 60) : service.basePrice)}
                           </span>
-                          <span className="text-xs text-slate-500 font-semibold">/ 30 mins</span>
+                          <span className="text-xs text-slate-500 font-semibold">/ {service.billingUnitMinutes ?? service.durationPricing?.billingUnitMinutes ?? 30} mins</span>
                         </div>
                       ) : (
                         <div className="flex items-baseline gap-1.5">
@@ -641,7 +651,7 @@ const ServicesPage = () => {
                 >
                   <span>Duration Based</span>
                   <span className={`text-[10px] font-normal ${formData.pricingType === "DURATION" ? "text-pink-100" : "text-slate-400"}`}>
-                    30-minute scalable increments
+                    Admin-configured duration increments
                   </span>
                 </button>
               </div>
@@ -681,16 +691,40 @@ const ServicesPage = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Price per 30 mins (₹) <span className="text-red-500">*</span>
+                      Price per billing unit (₹) <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
-                      placeholder="e.g. 30 or 150"
-                      value={formData.pricePer30Minutes}
-                      onChange={(e) => setFormData({ ...formData, pricePer30Minutes: e.target.value })}
+                      placeholder="e.g. 100"
+                      value={formData.pricePerUnit}
+                      onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E] font-bold text-[#720C3E]"
                       required={formData.pricingType === "DURATION"}
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Billing Unit / Step
+                    </label>
+                    <select
+                      value={formData.billingUnitMinutes}
+                      onChange={(e) => {
+                        const unit = Number(e.target.value);
+                        setFormData(prev => ({
+                          ...prev,
+                          billingUnitMinutes: unit,
+                          minDurationMinutes: unit,
+                          maxDurationMinutes: Math.max(unit, Number(prev.maxDurationMinutes) || 240)
+                        }));
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                    >
+                      <option value={15}>15 minutes</option>
+                      <option value={30}>30 minutes</option>
+                      <option value={60}>60 minutes</option>
+                    </select>
+                    <p className="text-[10px] text-slate-400 mt-1">Duration options and price blocks use this unit.</p>
                   </div>
 
                   <div>
@@ -702,6 +736,7 @@ const ServicesPage = () => {
                       onChange={(e) => setFormData({ ...formData, minDurationMinutes: Number(e.target.value) })}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
                     >
+                      <option value={15}>15 mins</option>
                       <option value={30}>30 mins (0.5 hr)</option>
                       <option value={60}>60 mins (1.0 hr)</option>
                       <option value={90}>90 mins (1.5 hrs)</option>
@@ -719,6 +754,8 @@ const ServicesPage = () => {
                       onChange={(e) => setFormData({ ...formData, maxDurationMinutes: Number(e.target.value) })}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
                     >
+                      <option value={15}>15 mins</option>
+                      <option value={30}>30 mins (0.5 hr)</option>
                       <option value={60}>60 mins (1.0 hr)</option>
                       <option value={90}>90 mins (1.5 hrs)</option>
                       <option value={120}>120 mins (2.0 hrs)</option>
@@ -732,26 +769,26 @@ const ServicesPage = () => {
                 </div>
 
                 {/* Live Dynamic Pricing Preview Card */}
-                {formData.pricePer30Minutes && Number(formData.pricePer30Minutes) > 0 && (
+                {formData.pricePerUnit && Number(formData.pricePerUnit) > 0 && (
                   <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-3.5 rounded-xl border border-slate-700 shadow-inner">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[11px] font-bold text-pink-300 uppercase tracking-wider flex items-center gap-1.5">
                         <FiDollarSign className="text-xs" /> Dynamic Live Pricing Preview
                       </span>
                       <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-slate-300">
-                        Formula: (Mins ÷ 30) × ₹{formData.pricePer30Minutes}
+                        Formula: (Mins ÷ {formData.billingUnitMinutes}) × ₹{formData.pricePerUnit}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                       {Array.from(
-                        { length: Math.floor(((Number(formData.maxDurationMinutes) || 240) - (Number(formData.minDurationMinutes) || 30)) / 30) + 1 },
-                        (_, idx) => (Number(formData.minDurationMinutes) || 30) + idx * 30
+                        { length: Math.floor(((Number(formData.maxDurationMinutes) || 240) - (Number(formData.minDurationMinutes) || 30)) / (Number(formData.billingUnitMinutes) || 30)) + 1 },
+                        (_, idx) => (Number(formData.minDurationMinutes) || 30) + idx * (Number(formData.billingUnitMinutes) || 30)
                       ).slice(0, 8).map((mins) => (
                         <div key={mins} className="bg-white/10 rounded-lg p-2 text-center border border-white/5">
                           <p className="text-[11px] text-slate-300 font-medium">{mins} mins {mins >= 60 ? `(${mins / 60}h)` : ''}</p>
                           <p className="text-sm font-black text-amber-400 mt-0.5">
-                            ₹{(mins / 30) * Number(formData.pricePer30Minutes)}
+                            ₹{(mins / Number(formData.billingUnitMinutes || 30)) * Number(formData.pricePerUnit)}
                           </p>
                         </div>
                       ))}

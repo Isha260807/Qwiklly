@@ -122,7 +122,7 @@ const createBooking = async (req, res) => {
 
     // 1. Parallel Fetching: Service and User
     const [service, user] = await Promise.all([
-      Service.findById(serviceId).select('title basePrice discountPrice description images iconUrl categoryId category categoryIds hourlyRate pricingType').lean(),
+      Service.findById(serviceId).select('title basePrice discountPrice description images iconUrl categoryId category categoryIds hourlyRate pricingType pricePerUnit billingUnitMinutes durationStepMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationPricing').lean(),
       User.findById(userId).select('name phone wallet plans')
     ]);
 
@@ -282,7 +282,10 @@ const createBooking = async (req, res) => {
         vendors: nearbyVendors,
         scheduledDate,
         timeSlot,
-        durationMins: hasHourlyPricing ? slotDurationMins : 0,
+        // Fixed-price NORMAL scheduled services use the global approximate
+        // service duration for slot blocking. Duration/hourly services keep
+        // using the duration selected by the customer.
+        durationMins: hasHourlyPricing ? slotDurationMins : slotRules.slotServiceDurationMins,
         intervalMins: slotRules.intervalMins
       });
 
@@ -397,7 +400,9 @@ const createBooking = async (req, res) => {
       const cardObj = item.card || item;
       const effectiveType = cardObj.pricingType || item.pricingType || (service.pricingType === 'DURATION' ? 'DURATION' : (item.hours ? 'HOURLY' : 'FIXED'));
       const durationMins = cardObj.durationMinutes || item.durationMinutes || (cardObj.hours ? cardObj.hours * 60 : (item.hours ? item.hours * 60 : null));
-      const pricePer30 = cardObj.pricePer30Minutes || item.pricePer30Minutes || service.pricePer30Minutes || null;
+      const billingUnit = Number(cardObj.billingUnitMinutes || item.billingUnitMinutes || service.billingUnitMinutes || 30);
+      const pricePerUnit = cardObj.pricePerUnit || item.pricePerUnit || service.pricePerUnit || service.pricePer30Minutes || null;
+      const pricePer30 = billingUnit === 30 ? pricePerUnit : (cardObj.pricePer30Minutes || item.pricePer30Minutes || service.pricePer30Minutes || null);
 
       return {
         brandName: item.brandName || item.sectionTitle || item.brand || '',
@@ -414,6 +419,8 @@ const createBooking = async (req, res) => {
           features: cardObj.features || [],
           pricingType: effectiveType,
           durationMinutes: durationMins,
+          pricePerUnit,
+          billingUnitMinutes: billingUnit,
           pricePer30Minutes: pricePer30,
           hours: cardObj.hours || (durationMins ? durationMins / 60 : null)
         },
@@ -432,8 +439,8 @@ const createBooking = async (req, res) => {
     let hourlyTracking = { isHourly: false };
     if (totalBookedMinutes > 0 || service.pricingType === 'DURATION' || service.pricingType === 'HOURLY') {
       const effectiveDuration = totalBookedMinutes > 0 ? totalBookedMinutes : (service.minDurationMinutes || 30);
-      const effectiveHourlyRate = service.pricingType === 'DURATION' 
-        ? ((service.pricePer30Minutes || (service.basePrice || 0)) * 2) 
+      const effectiveHourlyRate = service.pricingType === 'DURATION'
+        ? ((service.pricePerUnit || service.pricePer30Minutes || (service.basePrice || 0)) * (60 / (service.billingUnitMinutes || 30)))
         : (service.hourlyRate || 0);
 
       hourlyTracking = {
@@ -550,8 +557,8 @@ const createBooking = async (req, res) => {
           vendors: nearbyVendors,
           scheduledDate,
           timeSlot,
-          durationMins: 0,
-          intervalMins: (await getSlotRules()).intervalMins
+          durationMins: hasHourlyPricing ? slotDurationMins : slotRules.slotServiceDurationMins,
+          intervalMins: slotRules.intervalMins
         });
 
         if (!retryMatch.vendor) {
@@ -963,10 +970,10 @@ const cancelBooking = async (req, res) => {
       if (cancellationFee > 0 && !isPaid) {
         // Use wallet.penalty bucket
         user.wallet.penalty = (user.wallet.penalty || 0) + cancellationFee;
-        // Do NOT create a 'debit' transaction yet, as money hasn't left. 
+        // Do NOT create a 'debit' transaction yet, as money hasn't left.
         // Or create a 'penalty_added' transaction?
         // User didn't ask for transaction record logic, just functionality.
-        // We will skip transaction for penalty addition to keep it simple, 
+        // We will skip transaction for penalty addition to keep it simple,
         // as the actual CHARGE happens on next booking creation.
 
         console.log(`[CancelBooking] Added penalty of ₹${cancellationFee} to user ${userId}. Total Penalty: ${user.wallet.penalty}`);
@@ -1531,4 +1538,3 @@ module.exports = {
   getUserRatings,
   dispatchBookingToVendors
 };
-

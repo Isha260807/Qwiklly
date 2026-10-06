@@ -200,7 +200,7 @@ const settingsSchema = new mongoose.Schema({
   slotIntervalMins: {
     type: Number,
     default: 60, // 60 min intervals
-    enum: [30, 45, 60, 90, 120]
+    enum: [15, 30, 45, 60, 90, 120]
   },
   maxDaysInAdvance: {
     type: Number,

@@ -28,6 +28,9 @@ const BookingTimeline = () => {
   const [workPhotos, setWorkPhotos] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isWorkApproved, setIsWorkApproved] = useState(false);
+  const isTerminalBooking = ['cancelled', 'rejected'].includes(
+    String(booking?.status || '').toLowerCase()
+  );
 
   useLayoutEffect(() => {
     const html = document.documentElement;
@@ -86,6 +89,8 @@ const BookingTimeline = () => {
           'in_progress': 5,
           'work_done': 7,
           'completed': 8,
+          'cancelled': 2,
+          'rejected': 1,
         };
 
         const isActuallyPaid = apiData.isWorkerPaid || apiData.workerPaymentStatus === 'PAID' || apiData.workerPaymentStatus === 'SUCCESS';
@@ -313,8 +318,10 @@ const BookingTimeline = () => {
       id: 3,
       title: 'Assigned',
       icon: FiUser,
-      action: currentStage === 2 ? () => navigate(`/vendor/booking/${id}/assign-worker`) : null,
-      description: booking?.assignedTo ? `Assigned to ${booking.assignedTo.name}` : 'Assign worker or start yourself',
+      action: !isTerminalBooking && currentStage === 2 ? () => navigate(`/vendor/booking/${id}/assign-worker`) : null,
+      description: isTerminalBooking
+        ? 'No worker assignment allowed for this booking'
+        : booking?.assignedTo ? `Assigned to ${booking.assignedTo.name}` : 'Assign worker or start yourself',
     },
     {
       id: 4,
@@ -506,7 +513,7 @@ const BookingTimeline = () => {
                       <p className="text-[11px] text-gray-500 mb-1 leading-snug">{stage.description}</p>
 
                       {/* Hourly Service Timer / End Service — replaces "Mark Work Done" for hourly bookings */}
-                      {stage.id === 6 && booking?.hourlyTracking?.isHourly && (currentStage === 5 || currentStage === 6) &&
+                      {!isTerminalBooking && stage.id === 6 && booking?.hourlyTracking?.isHourly && (currentStage === 5 || currentStage === 6) &&
                         !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed) && (
                           <div className="my-1">
                             <HourlyServiceTimer
@@ -519,7 +526,7 @@ const BookingTimeline = () => {
                         )}
 
                       {/* Action Button */}
-                      {stage.action && !isSkipped &&
+                      {stage.action && !isTerminalBooking && !isSkipped &&
                         !(stage.id === 6 && booking?.hourlyTracking?.isHourly && !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed)) &&
                         (() => {
                         const isJourneyPaymentBlocked = stage.id === 4 && booking?.isSelfJob && !isPaymentComplete;

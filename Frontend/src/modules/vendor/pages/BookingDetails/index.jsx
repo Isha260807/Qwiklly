@@ -34,6 +34,9 @@ export default function BookingDetails() {
   const [isWorkDoneModalOpen, setIsWorkDoneModalOpen] = useState(false);
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const isTerminalBooking = ['cancelled', 'rejected'].includes(
+    String(booking?.status || '').toLowerCase()
+  );
 
 
   const [actionLoading, setActionLoading] = useState(false);
@@ -1036,7 +1039,7 @@ export default function BookingDetails() {
         )}
 
         {/* Worker & Job Status Card (Enhanced) */}
-        {booking.assignedTo && booking.assignedTo?.name !== 'You (Self)' && (
+        {booking.assignedTo && booking.assignedTo?.name !== 'You (Self)' && !isTerminalBooking && (
           <div className="bg-white rounded-2xl p-5 mb-5 shadow-lg border border-gray-100">
             <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-100">
               <div className="flex items-center gap-3">
@@ -1382,11 +1385,13 @@ export default function BookingDetails() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleViewTimeline}
+              onClick={isTerminalBooking ? undefined : handleViewTimeline}
+              disabled={isTerminalBooking}
               className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs border border-[#720C3E]/20"
               style={{
-                background: '#FCEBF3',
-                color: '#720C3E',
+                background: isTerminalBooking ? '#F3F4F6' : '#FCEBF3',
+                color: isTerminalBooking ? '#9CA3AF' : '#720C3E',
+                opacity: isTerminalBooking ? 0.55 : 1,
               }}
             >
               <span>Timeline</span>

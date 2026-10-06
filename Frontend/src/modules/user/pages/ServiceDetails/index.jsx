@@ -123,11 +123,13 @@ const ServiceDetails = () => {
   const [canBook, setCanBook] = useState(true);
 
   const isDurationBased = service?.pricingType === 'DURATION' || service?.pricingType === 'HOURLY';
-  const pricePer30Minutes = Number(service?.pricePer30Minutes ?? service?.durationPricing?.pricePer30Minutes ?? (service?.hourlyRate ? Math.round(service.hourlyRate / 2) : (service?.basePrice || 0)));
-  const minDurationMinutes = Number(service?.minDurationMinutes ?? service?.durationPricing?.minDurationMinutes ?? (service?.minHours ? service.minHours * 60 : 30));
+  const billingUnitMinutes = Number(service?.billingUnitMinutes ?? service?.durationPricing?.billingUnitMinutes ?? 30);
+  const pricePerUnit = Number(service?.pricePerUnit ?? service?.durationPricing?.pricePerUnit ?? service?.pricePer30Minutes ?? (service?.hourlyRate ? service.hourlyRate * (billingUnitMinutes / 60) : (service?.basePrice || 0)));
+  const minDurationMinutes = Number(service?.minDurationMinutes ?? service?.durationPricing?.minDurationMinutes ?? (service?.minHours ? service.minHours * 60 : billingUnitMinutes));
   const maxDurationMinutes = Number(service?.maxDurationMinutes ?? service?.durationPricing?.maxDurationMinutes ?? (service?.maxHours ? service.maxHours * 60 : 240));
+  const durationStepMinutes = Number(service?.durationStepMinutes ?? service?.durationPricing?.durationStepMinutes ?? billingUnitMinutes);
 
-  const [selectedDurationMinutes, setSelectedDurationMinutes] = useState(minDurationMinutes || 30);
+  const [selectedDurationMinutes, setSelectedDurationMinutes] = useState(minDurationMinutes || billingUnitMinutes);
 
   const howItWorksRef = useRef(null);
 
@@ -159,7 +161,8 @@ const ServiceDetails = () => {
         if (found) {
           setService(found);
           const isDur = found.pricingType === 'DURATION' || found.pricingType === 'HOURLY';
-          const minM = Number(found.minDurationMinutes ?? found.durationPricing?.minDurationMinutes ?? (found.minHours ? found.minHours * 60 : 30));
+          const foundUnit = Number(found.billingUnitMinutes ?? found.durationPricing?.billingUnitMinutes ?? 30);
+          const minM = Number(found.minDurationMinutes ?? found.durationPricing?.minDurationMinutes ?? (found.minHours ? found.minHours * 60 : foundUnit));
           if (isDur) {
             setSelectedDurationMinutes(minM || 30);
           }
@@ -227,19 +230,19 @@ const ServiceDetails = () => {
     );
   }
 
-  const displayPrice = isDurationBased 
-    ? (selectedDurationMinutes / 30) * pricePer30Minutes 
+  const displayPrice = isDurationBased
+    ? (selectedDurationMinutes / billingUnitMinutes) * pricePerUnit
     : (service.price || service.basePrice || service.discountPrice || 0);
 
   const originalPrice = isDurationBased ? null : (service.originalPrice || (service.discountPrice && service.basePrice ? service.basePrice : null));
   const hasDiscount = originalPrice && Number(originalPrice) > Number(displayPrice);
 
   const handleDurationDecrement = () => {
-    setSelectedDurationMinutes((prev) => Math.max(minDurationMinutes, prev - 30));
+    setSelectedDurationMinutes((prev) => Math.max(minDurationMinutes, prev - durationStepMinutes));
   };
 
   const handleDurationIncrement = () => {
-    setSelectedDurationMinutes((prev) => Math.min(maxDurationMinutes, prev + 30));
+    setSelectedDurationMinutes((prev) => Math.min(maxDurationMinutes, prev + durationStepMinutes));
   };
 
   const inclusions = service.inclusions && service.inclusions.length > 0 ? service.inclusions : defaultInclusions;
@@ -276,14 +279,16 @@ const ServiceDetails = () => {
         pricingType: isDurationBased ? 'DURATION' : 'FIXED',
         price: Number(displayPrice),
         originalPrice: originalPrice ? Number(originalPrice) : null,
-        unitPrice: isDurationBased ? pricePer30Minutes : Number(displayPrice),
+        unitPrice: isDurationBased ? pricePerUnit : Number(displayPrice),
+        pricePerUnit: isDurationBased ? pricePerUnit : null,
+        billingUnitMinutes: isDurationBased ? billingUnitMinutes : null,
         serviceCount: 1,
         rating: service.rating || '4.9',
         reviews: service.ratingCount || '237.6k',
         inclusions: inclusions,
         ...(isDurationBased ? {
           durationMinutes: selectedDurationMinutes,
-          pricePer30Minutes: pricePer30Minutes,
+          pricePer30Minutes: billingUnitMinutes === 30 ? pricePerUnit : null,
           minDurationMinutes: minDurationMinutes,
           maxDurationMinutes: maxDurationMinutes,
           hours: selectedDurationMinutes / 60
@@ -372,7 +377,7 @@ const ServiceDetails = () => {
             </div>
 
             {/* Hero Visual Area */}
-            <div 
+            <div
               className="relative w-full h-64 sm:h-80 overflow-hidden flex items-center justify-center border-b border-[#E8D9DF]/60"
               style={{
                 background: `
@@ -383,7 +388,7 @@ const ServiceDetails = () => {
                 `
               }}
             >
-              <div 
+              <div
                 className="absolute inset-0 opacity-[0.04] pointer-events-none"
                 style={{
                   backgroundImage: 'radial-gradient(#720C3E 0.8px, transparent 0.8px)',
@@ -398,7 +403,7 @@ const ServiceDetails = () => {
                   className="w-full h-full object-contain sm:object-cover relative z-0"
                 />
               ) : (
-                <div 
+                <div
                   className="w-20 h-20 rounded-2xl flex items-center justify-center text-white font-black text-3xl shadow-sm relative z-0"
                   style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
                 >
@@ -432,11 +437,6 @@ const ServiceDetails = () => {
                     <span className="text-xl sm:text-2xl font-black text-slate-900 leading-none">
                       ₹{displayPrice}
                     </span>
-                    {isDurationBased && (
-                      <span className="text-xs sm:text-sm text-slate-500 font-semibold leading-none">
-                        (₹{pricePer30Minutes}/30m × {selectedDurationMinutes}m)
-                      </span>
-                    )}
                     {hasDiscount && (
                       <span className="text-xs sm:text-sm text-slate-400 line-through font-medium leading-none">
                         ₹{originalPrice}
@@ -455,9 +455,33 @@ const ServiceDetails = () => {
                     </span>
                   </div>
                 </div>
-
-                {/* Brand Theme BOOK Button */}
-                {canBook ? (
+                {/* Compact duration selector, matching the service card pattern */}
+                {isDurationBased ? (
+                  <div className="flex items-center gap-1 rounded-xl border border-[#E8D9DF] bg-white px-1.5 py-1 shadow-sm shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleDurationDecrement}
+                      disabled={selectedDurationMinutes <= minDurationMinutes}
+                      className="w-7 h-7 rounded-lg text-[#831843] text-lg leading-none hover:bg-[#FFF7FA] disabled:opacity-30 disabled:cursor-not-allowed"
+                      aria-label={`Decrease duration by ${durationStepMinutes} minutes`}
+                    >
+                      −
+                    </button>
+                    <div className="min-w-[42px] text-center leading-none">
+                      <div className="text-base font-black text-[#831843]">{selectedDurationMinutes}</div>
+                      <div className="text-[9px] font-semibold text-slate-400 mt-0.5">Minutes</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDurationIncrement}
+                      disabled={selectedDurationMinutes >= maxDurationMinutes}
+                      className="w-7 h-7 rounded-lg bg-[#831843] text-white text-lg leading-none hover:bg-[#720C3E] disabled:opacity-30 disabled:cursor-not-allowed"
+                      aria-label={`Increase duration by ${durationStepMinutes} minutes`}
+                    >
+                      +
+                    </button>
+                  </div>
+                ) : canBook ? (
                   <button
                     onClick={handleBookNow}
                     disabled={addingToCart}
@@ -472,80 +496,6 @@ const ServiceDetails = () => {
                 )}
               </div>
             </div>
-
-            {/* Select Duration (DURATION-priced services) */}
-            {isDurationBased && (
-              <div className="p-4 bg-[#FFF7FA] rounded-2xl border border-[#E8D9DF] space-y-3.5 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">
-                      Select Duration
-                    </h3>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      Scales in 30-minute blocks (₹{pricePer30Minutes} per 30 mins)
-                    </p>
-                  </div>
-
-                  <span className="px-2.5 py-1 bg-white border border-[#E8D9DF] text-[#720C3E] text-xs font-black rounded-lg shadow-2xs">
-                    ₹{displayPrice}
-                  </span>
-                </div>
-
-                {/* Interactive Stepper */}
-                <div className="flex items-center justify-between bg-white rounded-xl p-2 border border-[#E8D9DF] shadow-xs">
-                  <button
-                    type="button"
-                    onClick={handleDurationDecrement}
-                    disabled={selectedDurationMinutes <= minDurationMinutes}
-                    className="w-10 h-10 rounded-lg bg-[#FFF7FA] hover:bg-[#FCEBF3] active:scale-95 border border-[#E8D9DF] text-[#720C3E] flex items-center justify-center font-black transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
-                    title="Decrease 30 minutes"
-                  >
-                    <FiMinus className="text-base" />
-                  </button>
-
-                  <div className="text-center px-4">
-                    <p className="text-base sm:text-lg font-black text-slate-900 leading-tight">
-                      {selectedDurationMinutes} Mins
-                    </p>
-                    <p className="text-[11px] font-bold text-slate-500">
-                      {selectedDurationMinutes >= 60 
-                        ? `${(selectedDurationMinutes / 60).toFixed(1).replace('.0', '')} ${selectedDurationMinutes === 60 ? 'Hour' : 'Hours'}`
-                        : '30 Minutes Help'}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleDurationIncrement}
-                    disabled={selectedDurationMinutes >= maxDurationMinutes}
-                    className="w-10 h-10 rounded-lg bg-gradient-to-r from-[#720C3E] to-[#9A2459] active:scale-95 text-white flex items-center justify-center font-black transition-all disabled:opacity-40 disabled:pointer-events-none cursor-pointer shadow-xs"
-                    title="Increase 30 minutes"
-                  >
-                    <FiPlus className="text-base" />
-                  </button>
-                </div>
-
-                {/* Quick Select Preset Pills */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {[30, 60, 90, 120, 180, 240, 300, 360, 480]
-                    .filter((mins) => mins >= minDurationMinutes && mins <= maxDurationMinutes)
-                    .map((mins) => (
-                      <button
-                        key={mins}
-                        type="button"
-                        onClick={() => setSelectedDurationMinutes(mins)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          selectedDurationMinutes === mins
-                            ? 'bg-[#720C3E] text-white shadow-2xs'
-                            : 'bg-white border border-[#E8D9DF] text-slate-700 hover:bg-[#FFF7FA]'
-                        }`}
-                      >
-                        {mins >= 60 ? `${mins / 60}h (${mins}m)` : `${mins}m`} • ₹{(mins / 30) * pricePer30Minutes}
-                      </button>
-                    ))}
-                </div>
-              </div>
-            )}
 
             {/* Tagline & Description */}
             <div className="space-y-1.5 pb-2">
@@ -783,12 +733,12 @@ const ServiceDetails = () => {
           {/* Desktop/Tablet 2-Column Content */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
             <div className="grid grid-cols-12 gap-6 lg:gap-8 items-start">
-              
+
               {/* Left Column */}
               <div className="col-span-7 xl:col-span-8 space-y-6">
                 {/* Hero Banner */}
                 <div className="relative w-full h-72 lg:h-80 xl:h-96 rounded-3xl overflow-hidden border border-[#E8D9DF]/70 shadow-sm bg-white">
-                  <div 
+                  <div
                     className="absolute inset-0 flex items-center justify-center"
                     style={{
                       background: `
@@ -799,7 +749,7 @@ const ServiceDetails = () => {
                       `
                     }}
                   >
-                    <div 
+                    <div
                       className="absolute inset-0 opacity-[0.04] pointer-events-none"
                       style={{
                         backgroundImage: 'radial-gradient(#720C3E 0.8px, transparent 0.8px)',
@@ -814,7 +764,7 @@ const ServiceDetails = () => {
                         className="w-full h-full object-contain p-4 relative z-0"
                       />
                     ) : (
-                      <div 
+                      <div
                         className="w-24 h-24 rounded-3xl flex items-center justify-center text-white font-black text-4xl shadow-md relative z-0"
                         style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
                       >
@@ -1051,66 +1001,37 @@ const ServiceDetails = () => {
                     {isDurationBased && (
                       <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-[#E8D9DF]/60">
                         <span>Rate Breakdown</span>
-                        <span className="font-semibold text-slate-700">₹{pricePer30Minutes} / 30 mins</span>
+                        <span className="font-semibold text-slate-700">₹{pricePerUnit} / {billingUnitMinutes} mins</span>
                       </div>
                     )}
                   </div>
-
-                  {/* Duration Picker (if duration based) */}
+                  {/* Compact duration selector */}
                   {isDurationBased && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Choose Duration</h4>
-                        <span className="text-xs font-bold text-[#720C3E]">{selectedDurationMinutes} Minutes</span>
-                      </div>
-
-                      <div className="flex items-center justify-between bg-slate-50 rounded-xl p-2 border border-slate-200">
+                    <div className="flex items-center justify-between rounded-xl border border-[#E8D9DF] bg-[#FFF7FA] p-2">
+                      <span className="text-[11px] font-bold text-slate-500">Duration</span>
+                      <div className="flex items-center gap-1 rounded-lg border border-[#E8D9DF] bg-white px-1 py-1">
                         <button
                           type="button"
                           onClick={handleDurationDecrement}
                           disabled={selectedDurationMinutes <= minDurationMinutes}
-                          className="w-9 h-9 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[#720C3E] flex items-center justify-center font-black transition-all disabled:opacity-40 cursor-pointer shadow-2xs"
+                          className="w-7 h-7 rounded-md text-[#831843] text-lg leading-none hover:bg-[#FFF7FA] disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label={`Decrease duration by ${durationStepMinutes} minutes`}
                         >
-                          <FiMinus />
+                          −
                         </button>
-
-                        <div className="text-center">
-                          <p className="text-sm font-black text-slate-900">{selectedDurationMinutes} Mins</p>
-                          <p className="text-[10px] text-slate-500 font-semibold">
-                            {selectedDurationMinutes >= 60 
-                              ? `${(selectedDurationMinutes / 60).toFixed(1).replace('.0', '')} Hours` 
-                              : 'Quick Help'}
-                          </p>
+                        <div className="min-w-[48px] text-center leading-none">
+                          <div className="text-sm font-black text-[#831843]">{selectedDurationMinutes}</div>
+                          <div className="text-[9px] font-semibold text-slate-400 mt-0.5">Minutes</div>
                         </div>
-
                         <button
                           type="button"
                           onClick={handleDurationIncrement}
                           disabled={selectedDurationMinutes >= maxDurationMinutes}
-                          className="w-9 h-9 rounded-lg bg-[#720C3E] hover:bg-[#5b0931] text-white flex items-center justify-center font-black transition-all disabled:opacity-40 cursor-pointer shadow-2xs"
+                          className="w-7 h-7 rounded-md bg-[#831843] text-white text-lg leading-none hover:bg-[#720C3E] disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label={`Increase duration by ${durationStepMinutes} minutes`}
                         >
-                          <FiPlus />
+                          +
                         </button>
-                      </div>
-
-                      {/* Quick Pills */}
-                      <div className="flex flex-wrap gap-1.5">
-                        {[30, 60, 90, 120, 180, 240]
-                          .filter((mins) => mins >= minDurationMinutes && mins <= maxDurationMinutes)
-                          .map((mins) => (
-                            <button
-                              key={mins}
-                              type="button"
-                              onClick={() => setSelectedDurationMinutes(mins)}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                                selectedDurationMinutes === mins
-                                  ? 'bg-[#720C3E] text-white'
-                                  : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100'
-                              }`}
-                            >
-                              {mins >= 60 ? `${mins / 60}h` : `${mins}m`}
-                            </button>
-                          ))}
                       </div>
                     </div>
                   )}
@@ -1191,4 +1112,3 @@ const ServiceDetails = () => {
 };
 
 export default ServiceDetails;
-
