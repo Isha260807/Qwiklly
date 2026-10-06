@@ -36,7 +36,6 @@ const ServicesWeOffer = ({ services = [], onServiceClick }) => {
           const displayPrice = service.price || service.basePrice || service.discountPrice || 0;
           const originalPrice = service.originalPrice || (service.discountPrice && service.basePrice ? service.basePrice : null);
           const hasDiscount = originalPrice && Number(originalPrice) > Number(displayPrice);
-
           const ratingDisplay = formatRatingDisplay(service.rating, service.ratingCount);
           const badge = service.badge?.trim();
 

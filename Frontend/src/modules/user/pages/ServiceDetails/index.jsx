@@ -120,7 +120,9 @@ const ServiceDetails = () => {
   // (out of zone / zone inactive / service not offered here). Vendor
   // availability (offline/busy/no-one-in-radius) is NOT one of these -
   // those bookings still go through and get parked for admin assignment.
-  const [canBook, setCanBook] = useState(true);
+  const [canBook, setCanBook] = useState(
+    location.state?.service?.isAvailableInArea !== false
+  );
 
   const isDurationBased = service?.pricingType === 'DURATION' || service?.pricingType === 'HOURLY';
   const billingUnitMinutes = Number(service?.billingUnitMinutes ?? service?.durationPricing?.billingUnitMinutes ?? 30);
@@ -160,6 +162,7 @@ const ServiceDetails = () => {
 
         if (found) {
           setService(found);
+          if (found.isAvailableInArea === false) setCanBook(false);
           const isDur = found.pricingType === 'DURATION' || found.pricingType === 'HOURLY';
           const foundUnit = Number(found.billingUnitMinutes ?? found.durationPricing?.billingUnitMinutes ?? 30);
           const minM = Number(found.minDurationMinutes ?? found.durationPricing?.minDurationMinutes ?? (found.minHours ? found.minHours * 60 : foundUnit));
@@ -269,6 +272,8 @@ const ServiceDetails = () => {
 
     try {
       setAddingToCart(true);
+      const latitude = parseFloat(localStorage.getItem('userLat'));
+      const longitude = parseFloat(localStorage.getItem('userLng'));
       const cartItemData = {
         serviceId: service.id || service._id,
         title: service.title,
@@ -286,6 +291,7 @@ const ServiceDetails = () => {
         rating: service.rating || '4.9',
         reviews: service.ratingCount || '237.6k',
         inclusions: inclusions,
+        ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {}),
         ...(isDurationBased ? {
           durationMinutes: selectedDurationMinutes,
           pricePer30Minutes: billingUnitMinutes === 30 ? pricePerUnit : null,

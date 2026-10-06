@@ -1,6 +1,16 @@
 const Cart = require('../../models/Cart');
 const Service = require('../../models/UserService');
 const { validationResult } = require('express-validator');
+const { checkBookingServiceability } = require('../../services/serviceabilityService');
+const { MATCH_FAILURE_REASONS } = require('../../utils/constants');
+
+const CART_HARD_BLOCK_REASONS = new Set([
+  MATCH_FAILURE_REASONS.OUT_OF_SERVICE_ZONE,
+  MATCH_FAILURE_REASONS.ZONE_INACTIVE,
+  MATCH_FAILURE_REASONS.SERVICE_NOT_AVAILABLE_IN_ZONE,
+  MATCH_FAILURE_REASONS.INVALID_LOCATION,
+  'SERVICE_NOT_FOUND'
+]);
 
 /**
  * Get user's cart
@@ -66,7 +76,9 @@ const addToCart = async (req, res) => {
       durationMinutes,
       pricePer30Minutes,
       pricePerUnit,
-      billingUnitMinutes
+      billingUnitMinutes,
+      latitude,
+      longitude
     } = req.body;
 
     console.log(`[AddToCart] Request details - Title: ${title}, Section: ${sectionTitle}, PricingType: ${requestedPricingType}`);
@@ -78,6 +90,30 @@ const addToCart = async (req, res) => {
         service = await Service.findById(serviceId).populate('categoryId', 'title').populate('brandId', 'title');
       } catch (svcErr) {
         console.warn('[AddToCart] Service find error (non-fatal):', svcErr);
+      }
+    }
+
+    // The catalog keeps unavailable services visible, but a cart add must
+    // still be rejected when the client has a resolved location. Vendor
+    // availability is intentionally not blocked here; only hard area/service
+    // restrictions prevent adding the item.
+    const bookingLatitude = Number(latitude);
+    const bookingLongitude = Number(longitude);
+    if (serviceId && Number.isFinite(bookingLatitude)) {
+      if (Number.isFinite(bookingLongitude)) {
+        const serviceability = await checkBookingServiceability({
+          serviceId,
+          lat: bookingLatitude,
+          lng: bookingLongitude
+        });
+
+        if (CART_HARD_BLOCK_REASONS.has(serviceability.reason)) {
+          return res.status(409).json({
+            success: false,
+            code: 'SERVICE_NOT_AVAILABLE_IN_AREA',
+            message: 'This service is not available in your selected area.'
+          });
+        }
       }
     }
 

@@ -297,6 +297,9 @@ const getPublicServices = async (req, res) => {
         maxHours: svc.maxHours ?? 8,
         allowCustomHours: svc.allowCustomHours ?? false,
         allowExtraHours: svc.allowExtraHours ?? true,
+        // Keep the service visible in every city/zone catalog. The client
+        // uses this list only to label area availability; it is not a filter.
+        zoneIds: (svc.zoneIds || []).map(zoneId => zoneId.toString()),
         rating: svc.rating || 4.9,
         reviews: svc.ratingCount || '4.9 (237.6k)',
         ratingCount: svc.ratingCount || '4.9 (237.6k)',
@@ -484,6 +487,9 @@ const getPublicHomeData = async (req, res) => {
       originalPrice: svc.originalPrice || 0,
       discountPrice: svc.discountPrice || null,
       gstPercentage: svc.gstPercentage ?? 18,
+      // Empty means available in every active zone. Non-empty is used by the
+      // client to show an unavailable badge without hiding the service.
+      zoneIds: (svc.zoneIds || []).map(zoneId => zoneId.toString()),
       rating: svc.rating || 4.9,
       reviews: svc.ratingCount || '4.9 (237.6k)',
       ratingCount: svc.ratingCount || '4.9 (237.6k)',

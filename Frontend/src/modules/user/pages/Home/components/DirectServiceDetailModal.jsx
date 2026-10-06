@@ -45,6 +45,7 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
 
   useEffect(() => {
     if (!isOpen || !service) return;
+    setCanBook(service.isAvailableInArea !== false);
     const serviceId = service.id || service._id;
     const lat = parseFloat(localStorage.getItem('userLat'));
     const lng = parseFloat(localStorage.getItem('userLng'));
@@ -85,6 +86,8 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
 
     try {
       setAddingToCart(true);
+      const latitude = parseFloat(localStorage.getItem('userLat'));
+      const longitude = parseFloat(localStorage.getItem('userLng'));
       const cartItemData = {
         serviceId: service.id || service._id,
         title: service.title,
@@ -98,7 +101,8 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
         serviceCount: 1,
         rating: service.rating || '4.9',
         reviews: service.ratingCount || '237.6k',
-        inclusions: inclusions
+        inclusions: inclusions,
+        ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {})
       };
 
       const response = await addToCart(cartItemData);

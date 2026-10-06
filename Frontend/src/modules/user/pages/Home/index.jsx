@@ -40,6 +40,22 @@ const toAssetUrl = (url) => {
   return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
 };
 
+const markAreaAvailability = (items, zoneStatus) => (items || []).map(service => {
+  let isAvailableInArea = true;
+
+  if (zoneStatus) {
+    if (!zoneStatus.inZone) {
+      isAvailableInArea = false;
+    } else if (Array.isArray(service.zoneIds) && service.zoneIds.length > 0) {
+      isAvailableInArea = Boolean(zoneStatus.zoneId) && service.zoneIds.some(zoneId => (
+        String(zoneId) === String(zoneStatus.zoneId)
+      ));
+    }
+  }
+
+  return { ...service, isAvailableInArea };
+});
+
 const Home = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -351,7 +367,7 @@ const Home = () => {
           }
 
           if (response.services) {
-            setServices(response.services);
+            setServices(markAreaAvailability(response.services, zoneStatus));
           }
 
           if (response.banners && response.banners.length > 0) {
@@ -370,7 +386,7 @@ const Home = () => {
           try {
             const svcRes = await publicCatalogService.getServices({ cityId });
             if (svcRes.success && svcRes.services) {
-              setServices(svcRes.services);
+              setServices(markAreaAvailability(svcRes.services, zoneStatus));
             }
           } catch (e) {
             console.error("Direct services fetch fallback error:", e);
@@ -384,7 +400,7 @@ const Home = () => {
     };
 
     fetchData();
-  }, [currentCity, zoneStatus?.zoneId]);
+  }, [currentCity, zoneStatus?.zoneId, zoneStatus?.inZone]);
   // Open category modal from navigation state (e.g. from Cart 'Add Services')
   useEffect(() => {
     if (!loading && categories.length > 0 && (location.state?.openCategoryId || location.state?.openCategoryName)) {
@@ -446,6 +462,11 @@ const Home = () => {
 
   const handleAddClick = async (service) => {
     try {
+      if (service.isAvailableInArea === false) {
+        toast.error('This service is not available in your selected area.');
+        return;
+      }
+
       if (service.targetCategoryId) {
         const cat = categories.find(c => c.id === service.targetCategoryId);
         if (cat) {
@@ -455,6 +476,8 @@ const Home = () => {
       }
 
       if (service.serviceId && service.categoryId) {
+        const latitude = parseFloat(localStorage.getItem('userLat'));
+        const longitude = parseFloat(localStorage.getItem('userLng'));
         const cartItemData = {
           serviceId: service.serviceId,
           categoryId: service.categoryId,
@@ -469,7 +492,8 @@ const Home = () => {
           rating: service.rating || "4.8",
           reviews: service.reviews || "10k+",
           vendorId: service.vendorId || null,
-          sectionId: service.sectionId || null // VITAL: Added for plan benefits
+          sectionId: service.sectionId || null, // VITAL: Added for plan benefits
+          ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {})
         };
 
         const response = await addToCart(cartItemData);
@@ -885,6 +909,7 @@ const Home = () => {
         location={address}
         cartCount={cartCount}
         currentCity={currentCity}
+        zoneStatus={zoneStatus}
       />
 
       {/* Search Overlay */}
