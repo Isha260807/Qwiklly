@@ -468,6 +468,7 @@ const Checkout = () => {
         serviceId: (typeof item.serviceId === 'object' ? (item.serviceId?._id || item.serviceId?.id) : item.serviceId) || undefined,
         pricingType: item.pricingType || item.card?.pricingType || undefined,
         durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+        estimatedDurationMinutes: item.serviceId?.estimatedDurationMinutes || item.estimatedDurationMinutes || item.card?.estimatedDurationMinutes || undefined,
         pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
         billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
         pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
@@ -483,6 +484,7 @@ const Checkout = () => {
           features: item.card?.features || [],
           pricingType: item.pricingType || item.card?.pricingType || undefined,
           durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+          estimatedDurationMinutes: item.serviceId?.estimatedDurationMinutes || item.estimatedDurationMinutes || item.card?.estimatedDurationMinutes || undefined,
           pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
           billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
           pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
@@ -690,6 +692,7 @@ const Checkout = () => {
         serviceId: (typeof item.serviceId === 'object' ? (item.serviceId?._id || item.serviceId?.id) : item.serviceId) || undefined,
         pricingType: item.pricingType || item.card?.pricingType || undefined,
         durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+        estimatedDurationMinutes: item.serviceId?.estimatedDurationMinutes || item.estimatedDurationMinutes || item.card?.estimatedDurationMinutes || undefined,
         pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
         billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
         pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
@@ -705,6 +708,7 @@ const Checkout = () => {
           features: item.card?.features || [],
           pricingType: item.pricingType || item.card?.pricingType || undefined,
           durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+          estimatedDurationMinutes: item.serviceId?.estimatedDurationMinutes || item.estimatedDurationMinutes || item.card?.estimatedDurationMinutes || undefined,
           pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
           billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
           pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
@@ -1041,6 +1045,25 @@ const Checkout = () => {
   const displayInstantFee = totalAmount === 0 ? (bookingType === 'instant' ? instantBookingCharges : 0) : finalInstantFee;
   const displaySavings = totalAmount === 0 ? (totalOriginalPrice + displayTax + displayFee + displayInstantFee) : (planSavings + couponDiscount);
   const savings = displaySavings;
+  // Every cart item contributes to the vendor's occupancy. Duration-priced
+  // items use the selected duration; fixed-price items use the admin-configured
+  // estimated execution time. No buffer is added here.
+  const getItemServiceDuration = (item) => {
+    const itemType = String(item.pricingType || item.card?.pricingType || item.serviceId?.pricingType || '').toUpperCase();
+    if (['HOURLY', 'DURATION'].includes(itemType)) {
+      return Number(
+        item.durationMinutes || item.card?.durationMinutes
+          || ((item.hours || item.card?.hours || 0) * 60)
+      ) || 0;
+    }
+
+    // Fixed services use the global Admin Settings duration.
+    return Number(slotConfig.slotServiceDurationMins) || 45;
+  };
+  const totalServiceDurationMins = cartItems.reduce(
+    (sum, item) => sum + (getItemServiceDuration(item) * (item.serviceCount || 1)),
+    0
+  );
 
   // Scheduled bookings are auto-assigned from the admin-marked vendor schedule, so
   // only the dates/slots a vendor is actually available for (the union across
@@ -1052,14 +1075,8 @@ const Checkout = () => {
     return ['HOURLY', 'DURATION'].includes(String(itemType || '').toUpperCase())
       || Boolean(item.hours || item.card?.hours);
   });
-  // Fixed-price services always take one slot; only duration/hourly ones span several.
-  const slotDurationMins = hasHourlyItems
-    ? cartItems.reduce((sum, item) => {
-      const mins = item.durationMinutes || item.card?.durationMinutes
-        || ((item.hours || item.card?.hours || 0) * 60);
-      return sum + mins * (item.serviceCount || 1);
-    }, 0)
-    : 0;
+  // Mixed carts reserve the sum of all service execution times.
+  const slotDurationMins = totalServiceDurationMins || Number(slotConfig.slotServiceDurationMins || 45);
   const hasAddressCoords = typeof addressDetails?.lat === 'number' && typeof addressDetails?.lng === 'number';
   const slotServiceId = cartItems[0]
     ? (typeof cartItems[0].serviceId === 'object'
@@ -1327,23 +1344,23 @@ const Checkout = () => {
                   <div className="shrink-0 flex flex-col items-end gap-1.5">
                     <div className="flex items-center gap-1.5">
                       {!item.isPlan && (isDurationItem ? (
-                        <div className="flex items-center gap-1 rounded-lg border border-[#E8D9DF] bg-[#FFF7FA] px-1 py-1">
+                        <div className="flex items-center gap-0.5 rounded-md border border-[#E8D9DF] bg-[#FFF7FA] px-0.5 py-0.5">
                           <button
                             onClick={() => handleDurationChange(item._id, -1)}
                             disabled={shownDuration <= Number(item.minDurationMinutes || item.card?.minDurationMinutes || durationUnit)}
-                            className="w-7 h-7 rounded-md text-[#831843] text-lg leading-none hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="w-6 h-6 rounded-md text-[#831843] text-sm leading-none hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
                             aria-label={`Decrease duration by ${durationUnit} minutes`}
                           >
                             −
                           </button>
-                          <div className="min-w-[46px] text-center leading-none">
-                            <div className="text-sm font-black text-[#831843]">{shownDuration}</div>
-                            <div className="text-[9px] font-semibold text-slate-400 mt-0.5">Minutes</div>
+                          <div className="min-w-[36px] text-center leading-none">
+                            <div className="text-xs font-black text-[#831843]">{shownDuration}</div>
+                            <div className="text-[8px] font-semibold text-slate-400 mt-0.5">Minutes</div>
                           </div>
                           <button
                             onClick={() => handleDurationChange(item._id, 1)}
                             disabled={shownDuration >= Number(item.maxDurationMinutes || item.card?.maxDurationMinutes || 480)}
-                            className="w-7 h-7 rounded-md bg-[#831843] text-white text-lg leading-none hover:bg-[#720C3E] disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="w-6 h-6 rounded-md bg-[#831843] text-white text-sm leading-none hover:bg-[#720C3E] disabled:opacity-30 disabled:cursor-not-allowed"
                             aria-label={`Increase duration by ${durationUnit} minutes`}
                           >
                             +
@@ -1853,11 +1870,7 @@ const Checkout = () => {
         formatDate={formatDate}
         isDateSelected={isDateSelected}
         isTimeSelected={isTimeSelected}
-        approxDuration={
-          cartItems.some((i) => i.durationMinutes || i.hours)
-            ? Math.max(...cartItems.map((i) => i.durationMinutes || (i.hours || 0) * 60))
-            : (slotConfig.slotServiceDurationMins || 45)
-        }
+        approxDuration={totalServiceDurationMins || (slotConfig.slotServiceDurationMins || 45)}
       />
     </div>
   );

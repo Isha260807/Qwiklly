@@ -160,6 +160,29 @@ const getSlotRange = (timeSlot) => {
   return { start, end };
 };
 
+const getBookedServiceDuration = (booking, fixedDurationMins = 45) => {
+  const items = Array.isArray(booking?.bookedItems) ? booking.bookedItems : [];
+  if (items.length === 0) return 0;
+  return items.reduce((sum, item) => {
+    const card = item.card || item;
+    const pricingType = String(card.pricingType || item.pricingType || 'FIXED').toUpperCase();
+    const duration = ['DURATION', 'HOURLY'].includes(pricingType)
+      ? Number(card.durationMinutes || item.durationMinutes || ((card.hours || item.hours || 0) * 60))
+      : Number(fixedDurationMins) || 45;
+    return sum + (duration || 0) * (item.quantity || 1);
+  }, 0);
+};
+
+const getEffectiveBookingRange = (booking, fixedDurationMins = 45) => {
+  const storedRange = getSlotRange(booking?.timeSlot);
+  const start = parseSlotTime(booking?.timeSlot?.start);
+  const duration = getBookedServiceDuration(booking, fixedDurationMins);
+  if (start === null || duration <= 0) return storedRange;
+  const computedRange = { start, end: start + duration };
+  if (!storedRange) return computedRange;
+  return { start, end: Math.max(storedRange.end, computedRange.end) };
+};
+
 const getUtcDayRange = (dateValue) => {
   const date = new Date(dateValue);
   if (Number.isNaN(date.getTime())) return null;
@@ -180,16 +203,18 @@ const pad2 = (n) => String(n).padStart(2, '0');
 const minutesToHHMM = (minutes) => `${pad2(Math.floor(minutes / 60))}:${pad2(minutes % 60)}`;
 
 /**
- * Slots a booking occupies, in whole slot units. Fixed-price services occupy one
- * slot; duration/hourly services occupy as many consecutive slots as their
- * booked duration needs (e.g. 90 min on 60-min slots = 2 slots).
+ * Admin availability is represented in slot units, so every required slot must
+ * be marked. The collision range itself remains the exact requested duration;
+ * no buffer or slot-rounding time is added to the stored booking end.
  */
 const getSlotSpan = (startMinutes, durationMins, unitMins) => {
-  const slotCount = Math.max(1, Math.ceil((Number(durationMins) || 0) / unitMins));
+  const requestedMinutes = Number(durationMins);
+  const occupiedMinutes = Number.isFinite(requestedMinutes) && requestedMinutes > 0 ? requestedMinutes : unitMins;
+  const slotCount = Math.max(1, Math.ceil(occupiedMinutes / unitMins));
   return {
     slotCount,
     starts: Array.from({ length: slotCount }, (_, i) => startMinutes + i * unitMins),
-    range: { start: startMinutes, end: startMinutes + slotCount * unitMins }
+    range: { start: startMinutes, end: startMinutes + occupiedMinutes }
   };
 };
 
@@ -231,7 +256,7 @@ const rangesOverlap = (a, b) => a.start < b.end && b.start < a.end;
  * NORMAL scheduled services receive the global approximate duration from the
  * caller; duration/hourly services receive the customer's selected duration.
  */
-const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, durationMins = 0, intervalMins = 60 }) => {
+const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, durationMins = 0, intervalMins = 60, fixedDurationMins = 45 }) => {
   const requestedStart = parseSlotTime(timeSlot?.start);
   const dayRange = getUtcDayRange(scheduledDate);
   const dateKey = toDateKey(scheduledDate);
@@ -273,7 +298,7 @@ const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, du
     vendorId: { $in: qualified.map(item => item.vendor._id) },
     scheduledDate: { $gte: dayRange.start, $lt: dayRange.end },
     status: { $in: SLOT_BLOCKING_STATUSES }
-  }).select('vendorId timeSlot').lean();
+  }).select('vendorId timeSlot bookedItems').lean();
 
   const bookedByVendor = new Map();
   existingBookings.forEach(booking => {
@@ -281,7 +306,7 @@ const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, du
     if (!bookedByVendor.has(key)) bookedByVendor.set(key, []);
     // An existing active booking without a parseable slot is safest treated as
     // blocking the vendor for that day rather than risking an overlap.
-    bookedByVendor.get(key).push(getSlotRange(booking.timeSlot) || { start: 0, end: 24 * 60 });
+    bookedByVendor.get(key).push(getEffectiveBookingRange(booking, fixedDurationMins) || { start: 0, end: 24 * 60 });
   });
 
   const match = qualified.find(({ vendor, span }) => {
@@ -300,7 +325,7 @@ const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, du
  * marked by admin and no overlapping active booking. Returns
  * { 'YYYY-MM-DD': ['09:00', ...] } and omits dates with no bookable start.
  */
-const getBookableSlotMap = async ({ vendors, dateKeys, intervalMins = 60, durationMins = 0 }) => {
+const getBookableSlotMap = async ({ vendors, dateKeys, intervalMins = 60, durationMins = 0, fixedDurationMins = 45 }) => {
   const candidateIds = (vendors || []).map(vendor => vendor._id);
   if (candidateIds.length === 0 || !dateKeys || dateKeys.length === 0) return {};
 
@@ -319,14 +344,14 @@ const getBookableSlotMap = async ({ vendors, dateKeys, intervalMins = 60, durati
     vendorId: { $in: candidateIds },
     scheduledDate: { $gte: rangeStart, $lt: rangeEnd },
     status: { $in: SLOT_BLOCKING_STATUSES }
-  }).select('vendorId scheduledDate timeSlot').lean();
+  }).select('vendorId scheduledDate timeSlot bookedItems').lean();
 
   const bookedRanges = new Map(); // `${vendorId}|${dateKey}` -> ranges[]
   bookings.forEach(booking => {
     const key = `${booking.vendorId}|${booking.scheduledDate.toISOString().slice(0, 10)}`;
     if (!bookedRanges.has(key)) bookedRanges.set(key, []);
     // Unparseable slot blocks the whole day for that vendor.
-    bookedRanges.get(key).push(getSlotRange(booking.timeSlot) || { start: 0, end: 24 * 60 });
+    bookedRanges.get(key).push(getEffectiveBookingRange(booking, fixedDurationMins) || { start: 0, end: 24 * 60 });
   });
 
   const byDate = {}; // dateKey -> Set<start minutes>

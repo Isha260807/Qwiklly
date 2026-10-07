@@ -72,6 +72,11 @@ const cartItemSchema = new mongoose.Schema({
     type: Number,
     default: null
   },
+  estimatedDurationMinutes: {
+    type: Number,
+    default: null,
+    min: 1
+  },
   // Generic duration pricing snapshot. Legacy 30-minute fields remain below
   // so existing carts and UI consumers continue to work.
   pricePerUnit: {
@@ -128,6 +133,7 @@ const cartItemSchema = new mongoose.Schema({
     price: Number,
     originalPrice: Number,
     duration: String,
+    estimatedDurationMinutes: Number,
     description: String,
     imageUrl: String,
     features: [String]

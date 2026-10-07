@@ -183,7 +183,7 @@ const getCheckoutData = async (req, res) => {
     // Fetch all 3 in parallel
     const [user, cart, settings] = await Promise.all([
       User.findById(userId).select('addresses phone name'),
-      Cart.findOne({ userId }).populate('items.serviceId', 'title iconUrl slug').populate('items.categoryId', 'title slug'),
+      Cart.findOne({ userId }).populate('items.serviceId', 'title iconUrl slug pricingType estimatedDurationMinutes').populate('items.categoryId', 'title slug'),
       Settings.findOne({ type: 'global' }).select(
         'visitedCharges instantBookingCharges serviceGstPercentage partsGstPercentage slotStartHour slotEndHour slotIntervalMins maxDaysInAdvance leadTimeHours slotServiceDurationMins disabledSlots customSlots'
       )
@@ -196,6 +196,21 @@ const getCheckoutData = async (req, res) => {
       });
     }
 
+    const cartItems = (cart?.items || []).map(item => {
+      const itemObject = typeof item.toObject === 'function' ? item.toObject() : { ...item };
+      const service = item.serviceId && typeof item.serviceId === 'object' ? item.serviceId : null;
+      const pricingType = String(itemObject.pricingType || itemObject.card?.pricingType || service?.pricingType || 'FIXED').toUpperCase();
+
+      // The current admin service duration is authoritative for fixed services.
+      // Do not let an older cart snapshot reduce a multi-service booking time.
+      if (pricingType === 'FIXED' && Number(service?.estimatedDurationMinutes) > 0) {
+        itemObject.estimatedDurationMinutes = Number(service.estimatedDurationMinutes);
+        if (itemObject.card) itemObject.card.estimatedDurationMinutes = Number(service.estimatedDurationMinutes);
+      }
+
+      return itemObject;
+    });
+
     res.status(200).json({
       success: true,
       user: {
@@ -204,7 +219,7 @@ const getCheckoutData = async (req, res) => {
         phone: user.phone,
         addresses: user.addresses || []
       },
-      cartItems: cart ? cart.items : [],
+      cartItems,
       settings: settings || {
         visitedCharges: 0,
         instantBookingCharges: 0,

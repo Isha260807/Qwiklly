@@ -63,7 +63,7 @@ const userServiceSchema = new mongoose.Schema({
   },
   estimatedDurationMinutes: {
     type: Number,
-    default: 30,
+    default: null,
     min: 1
   },
   // Duration-based pricing. `pricePer30Minutes` remains for backwards

@@ -685,6 +685,7 @@ const ServicesPage = () => {
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
                   />
                 </div>
+
               </div>
             ) : (
               <div className="space-y-4 pt-2 border-t border-slate-200">

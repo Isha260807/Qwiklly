@@ -275,6 +275,7 @@ const getPublicServices = async (req, res) => {
         discountPrice: svc.discountPrice || null,
         gstPercentage: svc.gstPercentage ?? 18,
         pricingType: svc.pricingType || 'FIXED',
+        estimatedDurationMinutes: svc.estimatedDurationMinutes ?? 45,
         pricePerUnit: svc.pricePerUnit ?? svc.durationPricing?.pricePerUnit ?? svc.pricePer30Minutes ?? (svc.hourlyRate ? svc.hourlyRate / 2 : null),
         billingUnitMinutes: svc.billingUnitMinutes ?? svc.durationPricing?.billingUnitMinutes ?? 30,
         durationStepMinutes: svc.durationStepMinutes ?? svc.durationPricing?.durationStepMinutes ?? svc.billingUnitMinutes ?? 30,

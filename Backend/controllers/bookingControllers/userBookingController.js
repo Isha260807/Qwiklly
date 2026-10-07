@@ -122,7 +122,7 @@ const createBooking = async (req, res) => {
 
     // 1. Parallel Fetching: Service and User
     const [service, user] = await Promise.all([
-      Service.findById(serviceId).select('title basePrice discountPrice description images iconUrl categoryId category categoryIds hourlyRate pricingType pricePerUnit billingUnitMinutes durationStepMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationPricing').lean(),
+      Service.findById(serviceId).select('title basePrice discountPrice description images iconUrl categoryId category categoryIds hourlyRate pricingType pricePerUnit billingUnitMinutes durationStepMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes estimatedDurationMinutes durationPricing').lean(),
       User.findById(userId).select('name phone wallet plans')
     ]);
 
@@ -140,24 +140,53 @@ const createBooking = async (req, res) => {
       });
     }
 
+    const slotRules = isScheduledBooking ? await getSlotRules() : null;
     // Every scheduled booking (fixed-price or duration/hourly) is silently assigned
+    const bookedServiceIds = Array.isArray(bookedItems)
+      ? [...new Set(bookedItems.map(item => {
+        const id = typeof item?.serviceId === 'object' ? item.serviceId?._id : item?.serviceId;
+        return id && mongoose.Types.ObjectId.isValid(id) ? String(id) : null;
+      }).filter(Boolean))]
+      : [];
+    const relatedServices = bookedServiceIds.length > 0
+      ? await Service.find({ _id: { $in: bookedServiceIds } })
+        .select('title pricingType estimatedDurationMinutes hourlyRate pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes')
+        .lean()
+      : [];
+    const serviceById = new Map([[String(service._id), service], ...relatedServices.map(item => [String(item._id), item])]);
+    const getItemService = (item) => {
+      const id = typeof item?.serviceId === 'object' ? item.serviceId?._id : item?.serviceId;
+      return id ? serviceById.get(String(id)) : null;
+    };
+    const getItemPricingType = (item) => {
+      const itemService = getItemService(item);
+      return String(item.pricingType || item.card?.pricingType || itemService?.pricingType || 'FIXED').toUpperCase();
+    };
+    const getItemServiceMinutes = (item) => {
+      const itemService = getItemService(item);
+      const pricingType = getItemPricingType(item);
+      if (pricingType === 'DURATION' || pricingType === 'HOURLY') {
+        return Number(
+          item.durationMinutes || item.card?.durationMinutes
+            || ((item.hours || item.card?.hours || 0) * 60)
+        ) || Number(itemService?.minDurationMinutes || 0);
+      }
+      // All fixed-price services use the global Admin Settings duration.
+      // Per-service/cart snapshots must not override this value.
+      return Number(slotRules?.slotServiceDurationMins) || 45;
+    };
+
     // from the admin-marked vendor slots. Duration/hourly bookings keep their timer
     // and extra-time billing; they just occupy as many consecutive slots as their
     // booked duration needs.
     const hasHourlyPricing = ['HOURLY', 'DURATION'].includes(String(service.pricingType || '').toUpperCase())
-      || (Array.isArray(bookedItems) && bookedItems.some(item => {
-        const itemType = item.pricingType || item.card?.pricingType;
-        return ['HOURLY', 'DURATION'].includes(String(itemType || '').toUpperCase())
-          || Boolean(item.hours || item.card?.hours);
-      }));
+      || (Array.isArray(bookedItems) && bookedItems.some(item => ['HOURLY', 'DURATION'].includes(getItemPricingType(item))));
     const isSlotBooking = isScheduledBooking;
     // This is the only branch that owns the NORMAL SERVICE -> SLOT behavior.
     // Duration-based and hourly scheduled bookings keep their existing path.
     const isNormalSlotBooking = isSlotBooking && !hasHourlyPricing;
-    const itemMinutes = (item) => item.card?.durationMinutes || item.durationMinutes
-      || ((item.card?.hours || item.hours || 0) * 60);
     let slotDurationMins = Array.isArray(bookedItems)
-      ? bookedItems.reduce((sum, item) => sum + itemMinutes(item) * (item.quantity || 1), 0)
+      ? bookedItems.reduce((sum, item) => sum + getItemServiceMinutes(item) * (item.quantity || 1), 0)
       : 0;
     if (hasHourlyPricing && slotDurationMins === 0) {
       slotDurationMins = service.minDurationMinutes || 30;
@@ -247,7 +276,6 @@ const createBooking = async (req, res) => {
     if (isSlotBooking && !matchFailureReason) {
       // The global slot setup (hours, interval, blocked slots, booking window) is
       // the master list; vendor availability only narrows it down.
-      const slotRules = await getSlotRules();
       if (!isDateWithinWindow(requestedDateValue.toISOString().slice(0, 10), slotRules)
         || !isSlotStartAllowed(timeSlot.start, slotRules)) {
         return res.status(409).json({
@@ -282,11 +310,11 @@ const createBooking = async (req, res) => {
         vendors: nearbyVendors,
         scheduledDate,
         timeSlot,
-        // Fixed-price NORMAL scheduled services use the global approximate
-        // service duration for slot blocking. Duration/hourly services keep
-        // using the duration selected by the customer.
-        durationMins: hasHourlyPricing ? slotDurationMins : slotRules.slotServiceDurationMins,
-        intervalMins: slotRules.intervalMins
+        // Mixed carts use the sum of every item's execution time. If legacy
+        // data has no duration metadata, retain the global fixed-service fallback.
+        durationMins: slotDurationMins || slotRules.slotServiceDurationMins,
+        intervalMins: slotRules.intervalMins,
+        fixedDurationMins: slotRules.slotServiceDurationMins
       });
 
       if (slotMatch.reason === 'INVALID_SLOT') {
@@ -398,13 +426,18 @@ const createBooking = async (req, res) => {
     // Map booked items to schema (preserving pricing snapshot & duration metadata)
     const formattedBookedItems = (Array.isArray(bookedItems) && bookedItems.length > 0) ? bookedItems.map(item => {
       const cardObj = item.card || item;
-      const effectiveType = cardObj.pricingType || item.pricingType || (service.pricingType === 'DURATION' ? 'DURATION' : (item.hours ? 'HOURLY' : 'FIXED'));
-      const durationMins = cardObj.durationMinutes || item.durationMinutes || (cardObj.hours ? cardObj.hours * 60 : (item.hours ? item.hours * 60 : null));
-      const billingUnit = Number(cardObj.billingUnitMinutes || item.billingUnitMinutes || service.billingUnitMinutes || 30);
-      const pricePerUnit = cardObj.pricePerUnit || item.pricePerUnit || service.pricePerUnit || service.pricePer30Minutes || null;
-      const pricePer30 = billingUnit === 30 ? pricePerUnit : (cardObj.pricePer30Minutes || item.pricePer30Minutes || service.pricePer30Minutes || null);
+      const itemService = getItemService(item) || service;
+      const effectiveType = getItemPricingType(item);
+      const isDurationBased = ['DURATION', 'HOURLY'].includes(effectiveType);
+      const durationMins = isDurationBased ? getItemServiceMinutes(item) : null;
+      const estimatedMinutes = isDurationBased ? null : getItemServiceMinutes(item);
+      const itemServiceId = typeof item.serviceId === 'object' ? item.serviceId?._id : item.serviceId;
+      const billingUnit = Number(cardObj.billingUnitMinutes || item.billingUnitMinutes || itemService.billingUnitMinutes || 30);
+      const pricePerUnit = cardObj.pricePerUnit || item.pricePerUnit || itemService.pricePerUnit || itemService.pricePer30Minutes || null;
+      const pricePer30 = billingUnit === 30 ? pricePerUnit : (cardObj.pricePer30Minutes || item.pricePer30Minutes || itemService.pricePer30Minutes || null);
 
       return {
+        serviceId: itemServiceId || itemService?._id || null,
         brandName: item.brandName || item.sectionTitle || item.brand || '',
         brandIcon: item.brandIcon || item.sectionIcon || item.icon || null,
         serviceName: item.serviceName || item.title || service.title || '',
@@ -414,6 +447,7 @@ const createBooking = async (req, res) => {
           price: cardObj.price ?? item.price ?? 0,
           originalPrice: cardObj.originalPrice ?? item.originalPrice ?? null,
           duration: cardObj.duration || (durationMins ? `${durationMins} mins` : ''),
+          estimatedDurationMinutes: estimatedMinutes,
           description: cardObj.description || item.description || '',
           imageUrl: cardObj.imageUrl || item.icon || service.iconUrl || '',
           features: cardObj.features || [],
@@ -422,7 +456,7 @@ const createBooking = async (req, res) => {
           pricePerUnit,
           billingUnitMinutes: billingUnit,
           pricePer30Minutes: pricePer30,
-          hours: cardObj.hours || (durationMins ? durationMins / 60 : null)
+          hours: isDurationBased ? (cardObj.hours || (durationMins ? durationMins / 60 : null)) : null
         },
         quantity: item.quantity || item.serviceCount || 1
       };
@@ -432,16 +466,25 @@ const createBooking = async (req, res) => {
 
     // Detect DURATION / HOURLY priced bookings and snapshot duration/rates for timer
     const totalBookedMinutes = formattedBookedItems.reduce((sum, item) => {
-      const mins = item.card?.durationMinutes || (item.card?.hours ? item.card.hours * 60 : 0);
+      const mins = item.card?.durationMinutes
+        || (item.card?.hours ? item.card.hours * 60 : 0)
+        || item.card?.estimatedDurationMinutes
+        || 0;
       return sum + (mins * (item.quantity || 1));
     }, 0);
+    const hasDurationBasedItems = formattedBookedItems.some(item =>
+      ['DURATION', 'HOURLY'].includes(String(item.card?.pricingType || '').toUpperCase())
+    );
+    const durationService = [service, ...relatedServices].find(item =>
+      ['DURATION', 'HOURLY'].includes(String(item?.pricingType || '').toUpperCase())
+    ) || service;
 
     let hourlyTracking = { isHourly: false };
-    if (totalBookedMinutes > 0 || service.pricingType === 'DURATION' || service.pricingType === 'HOURLY') {
+    if (hasDurationBasedItems || service.pricingType === 'DURATION' || service.pricingType === 'HOURLY') {
       const effectiveDuration = totalBookedMinutes > 0 ? totalBookedMinutes : (service.minDurationMinutes || 30);
-      const effectiveHourlyRate = service.pricingType === 'DURATION'
-        ? ((service.pricePerUnit || service.pricePer30Minutes || (service.basePrice || 0)) * (60 / (service.billingUnitMinutes || 30)))
-        : (service.hourlyRate || 0);
+      const effectiveHourlyRate = durationService.pricingType === 'DURATION'
+        ? ((durationService.pricePerUnit || durationService.pricePer30Minutes || (durationService.basePrice || 0)) * (60 / (durationService.billingUnitMinutes || 30)))
+        : (durationService.hourlyRate || 0);
 
       hourlyTracking = {
         isHourly: true,
@@ -557,8 +600,9 @@ const createBooking = async (req, res) => {
           vendors: nearbyVendors,
           scheduledDate,
           timeSlot,
-          durationMins: hasHourlyPricing ? slotDurationMins : slotRules.slotServiceDurationMins,
-          intervalMins: slotRules.intervalMins
+          durationMins: slotDurationMins || slotRules.slotServiceDurationMins,
+          intervalMins: slotRules.intervalMins,
+          fixedDurationMins: slotRules.slotServiceDurationMins
         });
 
         if (!retryMatch.vendor) {

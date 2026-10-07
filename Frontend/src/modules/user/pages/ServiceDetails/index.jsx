@@ -287,6 +287,9 @@ const ServiceDetails = () => {
         unitPrice: isDurationBased ? pricePerUnit : Number(displayPrice),
         pricePerUnit: isDurationBased ? pricePerUnit : null,
         billingUnitMinutes: isDurationBased ? billingUnitMinutes : null,
+        estimatedDurationMinutes: isDurationBased
+          ? null
+          : Number(service.estimatedDurationMinutes || 45),
         serviceCount: 1,
         rating: service.rating || '4.9',
         reviews: service.ratingCount || '237.6k',

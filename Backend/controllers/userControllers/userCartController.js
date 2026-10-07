@@ -19,16 +19,33 @@ const getUserCart = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    let cart = await Cart.findOne({ userId }).populate('items.serviceId', 'title iconUrl slug').populate('items.categoryId', 'title slug');
+    let cart = await Cart.findOne({ userId })
+      .populate('items.serviceId', 'title iconUrl slug pricingType estimatedDurationMinutes')
+      .populate('items.categoryId', 'title slug');
 
     if (!cart) {
       // Create empty cart if doesn't exist
       cart = await Cart.create({ userId, items: [] });
     }
 
+    const cartItems = (cart.items || []).map(item => {
+      const itemObject = typeof item.toObject === 'function' ? item.toObject() : { ...item };
+      const service = item.serviceId && typeof item.serviceId === 'object' ? item.serviceId : null;
+      const pricingType = String(itemObject.pricingType || itemObject.card?.pricingType || service?.pricingType || 'FIXED').toUpperCase();
+
+      // Duration is service configuration, not a permanent cart snapshot. This
+      // keeps older carts in sync after an admin changes a fixed service's time.
+      if (pricingType === 'FIXED' && Number(service?.estimatedDurationMinutes) > 0) {
+        itemObject.estimatedDurationMinutes = Number(service.estimatedDurationMinutes);
+        if (itemObject.card) itemObject.card.estimatedDurationMinutes = Number(service.estimatedDurationMinutes);
+      }
+
+      return itemObject;
+    });
+
     res.status(200).json({
       success: true,
-      data: cart.items || []
+      data: cartItems
     });
   } catch (error) {
     console.error('Get user cart error:', error);
@@ -77,6 +94,7 @@ const addToCart = async (req, res) => {
       pricePer30Minutes,
       pricePerUnit,
       billingUnitMinutes,
+      estimatedDurationMinutes,
       latitude,
       longitude
     } = req.body;
@@ -126,6 +144,7 @@ const addToCart = async (req, res) => {
     let itemMinDuration = 30;
     let itemMaxDuration = 480;
     let itemHours = null;
+    let itemEstimatedDurationMinutes = null;
 
     let itemUnitPrice = 0;
     let itemCount = 1;
@@ -170,6 +189,15 @@ const addToCart = async (req, res) => {
       itemUnitPrice = Number(unitPrice ?? price ?? service?.basePrice ?? 0);
       itemCount = Number(serviceCount || 1);
       itemTotalPrice = Number(price ?? (itemUnitPrice * itemCount));
+      itemEstimatedDurationMinutes = Number(
+        service?.estimatedDurationMinutes ?? estimatedDurationMinutes ?? 45
+      );
+      if (!Number.isFinite(itemEstimatedDurationMinutes) || itemEstimatedDurationMinutes < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Estimated service duration must be at least 1 minute'
+        });
+      }
     }
 
     const itemTitle = title || service?.title || 'Service Item';
@@ -219,6 +247,12 @@ const addToCart = async (req, res) => {
 
       cart.items[existingItemIndex].serviceCount = newCount;
       cart.items[existingItemIndex].price = newPrice;
+      if (itemEstimatedDurationMinutes) {
+        cart.items[existingItemIndex].estimatedDurationMinutes = itemEstimatedDurationMinutes;
+        if (cart.items[existingItemIndex].card) {
+          cart.items[existingItemIndex].card.estimatedDurationMinutes = itemEstimatedDurationMinutes;
+        }
+      }
     } else {
       // Add new item
       const newItem = {
@@ -233,6 +267,7 @@ const addToCart = async (req, res) => {
         pricePer30Minutes: itemPricePer30,
         minDurationMinutes: itemMinDuration,
         maxDurationMinutes: itemMaxDuration,
+        estimatedDurationMinutes: itemEstimatedDurationMinutes,
         price: itemTotalPrice,
         originalPrice: originalPrice ? Number(originalPrice) : (service?.originalPrice || null),
         unitPrice: itemUnitPrice,
@@ -243,7 +278,9 @@ const addToCart = async (req, res) => {
         vendorId: vendorId || null,
         sectionTitle: sectionTitle || (service?.brandId?.title || ''),
         sectionIcon: sectionIcon || (service?.brandId?.iconUrl || null),
-        card: card || null
+        card: card
+          ? { ...card, estimatedDurationMinutes: card.estimatedDurationMinutes ?? itemEstimatedDurationMinutes }
+          : null
       };
 
       // Only add serviceId and categoryId if they are provided

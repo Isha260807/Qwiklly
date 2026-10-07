@@ -70,7 +70,8 @@ exports.getAvailableSlots = async (req, res) => {
       vendors,
       dateKeys,
       intervalMins: rules.intervalMins,
-      durationMins: effectiveDurationMins
+      durationMins: effectiveDurationMins,
+      fixedDurationMins: rules.slotServiceDurationMins
     });
 
     const availability = {};

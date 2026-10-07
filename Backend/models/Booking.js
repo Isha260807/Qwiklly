@@ -122,6 +122,7 @@ const bookingSchema = new mongoose.Schema({
   }],
   // Booked Items (Brand > Card snapshot)
   bookedItems: [{
+    serviceId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserService', default: null },
     brandName: { type: String, default: '' },
     brandIcon: { type: String, default: null },
     serviceName: { type: String, default: '' },
@@ -131,6 +132,7 @@ const bookingSchema = new mongoose.Schema({
       price: { type: Number, default: 0 },
       originalPrice: { type: Number },
       duration: { type: String },
+      estimatedDurationMinutes: { type: Number, default: null },
       description: { type: String },
       imageUrl: { type: String },
       features: [{ type: String }],

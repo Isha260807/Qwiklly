@@ -152,7 +152,7 @@ const createService = async (req, res) => {
     const resolvedPricingType = isDuration ? 'DURATION' : 'FIXED';
 
     let resolvedFixedPrice = null;
-    let resolvedEstimatedDuration = 30;
+    let resolvedEstimatedDuration = null;
     let resolvedPricePerUnit = null;
     let resolvedBillingUnit = 30;
     let resolvedMinDuration = 30;
@@ -192,7 +192,7 @@ const createService = async (req, res) => {
       resolvedBasePrice = resolvedPricePerUnit;
     } else {
       resolvedFixedPrice = Number(fixedPrice !== undefined && fixedPrice !== null && fixedPrice !== '' ? fixedPrice : (basePrice || 0));
-      resolvedEstimatedDuration = Number(estimatedDurationMinutes || 30);
+      resolvedEstimatedDuration = estimatedDurationMinutes === undefined || estimatedDurationMinutes === null || estimatedDurationMinutes === '' ? null : Number(estimatedDurationMinutes);
       resolvedBasePrice = resolvedFixedPrice;
       if (resolvedBasePrice < 0) {
         return res.status(400).json({
@@ -377,7 +377,7 @@ const updateService = async (req, res) => {
       service.basePrice = fixedPriceVal;
       service.fixedPrice = fixedPriceVal;
       if (updates.estimatedDurationMinutes !== undefined) {
-        service.estimatedDurationMinutes = Number(updates.estimatedDurationMinutes);
+        service.estimatedDurationMinutes = updates.estimatedDurationMinutes === null || updates.estimatedDurationMinutes === '' ? null : Number(updates.estimatedDurationMinutes);
       }
     }
 
