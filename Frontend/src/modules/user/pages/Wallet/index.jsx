@@ -109,7 +109,7 @@ const Wallet = () => {
             <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/[0.02] rounded-full -ml-8 -mb-8 pointer-events-none"></div>
 
             <div className="relative z-10">
-              <p className="text-gray-400 text-[10px] font-medium uppercase tracking-wider">Current Balance</p>
+              <p className="text-gray-400 text-[10px] font-medium uppercase tracking-wider">Penalty Total</p>
               <div className="flex items-baseline gap-1.5 mt-0.5">
                 <h2 className="text-2xl font-bold text-red-400 tracking-tight">
                   -₹{transactions
@@ -118,6 +118,7 @@ const Wallet = () => {
                     .toLocaleString('en-IN')}
                 </h2>
                 <span className="text-[11px] font-medium text-red-300/80">(Penalty)</span>
+                <span className="text-[11px] font-medium text-emerald-300">Wallet: INR {walletBalance.toLocaleString('en-IN')}</span>
               </div>
             </div>
           </div>

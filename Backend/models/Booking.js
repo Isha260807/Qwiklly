@@ -469,6 +469,19 @@ bookingSchema.pre('save', async function (next) {
   next();
 });
 
+// Referral rewards are settled after a booking reaches completed status and
+// payment is eligible. The service is idempotent, so every completion path can
+// safely pass through this hook without creating duplicate wallet credits.
+bookingSchema.post('save', async (booking) => {
+  if (booking.status !== BOOKING_STATUS.COMPLETED) return;
+  try {
+    const { rewardReferralForCompletedBooking } = require('../services/referralService');
+    await rewardReferralForCompletedBooking(booking);
+  } catch (error) {
+    console.error('[Referral] Failed to settle completed-booking reward:', error);
+  }
+});
+
 // Core compound indexes
 bookingSchema.index({ userId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ vendorId: 1, status: 1, createdAt: -1 });

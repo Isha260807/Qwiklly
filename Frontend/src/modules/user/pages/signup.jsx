@@ -27,6 +27,7 @@ const Signup = () => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpToken, setOtpToken] = useState('');
   const [verificationToken, setVerificationToken] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
 
@@ -52,6 +53,11 @@ const Signup = () => {
       setVerificationToken(location.state.verificationToken);
     }
   }, [location.state]);
+
+  useEffect(() => {
+    const code = location.state?.referralCode || new URLSearchParams(location.search).get('ref');
+    if (code) setReferralCode(String(code).trim().toUpperCase());
+  }, [location.state, location.search]);
 
   // Auto-focus logic
   useEffect(() => {
@@ -88,7 +94,8 @@ const Signup = () => {
         const response = await userAuthService.register({
           name: formData.name,
           email: formData.email || null,
-          verificationToken
+          verificationToken,
+          referralCode: referralCode || undefined
         });
         if (response.success) {
           try {
@@ -190,7 +197,8 @@ const Signup = () => {
         email: formData.email || null,
         phone: formData.phoneNumber,
         otp: otpValue,
-        token: otpToken
+        token: otpToken,
+        referralCode: referralCode || undefined
       });
       if (response.success) {
         setIsLoading(false);

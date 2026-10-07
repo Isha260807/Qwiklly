@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiClock, FiCheck, FiSlash, FiCalendar } from 'react-icons/fi';
+import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiClock, FiCheck, FiSlash, FiCalendar, FiGift } from 'react-icons/fi';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus } from '../../services/settingsService';
 import { cityService } from '../../services/cityService';
 import ZoneManagement from '../Zones';
@@ -25,6 +25,11 @@ const AdminSettings = () => {
     maxSearchTime: 5,
     paymentTimeoutMinutes: 15,
     isOnlinePaymentEnabled: true
+  });
+  const [referralSettings, setReferralSettings] = useState({
+    referralEnabled: true,
+    referrerRewardAmount: 100,
+    referredRewardAmount: 100
   });
 
   // Dynamic Booking Slots State
@@ -62,6 +67,7 @@ const AdminSettings = () => {
     supportWhatsapp: ''
   });
   const [supportLoading, setSupportLoading] = useState(false);
+  const [referralLoading, setReferralLoading] = useState(false);
 
   const [profile, setProfile] = useState({
     name: '',
@@ -82,7 +88,7 @@ const AdminSettings = () => {
 
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'admins'
+  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'referral', 'system', 'admins'
 
   const isSuperAdmin = profile.role === 'super_admin';
 
@@ -135,6 +141,11 @@ const AdminSettings = () => {
             maxSearchTime: res.settings.maxSearchTime || 5,
             paymentTimeoutMinutes: res.settings.paymentTimeoutMinutes || 15,
             isOnlinePaymentEnabled: res.settings.isOnlinePaymentEnabled !== undefined ? res.settings.isOnlinePaymentEnabled : true
+          });
+          setReferralSettings({
+            referralEnabled: res.settings.referralEnabled !== undefined ? res.settings.referralEnabled : true,
+            referrerRewardAmount: res.settings.referrerRewardAmount ?? 100,
+            referredRewardAmount: res.settings.referredRewardAmount ?? 100
           });
           // Load billing settings
           setBillingSettings({
@@ -225,6 +236,14 @@ const AdminSettings = () => {
     }));
   };
 
+  const handleReferralChange = (e) => {
+    const { name, value } = e.target;
+    setReferralSettings(prev => ({
+      ...prev,
+      [name]: Number(value)
+    }));
+  };
+
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
     setProfile(prev => ({ ...prev, [name]: value }));
@@ -240,6 +259,19 @@ const AdminSettings = () => {
       toast.error('Failed to update settings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReferralSave = async (e) => {
+    e.preventDefault();
+    setReferralLoading(true);
+    try {
+      await updateSettings(referralSettings);
+      toast.success('Referral settings updated');
+    } catch {
+      toast.error('Failed to update referral settings');
+    } finally {
+      setReferralLoading(false);
     }
   };
 
@@ -547,6 +579,18 @@ const AdminSettings = () => {
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">Financial Info</h3>
           <p className="text-sm text-gray-500">Configure charges, commissions, and billing details</p>
+        </div>
+      )}
+
+      {/* Referral Settings Card - Super Admin Only */}
+      {isSuperAdmin && (
+        <div onClick={function () { setActiveView('referral'); }}
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
+          <div className="w-12 h-12 bg-pink-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-pink-100 transition-colors">
+            <FiGift className="w-6 h-6 text-pink-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Referral Settings</h3>
+          <p className="text-sm text-gray-500">Manage referral rewards and invite benefits</p>
         </div>
       )}
 
@@ -884,6 +928,65 @@ const AdminSettings = () => {
                   </form>
                 </div>
               )}
+            </motion.div>
+          )
+        }
+
+        {/* Referral Settings View */}
+        {
+          activeView === 'referral' && isSuperAdmin && (
+            <motion.div key="referral" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+              <div className="max-w-3xl mx-auto bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-pink-100 rounded-lg">
+                    <FiGift className="w-5 h-5 text-pink-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-800">Referral Settings</h2>
+                    <p className="text-xs text-gray-500">Configure Refer &amp; Earn rewards for users</p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleReferralSave} className="space-y-6">
+                  <div className="flex items-center justify-between gap-4 p-4 bg-pink-50/50 rounded-xl border border-pink-100">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">Enable referral rewards</p>
+                      <p className="text-xs text-gray-500 mt-1">Reward users after a referred user's first completed and paid booking.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReferralSettings(prev => ({ ...prev, referralEnabled: !prev.referralEnabled }))}
+                      className={`relative w-12 h-7 rounded-full transition-all ${referralSettings.referralEnabled ? 'bg-pink-600' : 'bg-gray-300'}`}
+                      aria-label="Toggle referral rewards"
+                    >
+                      <span className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${referralSettings.referralEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Referrer Reward (INR)</label>
+                      <input type="number" name="referrerRewardAmount" value={referralSettings.referrerRewardAmount} onChange={handleReferralChange} min="0"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-pink-500 transition-all" />
+                      <p className="text-[10px] text-gray-400 mt-1">Amount earned by the user who invites a friend.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Referred User Reward (INR)</label>
+                      <input type="number" name="referredRewardAmount" value={referralSettings.referredRewardAmount} onChange={handleReferralChange} min="0"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-pink-500 transition-all" />
+                      <p className="text-[10px] text-gray-400 mt-1">Welcome reward for the new referred user.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button type="submit" disabled={referralLoading}
+                      className="px-6 py-2.5 bg-pink-600 text-white rounded-lg font-medium hover:bg-pink-700 flex items-center gap-2 disabled:opacity-60 shadow-lg shadow-pink-200">
+                      {referralLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiSave className="w-4 h-4" />}
+                      Save Referral Settings
+                    </button>
+                  </div>
+                </form>
+              </div>
             </motion.div>
           )
         }

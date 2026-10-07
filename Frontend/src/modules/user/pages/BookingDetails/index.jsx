@@ -1460,6 +1460,15 @@ const BookingDetails = () => {
                   <span className="text-xs sm:text-sm font-bold text-gray-700">Email Help</span>
                 </button>
 
+                {/* Open booking confirmation/status */}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/user/booking-confirmation/${booking._id || booking.id}`)}
+                  className="col-span-2 flex items-center justify-center gap-2 py-3.5 sm:py-4 rounded-2xl text-[#720C3E] font-bold text-xs sm:text-sm bg-[#FFF7FA] border border-[#E8D9DF] hover:bg-[#FCEBF3] transition-colors active:scale-95 cursor-pointer"
+                >
+                  View Booking Status <FiChevronRight className="w-4 h-4" />
+                </button>
+
                 {/* Cancel */}
                 {!['cancelled', 'completed', 'work_done'].includes(booking.status?.toLowerCase()) && (
                   <button

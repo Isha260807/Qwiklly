@@ -172,6 +172,7 @@ app.use('/api/public/zones', require('./routes/public-routes/zone.routes.js'));
 app.use('/api/users/auth', require('./routes/user-routes/auth.routes'));
 app.use('/api/users', require('./routes/user-routes/profile.routes'));
 app.use('/api/user/wallet', require('./routes/user-routes/userWallet.routes'));
+app.use('/api/user/referral', require('./routes/user-routes/referral.routes'));
 app.use('/api/users/bookings', require('./routes/user-routes/booking.routes'));
 app.use('/api/users', require('./routes/user-routes/cart.routes'));
 app.use('/api/users/fcm-tokens', require('./routes/user-routes/fcmToken.routes'));

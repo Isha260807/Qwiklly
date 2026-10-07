@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 
@@ -6,26 +6,40 @@ import { FiCopy, FiArrowLeft, FiGift } from 'react-icons/fi';
 import { FaWhatsapp, FaFacebookMessenger } from 'react-icons/fa';
 import { themeColors } from '../../../../theme';
 import NotificationBell from '../../components/common/NotificationBell';
+import referralService from '../../../../services/referralService';
 
 const Rewards = () => {
   const navigate = useNavigate();
+  const [referral, setReferral] = useState(null);
+
+  useEffect(() => {
+    referralService.getSummary()
+      .then(response => {
+        if (response.success) setReferral(response.data);
+      })
+      .catch(() => toast.error('Failed to load referral details'));
+  }, []);
+
+  const shareUrl = referral?.referralCode
+    ? `${window.location.origin}/user/login?ref=${encodeURIComponent(referral.referralCode)}`
+    : '';
+
   const handleCopyLink = () => {
-    // Copy referral link to clipboard
-    const referralLink = 'https://appzeto.com/refer/your-link';
-    navigator.clipboard.writeText(referralLink).then(() => {
+    if (!shareUrl) return toast.error('Referral link is not ready yet');
+    navigator.clipboard.writeText(shareUrl).then(() => {
       toast.success('Link copied to clipboard!');
     });
   };
 
   const handleShareWhatsApp = () => {
+    if (!shareUrl) return toast.error('Referral link is not ready yet');
     const text = 'Check out this amazing electrical services app!';
-    const url = 'https://appzeto.com/refer/your-link';
-    window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + url)}`, '_blank');
+    window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + shareUrl)}`, '_blank');
   };
 
   const handleShareMessenger = () => {
-    const url = 'https://appzeto.com/refer/your-link';
-    window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(url)}&app_id=your-app-id`, '_blank');
+    if (!shareUrl) return toast.error('Referral link is not ready yet');
+    window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(shareUrl)}&app_id=your-app-id`, '_blank');
   };
   return (
     <div className="min-h-screen bg-transparent pb-12">
@@ -66,10 +80,11 @@ const Rewards = () => {
             <div className="flex items-start gap-3 mb-4">
               <div className="flex-1">
                 <h2 className="text-lg font-bold text-black mb-2">
-                  Refer and get FREE services
+                  Refer & Earn
                 </h2>
+                <p className="text-[11px] font-semibold text-[#720C3E]">Referrer: INR {referral?.referrerRewardAmount ?? 0} | New user: INR {referral?.referredRewardAmount ?? 0}</p>
                 <p className="text-xs text-gray-700 leading-relaxed">
-                  Invite your friends to try our electrical services. They get instant ₹100 off. You win ₹100 once they take a service.
+                  Invite your friends to try our services. New users get INR {referral?.referredRewardAmount ?? 0}; you earn INR {referral?.referrerRewardAmount ?? 0} after their first completed booking.
                 </p>
               </div>
               {/* Gift Box Illustration */}
@@ -144,7 +159,7 @@ const Rewards = () => {
               <div className="absolute -left-7 w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-700">
                 2
               </div>
-              <p className="text-xs text-gray-700">They get ₹100 on their first service</p>
+              <p className="text-xs text-gray-700">They get INR {referral?.referredRewardAmount ?? 0} after their first completed booking</p>
             </div>
 
             {/* Step 3 */}
@@ -152,7 +167,7 @@ const Rewards = () => {
               <div className="absolute -left-7 w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-700">
                 3
               </div>
-              <p className="text-xs text-gray-700">You get ₹100 once their service is completed</p>
+              <p className="text-xs text-gray-700">You get INR {referral?.referrerRewardAmount ?? 0} after their first completed booking</p>
             </div>
           </div>
         </div>
@@ -185,7 +200,7 @@ const Rewards = () => {
               <span className="text-xl">🎁</span>
             </div>
             <p className="text-sm text-gray-800 font-medium">
-              Earn ₹100 on every successful referral
+              Earn INR {referral?.referrerRewardAmount ?? 0} on every successful referral
             </p>
           </div>
         </div>

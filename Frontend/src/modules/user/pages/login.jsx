@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { FiCheckCircle, FiChevronLeft, FiGift, FiShield, FiZap, FiStar, FiClock } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { userAuthService } from '../../../services/authService';
@@ -56,6 +56,7 @@ const ROW_3_IMAGES = [
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [step, setStep] = useState('phone'); // 'phone' | 'otp'
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -69,6 +70,15 @@ const Login = () => {
   const phoneInputRef = useRef(null);
   const otpInputRefs = useRef([]);
 
+  // Capture a referral code from shared links before the new-user flow starts.
+  useEffect(() => {
+    const code = new URLSearchParams(location.search).get('ref');
+    if (code) {
+      setReferralCode(code.trim().toUpperCase());
+      setHasReferral(true);
+    }
+  }, [location.search]);
+
   // Timer countdown
   useEffect(() => {
     let interval;
@@ -77,6 +87,7 @@ const Login = () => {
         setResendTimer((prev) => prev - 1);
       }, 1000);
     }
+
     return () => clearInterval(interval);
   }, [resendTimer]);
 

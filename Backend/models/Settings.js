@@ -62,6 +62,20 @@ const settingsSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  referralEnabled: {
+    type: Boolean,
+    default: true
+  },
+  referrerRewardAmount: {
+    type: Number,
+    default: 100,
+    min: 0
+  },
+  referredRewardAmount: {
+    type: Number,
+    default: 100,
+    min: 0
+  },
   maxSearchTime: {
     type: Number,
     default: 5, // 5 minutes default

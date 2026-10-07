@@ -19,6 +19,24 @@ const userSchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    uppercase: true,
+    trim: true,
+    index: true
+  },
+  referredBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    index: true
+  },
+  referralAppliedAt: {
+    type: Date,
+    default: null
+  },
   role: {
     type: String,
     enum: ['user', 'admin'],

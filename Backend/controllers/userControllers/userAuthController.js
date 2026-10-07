@@ -5,6 +5,7 @@ const { sendOTP: sendSMSOTP } = require('../../services/smsService');
 const { sendOTPEmail, sendWelcomeEmail } = require('../../services/emailService');
 const { USER_ROLES } = require('../../utils/constants');
 const { validationResult } = require('express-validator');
+const { ensureReferralCode, captureReferralForNewUser } = require('../../services/referralService');
 
 /**
  * Send OTP for user registration/login
@@ -161,7 +162,7 @@ const register = async (req, res) => {
       });
     }
 
-    const { name, email, verificationToken } = req.body;
+    const { name, email, verificationToken, referralCode } = req.body;
     let phone = req.body.phone;
 
     // Verify token if provided (New Flow)
@@ -203,6 +204,17 @@ const register = async (req, res) => {
       isEmailVerified: email ? false : true
     });
 
+    const userWithReferralCode = await ensureReferralCode(user._id);
+    let referral = { applied: false };
+    try {
+      referral = await captureReferralForNewUser({
+        referredUserId: user._id,
+        referralCode
+      });
+    } catch (referralError) {
+      console.error('[Referral] Failed to capture signup referral:', referralError);
+    }
+
     // Send Welcome Email
     if (email) {
       sendWelcomeEmail(email, name).catch(err => console.error(err));
@@ -227,8 +239,10 @@ const register = async (req, res) => {
         email: user.email,
         phone: user.phone,
         isPhoneVerified: user.isPhoneVerified,
-        isEmailVerified: user.isEmailVerified
+        isEmailVerified: user.isEmailVerified,
+        referralCode: userWithReferralCode?.referralCode || null
       },
+      referral: referral.applied ? { applied: true } : { applied: false },
       ...tokens
     });
   } catch (error) {

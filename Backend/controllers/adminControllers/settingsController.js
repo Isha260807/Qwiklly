@@ -38,6 +38,9 @@ exports.updateSettings = async (req, res, next) => {
       platformFeePercentage,
       vendorCashLimit, // Add this
       cancellationPenalty,
+      referralEnabled,
+      referrerRewardAmount,
+      referredRewardAmount,
       razorpayKeyId,
       razorpayKeySecret,
       razorpayWebhookSecret,
@@ -71,6 +74,9 @@ exports.updateSettings = async (req, res, next) => {
         platformFeePercentage,
         vendorCashLimit,
         cancellationPenalty,
+        referralEnabled,
+        referrerRewardAmount,
+        referredRewardAmount,
         razorpayKeyId,
         razorpayKeySecret,
         razorpayWebhookSecret,
@@ -100,6 +106,9 @@ exports.updateSettings = async (req, res, next) => {
       if (platformFeePercentage !== undefined) settings.platformFeePercentage = platformFeePercentage;
       if (vendorCashLimit !== undefined) settings.vendorCashLimit = vendorCashLimit;
       if (cancellationPenalty !== undefined) settings.cancellationPenalty = cancellationPenalty;
+      if (referralEnabled !== undefined) settings.referralEnabled = referralEnabled;
+      if (referrerRewardAmount !== undefined) settings.referrerRewardAmount = referrerRewardAmount;
+      if (referredRewardAmount !== undefined) settings.referredRewardAmount = referredRewardAmount;
       if (razorpayKeyId !== undefined) settings.razorpayKeyId = razorpayKeyId;
       if (razorpayKeySecret !== undefined) settings.razorpayKeySecret = razorpayKeySecret;
       if (razorpayWebhookSecret !== undefined) settings.razorpayWebhookSecret = razorpayWebhookSecret;
