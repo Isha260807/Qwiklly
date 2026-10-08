@@ -4,6 +4,7 @@ const Transaction = require('../../models/Transaction');
 const { PAYMENT_STATUS, BOOKING_STATUS } = require('../../utils/constants');
 const { recordBookingEarning } = require('../../services/earningTrackerService');
 const { createQRCode, getQRCodePayments } = require('../../services/razorpayService');
+const { creditSalaryEarningForBooking } = require('../../services/salaryEarningService');
 
 /**
  * Initiate Online Collection (Show QR Code)
@@ -316,7 +317,7 @@ exports.confirmCashCollection = async (req, res) => {
     let grandTotal = collectionAmount;
 
     if (bill) {
-      vendorEarning = Number(bill.vendorTotalEarning) || 0;
+      vendorEarning = 0;
       grandTotal = Number(bill.grandTotal) || 0;
 
       // Sync booking fields from bill to ensure data consistency
@@ -364,6 +365,7 @@ exports.confirmCashCollection = async (req, res) => {
     booking.customerConfirmationOTP = undefined;
 
     await booking.save();
+    await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId: booking.vendorId });
 
     // Update Vendor Wallet
     const vendorId = booking.vendorId;
@@ -477,7 +479,7 @@ exports.confirmCashCollection = async (req, res) => {
       date: new Date(),
       totalRevenue: bill ? bill.grandTotal : collectionAmount,
       platformCommission: bill ? (bill.companyRevenue || 0) : (collectionAmount * 0.2),
-      vendorEarnings: vendorEarning > 0 ? vendorEarning : (collectionAmount * 0.8),
+      vendorEarnings: 0,
       totalGST: bill ? (bill.totalGST || 0) : 0,
       totalTDS: 0 // Captured separately during withdrawal
     }).catch(err => console.error('[ConfirmCash] Daily tracker failed:', err));
@@ -599,7 +601,7 @@ exports.verifyOnlinePayment = async (req, res) => {
 
         let vendorEarning = 0;
         if (bill) {
-          vendorEarning = bill.vendorTotalEarning;
+          vendorEarning = 0;
           
           // Sync booking fields from bill to ensure data consistency
           booking.basePrice = bill.originalServiceBase;
@@ -612,7 +614,7 @@ exports.verifyOnlinePayment = async (req, res) => {
           bill.paidAt = new Date();
           await bill.save();
         } else {
-          vendorEarning = booking.finalAmount * 0.8;
+          vendorEarning = 0;
         }
 
         const vendorId = booking.vendorId;
@@ -620,6 +622,7 @@ exports.verifyOnlinePayment = async (req, res) => {
         await Vendor.findByIdAndUpdate(vendorId, {
           $inc: { 'wallet.earnings': vendorEarning }
         });
+        await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId });
 
         // 3. Transactions
         await Transaction.create({
@@ -743,7 +746,7 @@ exports.confirmManualOnlinePayment = async (req, res) => {
 
     let vendorEarning = 0;
     if (bill) {
-      vendorEarning = bill.vendorTotalEarning;
+      vendorEarning = 0;
       
       // Sync booking fields from bill to ensure data consistency
       booking.basePrice = bill.originalServiceBase;
@@ -756,13 +759,14 @@ exports.confirmManualOnlinePayment = async (req, res) => {
       bill.paidAt = new Date();
       await bill.save();
     } else {
-      vendorEarning = booking.finalAmount * 0.8;
+      vendorEarning = 0;
     }
 
     const vendorId = booking.vendorId;
     await Vendor.findByIdAndUpdate(vendorId, {
       $inc: { 'wallet.earnings': vendorEarning }
     });
+    await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId });
 
     // 3. Transactions
     await Transaction.create({

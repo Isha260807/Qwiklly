@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 import Modal from '../../components/Modal';
 import Button from '../../components/Button';
 import adminSettlementService from '../../../../services/adminSettlementService';
+import { adminSalaryService } from '../../../../services/salaryService';
 import { getSettings } from '../../services/settingsService';
 import { exportToCSV } from '../../../../utils/csvExport';
 
@@ -24,6 +25,8 @@ const SettlementManagement = () => {
   const [vendors, setVendors] = useState([]);
   const [history, setHistory] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
+  const [salaryPayments, setSalaryPayments] = useState([]);
+  const [salarySummary, setSalarySummary] = useState({});
   const [actionLoading, setActionLoading] = useState(false);
   const [settings, setSettings] = useState(null);
 
@@ -40,14 +43,14 @@ const SettlementManagement = () => {
   // Tab Definitions
   const navTabs = [
     { path: '/admin/settlements/pending', tabKey: 'pending', label: 'Pending Settlements', icon: FiClock },
-    { path: '/admin/settlements/withdrawals', tabKey: 'withdrawals', label: 'Withdrawal Requests', icon: FiArrowUpRight },
+    { path: '/admin/settlements/salary', tabKey: 'salary', label: 'Salary Settlements', icon: FiCreditCard },
     { path: '/admin/settlements/history', tabKey: 'history', label: 'Settlement History', icon: FiTrendingUp },
   ];
 
   // Determine active tab from URL
   useEffect(() => {
     const path = location.pathname.split('/').pop();
-    if (['pending', 'history', 'withdrawals'].includes(path)) {
+    if (['pending', 'salary', 'history'].includes(path)) {
       setActiveTab(path);
     } else {
       setActiveTab('pending');
@@ -77,6 +80,12 @@ const SettlementManagement = () => {
       } else if (activeTab === 'history') {
         const res = await adminSettlementService.getSettlementHistory();
         if (res.success) setHistory(res.data || []);
+      } else if (activeTab === 'salary') {
+        const res = await adminSalaryService.getAllPayments({ limit: 100 });
+        if (res.success) {
+          setSalaryPayments(res.data || []);
+          setSalarySummary(res.summary || {});
+        }
       } else if (activeTab === 'withdrawals') {
         const res = await adminSettlementService.getWithdrawalRequests();
         if (res.success) setWithdrawals(res.data || []);
@@ -238,6 +247,23 @@ const SettlementManagement = () => {
         { key: 'status', label: 'Status' },
         { key: 'requestDate', label: 'Request Date', type: 'date' }
       ]);
+    } else if (activeTab === 'salary' && salaryPayments.length > 0) {
+      exportToCSV(salaryPayments, 'salary_settlements', [
+        { key: 'vendorId.name', label: 'Vendor Name' },
+        { key: 'vendorId.businessName', label: 'Business Name' },
+        { key: 'periodType', label: 'Period' },
+        { key: 'periodStart', label: 'Period Start', type: 'date' },
+        { key: 'periodEnd', label: 'Period End', type: 'date' },
+        { key: 'bookingEarningsAmount', label: 'Booking Earnings', type: 'currency' },
+        { key: 'salaryAmount', label: 'Salary', type: 'currency' },
+        { key: 'bonusAmount', label: 'Bonus', type: 'currency' },
+        { key: 'incentiveAmount', label: 'Incentive', type: 'currency' },
+        { key: 'adjustmentAmount', label: 'Adjustment', type: 'currency' },
+        { key: 'totalAmount', label: 'Total Paid', type: 'currency' },
+        { key: 'paymentMethod', label: 'Payment Method' },
+        { key: 'paymentReference', label: 'Reference' },
+        { key: 'paidAt', label: 'Paid At', type: 'datetime' }
+      ]);
     } else if (activeTab === 'pending' && pendingSettlements.length > 0) {
       exportToCSV(pendingSettlements, 'pending_settlements', [
         { key: 'vendorId.name', label: 'Vendor Name' },
@@ -256,7 +282,42 @@ const SettlementManagement = () => {
   const renderDashboardCards = () => {
     let cards = [];
 
-    if (activeTab === 'withdrawals') {
+    if (activeTab === 'salary') {
+      cards = [
+        {
+          title: 'Total Salary Paid',
+          value: `₹${(salarySummary.totalAmount || 0).toLocaleString('en-IN')}`,
+          icon: FiCreditCard,
+          color: 'text-emerald-600',
+          bg: 'bg-emerald-50',
+          border: 'border-gray-100'
+        },
+        {
+          title: 'Salary Payments',
+          value: salarySummary.paymentCount || salaryPayments.length,
+          icon: FiCheckCircle,
+          color: 'text-blue-600',
+          bg: 'bg-blue-50',
+          border: 'border-gray-100'
+        },
+        {
+          title: 'Salary + Bonus',
+          value: `₹${((salarySummary.salaryAmount || 0) + (salarySummary.bonusAmount || 0)).toLocaleString('en-IN')}`,
+          icon: FiTrendingUp,
+          color: 'text-purple-600',
+          bg: 'bg-purple-50',
+          border: 'border-gray-100'
+        },
+        {
+          title: 'Incentive Paid',
+          value: `₹${(salarySummary.incentiveAmount || 0).toLocaleString('en-IN')}`,
+          icon: FiDollarSign,
+          color: 'text-orange-600',
+          bg: 'bg-orange-50',
+          border: 'border-gray-100'
+        }
+      ];
+    } else if (activeTab === 'withdrawals') {
       const pendingCount = withdrawals.length;
       const pendingAmount = withdrawals.reduce((sum, w) => sum + (w.amount || 0), 0);
 
@@ -431,6 +492,19 @@ const SettlementManagement = () => {
     const matchesSearch = !q || name.includes(q) || business.includes(q) || ref.includes(q);
     const matchesStatus = statusFilter === 'all' || w.status === statusFilter;
     return matchesSearch && matchesStatus;
+  });
+
+  const filteredSalaryPayments = salaryPayments.filter(payment => {
+    const q = search.toLowerCase();
+    const name = (payment.vendorId?.name || '').toLowerCase();
+    const business = (payment.vendorId?.businessName || '').toLowerCase();
+    const phone = (payment.vendorId?.phone || '').toLowerCase();
+    const ref = (payment.paymentReference || '').toLowerCase();
+    const matchesSearch = !q || name.includes(q) || business.includes(q) || phone.includes(q) || ref.includes(q);
+    const salaryStatus = statusFilter === 'approved' ? 'paid' : statusFilter;
+    const matchesStatus = statusFilter === 'all' || payment.status === salaryStatus;
+    const matchesMethod = methodFilter === 'all' || payment.paymentMethod === methodFilter;
+    return matchesSearch && matchesStatus && matchesMethod;
   });
 
   // --- Render Helpers ---
@@ -711,6 +785,53 @@ const SettlementManagement = () => {
     )
   );
 
+  const renderSalaryPayments = () => {
+    if (filteredSalaryPayments.length === 0) {
+      return React.createElement('div', { className: 'text-center py-16' }, [
+        React.createElement(FiCreditCard, { key: 'icon', className: 'w-10 h-10 mx-auto mb-2 text-gray-300' }),
+        React.createElement('p', { key: 'title', className: 'text-gray-700 font-bold text-sm' }, 'No salary settlements found'),
+        React.createElement('p', { key: 'hint', className: 'text-xs text-gray-400 mt-0.5' }, 'Payments marked done from Vendor Salary Wallets will appear here.')
+      ]);
+    }
+    return React.createElement('div', { className: 'space-y-3' }, filteredSalaryPayments.map((payment) => {
+      const vendor = payment.vendorId || {};
+      const customTotal = (payment.customItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      const period = payment.periodType === 'week' ? 'Weekly salary' : payment.periodType === 'month' ? 'Monthly salary' : 'Custom salary';
+      const statusClass = payment.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : payment.status === 'cancelled' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200';
+      const breakdown = [
+        ['Booking earning', payment.bookingEarningsAmount],
+        ['Salary', payment.salaryAmount],
+        ['Bonus', payment.bonusAmount],
+        ['Incentive', payment.incentiveAmount],
+        ['Adjustment', payment.adjustmentAmount],
+        ['Custom items', customTotal]
+      ];
+      return React.createElement('div', { key: payment._id, className: 'rounded-xl border border-gray-100 bg-white p-4 shadow-sm hover:shadow-md transition-all' }, [
+        React.createElement('div', { key: 'header', className: 'flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4' }, [
+          React.createElement('div', { key: 'vendor', className: 'flex items-start gap-3' }, [
+            React.createElement('div', { key: 'avatar', className: 'w-10 h-10 rounded-full bg-primary-50 text-primary-700 flex items-center justify-center font-bold text-sm shrink-0' }, (vendor.name || 'V').charAt(0).toUpperCase()),
+            React.createElement('div', { key: 'details' }, [
+              React.createElement('h3', { key: 'name', className: 'text-sm font-bold text-gray-900' }, vendor.name || 'Vendor'),
+              React.createElement('p', { key: 'business', className: 'text-[10px] text-gray-500 mt-0.5' }, vendor.businessName || vendor.phone || vendor.email || 'Salary vendor'),
+              React.createElement('p', { key: 'period', className: 'text-[10px] text-gray-400 mt-1' }, period + ' / ' + formatDate(payment.periodStart) + ' - ' + formatDate(payment.periodEnd))
+            ])
+          ]),
+          React.createElement('div', { key: 'amount', className: 'text-left lg:text-right' }, [
+            React.createElement('p', { key: 'total', className: 'text-xl font-extrabold text-emerald-700' }, '₹' + (payment.totalAmount || 0).toLocaleString('en-IN')),
+            React.createElement('span', { key: 'status', className: 'inline-flex mt-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ' + statusClass }, payment.status || 'paid')
+          ])
+        ]),
+        React.createElement('div', { key: 'breakdown', className: 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-4 rounded-lg bg-gray-50 p-3 border border-gray-100' }, breakdown.map(([label, amount]) => React.createElement('div', { key: label }, [
+          React.createElement('p', { key: 'label', className: 'text-[9px] uppercase tracking-wide text-gray-400 font-bold' }, label),
+          React.createElement('p', { key: 'amount', className: 'text-xs font-bold text-gray-800 mt-0.5' }, '₹' + (amount || 0).toLocaleString('en-IN'))
+        ]))),
+        React.createElement('div', { key: 'footer', className: 'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3 pt-3 border-t border-gray-100 text-[10px] text-gray-500' }, [
+          React.createElement('span', { key: 'paid' }, 'Paid ' + formatDate(payment.paidAt || payment.createdAt) + ' / ' + (payment.paymentMethod || 'Payment method not set')),
+          React.createElement('span', { key: 'reference', className: 'font-mono' }, payment.paymentReference || 'No payment reference')
+        ])
+      ]);
+    }));
+  };
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
       {/* Top Sub-Navigation Tabs */}
@@ -762,7 +883,7 @@ const SettlementManagement = () => {
 
         {/* Dropdowns & Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {activeTab === 'pending' && (
+          {(activeTab === 'pending' || activeTab === 'salary') && (
             <select
               value={methodFilter}
               onChange={(e) => setMethodFilter(e.target.value)}
@@ -775,7 +896,7 @@ const SettlementManagement = () => {
             </select>
           )}
 
-          {(activeTab === 'history' || activeTab === 'withdrawals') && (
+          {(activeTab === 'history' || activeTab === 'withdrawals' || activeTab === 'salary') && (
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -817,6 +938,7 @@ const SettlementManagement = () => {
         ) : (
           <div className="p-4">
             {activeTab === 'pending' && renderPendingSettlements()}
+            {activeTab === 'salary' && renderSalaryPayments()}
             {activeTab === 'history' && renderHistoryList()}
             {activeTab === 'withdrawals' && renderWithdrawalsList()}
           </div>

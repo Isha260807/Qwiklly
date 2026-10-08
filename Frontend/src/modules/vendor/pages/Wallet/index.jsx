@@ -1,299 +1,139 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  FiDollarSign, 
-  FiArrowUp, 
-  FiArrowRight, 
-  FiClock, 
-  FiCheckCircle, 
-  FiAlertCircle, 
-  FiTrendingUp,
-  FiCreditCard
-} from 'react-icons/fi';
-import { vendorTheme as themeColors } from '../../../../theme';
+import React, { useEffect, useState } from 'react';
+import { FiCreditCard, FiDollarSign, FiFilter, FiChevronDown } from 'react-icons/fi';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
 import LogoLoader from '../../../../components/common/LogoLoader';
-import vendorWalletService from '../../../../services/vendorWalletService';
+import { vendorSalaryService } from '../../../../services/salaryService';
 import { toast } from 'react-hot-toast';
 
-const Wallet = () => {
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [wallet, setWallet] = useState({
-    balance: 0,
-    earnings: 0,
-    totalWithdrawn: 0,
-    pendingSettlements: 0
-  });
-  const [transactions, setTransactions] = useState([]);
-  const [filter, setFilter] = useState('all');
-
-  useLayoutEffect(() => {
-    const html = document.documentElement;
-    const body = document.body;
-    const root = document.getElementById('root');
-    const bgStyle = themeColors.backgroundGradient;
-
-    if (html) html.style.background = bgStyle;
-    if (body) body.style.background = bgStyle;
-    if (root) root.style.background = bgStyle;
-
-    return () => {
-      if (html) html.style.background = '';
-      if (body) body.style.background = '';
-      if (root) root.style.background = '';
-    };
-  }, []);
-
-  useEffect(() => {
-    loadWalletData();
-  }, []);
-
-  const loadWalletData = async () => {
-    try {
-      setLoading(true);
-      const [walletRes, txnRes] = await Promise.all([
-        vendorWalletService.getWallet(),
-        vendorWalletService.getTransactions({ limit: 50 })
-      ]);
-
-      if (walletRes.success) {
-        setWallet(walletRes.data);
-      }
-
-      if (txnRes.success) {
-        setTransactions(txnRes.data || []);
-      }
-    } catch (error) {
-      console.error('Error loading wallet:', error);
-      toast.error('Failed to load wallet data');
-    } finally {
-      setLoading(false);
-    }
+const money = (v) => '\u20B9' + Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const dateText = (v) => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+const durationText = (v) => {
+  const n = Number(v || 0); const h = Math.floor(n / 60); const m = n % 60;
+  return h ? h + 'h' + (m ? ' ' + m + 'm' : '') : (m ? m + 'm' : '');
+};
+const labelFor = (v) => ({ booking_earning: 'Booking earning', salary: 'Salary', bonus: 'Performance bonus', incentive: 'Incentive', adjustment: 'Adjustment', custom: 'Custom earning' }[v] || 'Earning');
+const paymentBreakdown = (payment) => {
+  const items = [];
+  const add = (label, amount) => {
+    if (Number(amount || 0) > 0) items.push({ label, amount });
   };
 
-  const filteredTransactions = transactions.filter(txn => {
-    if (filter === 'all') return true;
-    return txn.type === filter;
+  add('Booking earning', payment.bookingEarningsAmount);
+  add('Salary', payment.salaryAmount);
+  add('Bonus', payment.bonusAmount);
+  add('Incentive', payment.incentiveAmount);
+  add('Adjustment', payment.adjustmentAmount);
+  (Array.isArray(payment.customItems) ? payment.customItems : []).forEach((item) => {
+    add(item.label || 'Other earning', item.amount);
   });
 
-  const getTransactionIcon = (type) => {
-    switch (type) {
-      case 'earnings_credit':
-        return <FiArrowUp className="w-5 h-5 text-emerald-600" />;
-      case 'withdrawal':
-        return <FiDollarSign className="w-5 h-5 text-purple-600" />;
-      case 'tds_deduction':
-        return <FiAlertCircle className="w-5 h-5 text-amber-600" />;
-      case 'commission':
-        return <FiDollarSign className="w-5 h-5 text-orange-600" />;
-      case 'platform_fee':
-        return <FiAlertCircle className="w-5 h-5 text-rose-600" />;
-      default:
-        return <FiDollarSign className="w-5 h-5 text-gray-500" />;
-    }
-  };
-
-  const getTransactionLabel = (type) => {
-    switch (type) {
-      case 'earnings_credit':
-        return 'Earnings Credited';
-      case 'withdrawal':
-        return 'Withdrawal Payout';
-      case 'tds_deduction':
-        return 'TDS Deduction';
-      case 'commission':
-        return 'Commission';
-      case 'platform_fee':
-        return 'Platform Charge';
-      default:
-        return type?.replace(/_/g, ' ') || 'Transaction';
-    }
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
-  };
-
-  if (loading) {
-    return <LogoLoader />;
-  }
-
-  const lifetimeEarnings = (wallet.earnings || 0) + (wallet.totalWithdrawn || 0);
-
-  return (
-    <div className="min-h-screen pb-24" style={{ background: themeColors.backgroundGradient }}>
-      <Header title="Wallet" />
-
-      <main className="px-4 py-3 max-w-lg mx-auto">
-        {/* Available Earnings Card */}
-        <div 
-          className="rounded-2xl p-4 shadow-sm relative overflow-hidden mb-3 border border-[#E8D9DF]" 
-          style={{ background: 'linear-gradient(135deg, #FCEBF3 0%, #FFF5F9 100%)' }}
-        >
-          <div className="relative z-10">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <p className="text-[#6F5A64] text-xs font-semibold mb-1 uppercase tracking-wider">Available Balance</p>
-                <p className="text-3xl font-extrabold text-[#720C3E]">₹{(wallet.earnings || 0).toLocaleString()}</p>
-                <p className="text-[11px] text-[#6F5A64]/80 mt-1">Available for immediate payout</p>
-              </div>
-              <div className="p-2.5 rounded-xl bg-white shadow-xs border border-[#E8D9DF]">
-                <FiDollarSign className="w-6 h-6 text-[#720C3E]" />
-              </div>
-            </div>
-            
-            <button
-              onClick={() => navigate('/vendor/wallet/withdraw')}
-              disabled={(wallet.earnings || 0) <= 0}
-              className="w-full py-2.5 rounded-xl font-bold text-xs active:scale-95 transition-all text-white shadow-xs disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
-              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
-            >
-              <FiCreditCard className="w-3.5 h-3.5" />
-              <span>Request Withdrawal</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Lifetime Earnings & Withdrawn Summary */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-white rounded-xl p-3.5 shadow-xs border border-[#E8D9DF]">
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
-                <FiTrendingUp className="w-4 h-4" />
-              </div>
-              <p className="text-[11px] text-[#6F5A64] font-semibold">Total Earned</p>
-            </div>
-            <p className="text-lg font-bold text-gray-900">
-              ₹{lifetimeEarnings.toLocaleString()}
-            </p>
-            <p className="text-[10px] text-gray-400 mt-0.5">Lifetime earnings</p>
-          </div>
-
-          <div className="bg-white rounded-xl p-3.5 shadow-xs border border-[#E8D9DF]">
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="p-1.5 rounded-lg bg-purple-50 text-purple-600">
-                <FiCheckCircle className="w-4 h-4" />
-              </div>
-              <p className="text-[11px] text-[#6F5A64] font-semibold">Total Withdrawn</p>
-            </div>
-            <p className="text-lg font-bold text-gray-900">
-              ₹{(wallet.totalWithdrawn || 0).toLocaleString()}
-            </p>
-            <p className="text-[10px] text-gray-400 mt-0.5">Paid out to bank</p>
-          </div>
-        </div>
-
-        {/* Filter Tags */}
-        <div className="flex gap-2 mb-3.5 overflow-x-auto pb-1 scrollbar-hide">
-          {[
-            { id: 'all', label: 'All' },
-            { id: 'earnings_credit', label: 'Earnings' },
-            { id: 'withdrawal', label: 'Withdrawals' },
-            { id: 'tds_deduction', label: 'TDS' },
-            { id: 'platform_fee', label: 'Platform Fees' },
-          ].map((filterOption) => (
-            <button
-              key={filterOption.id}
-              onClick={() => setFilter(filterOption.id)}
-              className={`px-3.5 py-1.5 rounded-full font-bold text-xs whitespace-nowrap transition-all cursor-pointer ${
-                filter === filterOption.id
-                  ? 'text-white shadow-xs'
-                  : 'bg-white text-gray-600 border border-gray-200'
-              }`}
-              style={
-                filter === filterOption.id
-                  ? {
-                      background: themeColors.button,
-                    }
-                  : {}
-              }
-            >
-              {filterOption.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Transactions / Ledger */}
-        <div>
-          <div className="flex items-center justify-between mb-2.5">
-            <h3 className="font-bold text-gray-900 text-xs uppercase tracking-wider">Transaction History</h3>
-            <span className="text-[11px] text-gray-400 font-medium">{filteredTransactions.length} records</span>
-          </div>
-
-          {filteredTransactions.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center shadow-xs border border-gray-100">
-              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                <FiDollarSign className="w-6 h-6 text-gray-300" />
-              </div>
-              <p className="text-gray-700 font-bold text-xs mb-1">No transactions found</p>
-              <p className="text-[11px] text-gray-400">Your completed booking payouts will appear here</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filteredTransactions.map((txn) => {
-                const isDebit = ['tds_deduction', 'withdrawal', 'platform_fee'].includes(txn.type);
-                return (
-                  <div
-                    key={txn._id}
-                    className="bg-white rounded-xl p-3 shadow-xs border border-gray-100 flex items-center gap-3 transition-all"
-                  >
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                      style={{
-                        background:
-                          txn.type === 'earnings_credit' ? '#ECFDF5' :
-                          txn.type === 'withdrawal' ? '#F5F3FF' :
-                          txn.type === 'tds_deduction' ? '#FFFBEB' :
-                          txn.type === 'platform_fee' ? '#FFF1F2' : '#F3F4F6'
-                      }}
-                    >
-                      {getTransactionIcon(txn.type)}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <p className="font-bold text-gray-900 text-xs truncate">
-                          {getTransactionLabel(txn.type)}
-                        </p>
-                        <p className={`text-sm font-extrabold ${isDebit ? 'text-red-600' : 'text-emerald-600'}`}>
-                          {isDebit ? '-' : '+'}₹{Math.abs(txn.amount).toLocaleString()}
-                        </p>
-                      </div>
-
-                      <p className="text-[11px] text-gray-500 truncate mb-1">
-                        {txn.description || txn.bookingId?.bookingNumber || 'Transaction details'}
-                      </p>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-gray-400 font-medium">{formatDate(txn.createdAt)}</span>
-                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md uppercase tracking-wider ${
-                          txn.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                          txn.status === 'pending' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 
-                          'bg-gray-50 text-gray-600 border border-gray-100'
-                        }`}>
-                          {txn.status}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </main>
-
-      <BottomNav />
-    </div>
-  );
+  return items;
 };
 
-export default Wallet;
+function PaymentHistory({ payments = [] }) {
+  if (!payments.length) return <div className={'px-5 py-10 text-center'}><p className={'text-xs'}>No payments yet</p></div>;
+  return payments.map((payment) => (
+    <div key={payment._id} className={'px-4 py-3 border-b border-gray-100'}>
+      <div className={'flex items-start justify-between gap-2'}>
+        <div>
+          <b className={'text-xs capitalize block text-[#24151D]'}>{payment.periodType} payment</b>
+          <span className={'text-[10px] text-gray-500 block'}>{dateText(payment.periodStart)} - {dateText(payment.periodEnd)}</span>
+        </div>
+        <strong className={'text-sm text-blue-600 shrink-0'}>{money(payment.totalAmount)}</strong>
+      </div>
+      <div className={'mt-2 rounded-lg bg-[#FAF6F8] border border-[#F0E3E8] px-2.5 py-2'}>
+        <p className={'text-[9px] uppercase tracking-wide font-bold text-[#8A6C79] mb-1'}>Payment breakdown</p>
+        <div className={'grid grid-cols-2 gap-x-3 gap-y-1'}>{paymentBreakdown(payment).map((item, index) => (
+        <div key={item.label + index} className={'flex items-center justify-between gap-1 text-[10px]'}><span className={'text-[#6F5A64] truncate'}>{item.label}</span> <b className={'text-[#24151D] shrink-0'}>{money(item.amount)}</b></div>
+        ))}</div>
+      </div>
+    </div>
+  ));
+}
+
+export default function Wallet() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ startDate: '', endDate: '' });
+  const [historyTab, setHistoryTab] = useState('earnings');
+  const [adminSalaryOpen, setAdminSalaryOpen] = useState(false);
+  const load = async (params = {}) => {
+    try {
+      setLoading(true);
+      const res = await vendorSalaryService.getWallet(params);
+      if (!res.success) throw new Error(res.message || 'Failed to load earnings');
+      setData(res.data);
+    } catch (e) {
+      console.error(e);
+      toast.error(e.message || 'Failed to load earnings');
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+  if (loading && !data) return <LogoLoader />;
+  const summary = data?.summary || {};
+  const config = data?.salaryConfig || {};
+  const cards = [['Total earning', summary.totalEarning], ['Paid amount', summary.paidEarning], ['Pending payment', summary.pendingEarning], ['Booking earning', summary.bookingEarning]];
+  return <div className="min-h-screen pb-24 bg-[#FFF8FB]">
+    <Header title="Today Earn" />
+    <main className="max-w-lg mx-auto px-4 py-4 space-y-4">
+      <section className="rounded-2xl p-5 text-white" style={{ background: 'linear-gradient(135deg,#720C3E,#A62D64)' }}>
+        <p className="text-xs uppercase tracking-wider text-white/75">Today Earn</p><p className="text-3xl font-black mt-1">{money(summary.todayEarn)}</p>
+        <p className="text-[11px] text-white/75 mt-1">Calculated from completed bookings</p>
+        <div className="mt-4 pt-3 border-t border-white/20 flex justify-between text-xs"><span>Current rate</span><b>{config.rateAmount ? money(config.rateAmount) + ' / ' + (config.rateUnitMinutes || 60) + ' min' : 'Rate not configured'}</b></div>
+      </section>
+      <section className="grid grid-cols-2 gap-3">{cards.map(([title, value]) => <div key={title} className="bg-white rounded-xl p-3.5 border border-[#E8D9DF]"><p className="text-[11px] text-gray-500 font-semibold">{title}</p><p className="text-lg font-black mt-1">{money(value)}</p></div>)}</section>
+      <form onSubmit={(e) => { e.preventDefault(); load(filters); }} className="bg-white rounded-xl p-3.5 border border-gray-100">
+        <div className="flex items-center gap-2 mb-3"><FiFilter className="text-[#720C3E]" /><b className="text-xs">Filter earning by date</b></div>
+        <div className="grid grid-cols-2 gap-2"><input type="date" value={filters.startDate} onChange={(e) => setFilters({ ...filters, startDate: e.target.value })} className="border rounded-lg px-2 py-2 text-xs" /><input type="date" value={filters.endDate} onChange={(e) => setFilters({ ...filters, endDate: e.target.value })} className="border rounded-lg px-2 py-2 text-xs" /></div>
+        <div className="flex gap-2 mt-2"><button className="flex-1 rounded-lg py-2 text-xs font-bold text-white bg-[#720C3E]">Apply filter</button><button type="button" onClick={() => { const x = { startDate: '', endDate: '' }; setFilters(x); load(x); }} className="px-4 rounded-lg bg-gray-100 text-xs font-bold">Clear</button></div>
+      </form>
+      <section className="bg-white rounded-2xl border border-[#E8D9DF]/80 shadow-[0_6px_20px_rgba(114,12,62,0.05)] overflow-hidden">
+        <div className="p-4 pb-3 border-b border-[#E8D9DF]/70">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-bold text-[#24151D]">Earnings & payments</h3>
+              <p className="text-[10px] text-gray-500 mt-0.5">Track your salary records</p>
+            </div>
+            <span className="px-2 py-1 rounded-full bg-[#FCEBF3] text-[#720C3E] text-[10px] font-bold">
+              {historyTab === 'earnings' ? (data?.earningsPagination?.total || 0) + ' records' : (data?.paymentsPagination?.total || 0) + ' payments'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#F8F2F5] border border-[#E8D9DF]/70">
+            <button type="button" onClick={() => setHistoryTab('earnings')} className={'flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-[10px] font-bold transition-all ' + (historyTab === 'earnings' ? 'bg-[#720C3E] text-white shadow-sm' : 'text-[#6F5A64]') }><FiDollarSign className="w-3.5 h-3.5" /> Earnings</button>
+            <button type="button" onClick={() => setHistoryTab('payments')} className={'flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-[10px] font-bold transition-all ' + (historyTab === 'payments' ? 'bg-[#720C3E] text-white shadow-sm' : 'text-[#6F5A64]') }><FiCreditCard className="w-3.5 h-3.5" /> Payments</button>
+          </div>
+        </div>
+        {historyTab === 'earnings' ? (
+          <>
+            {!data?.earnings?.length ? <div className="px-5 py-10 text-center"><div className="w-11 h-11 mx-auto rounded-full bg-[#FCEBF3] text-[#720C3E] flex items-center justify-center"><FiDollarSign className="w-5 h-5" /></div><p className="text-xs font-semibold text-[#3D2B34] mt-3">No earnings yet</p><p className="text-[10px] text-gray-400 mt-1">Completed booking earnings will appear here.</p></div> : data.earnings.map((e) => <div key={e._id} className="px-4 py-3 border-b border-gray-100 flex items-center gap-3"><div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><FiDollarSign className="w-4 h-4" /></div><div className="flex-1 min-w-0"><b className="text-xs block truncate text-[#24151D]">{labelFor(e.type)}</b><span className="text-[10px] text-gray-500 block truncate">{e.bookingId?.bookingNumber || e.description}</span><span className="text-[10px] text-gray-400">{dateText(e.earningDate)}{e.durationMinutes ? ' • ' + durationText(e.durationMinutes) : ''}</span></div><strong className="text-sm text-emerald-600">+{money(e.amount)}</strong></div>)}
+          </>
+        ) : (
+          <>
+            <div className={'hidden'}>
+            {!data?.payments?.length ? <div className="px-5 py-10 text-center"><div className="w-11 h-11 mx-auto rounded-full bg-[#FCEBF3] text-[#720C3E] flex items-center justify-center"><FiCreditCard className="w-5 h-5" /></div><p className="text-xs font-semibold text-[#3D2B34] mt-3">No payments yet</p><p className="text-[10px] text-gray-400 mt-1">Your salary payment records will appear here.</p></div> : data.payments.map((p) => <div key={p._id} className="px-4 py-3 border-b border-gray-100 flex items-center gap-3"><div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><FiCreditCard className="w-4 h-4" /></div><div className="flex-1 min-w-0"><b className="text-xs capitalize block text-[#24151D]">{p.periodType} payment</b><span className="text-[10px] text-gray-500 block">{dateText(p.periodStart)} - {dateText(p.periodEnd)}</span>{p.customItems?.length ? <div className="text-[10px] text-gray-400 block truncate">{p.customItems.map((item, index) => <span key={item.label + index} className="mr-2">{item.label}: {money(item.amount)}</span>)}</div> : <span className="text-[10px] text-gray-400 block">Salary {money(p.salaryAmount)} • Bonus {money(p.bonusAmount)} • Incentive {money(p.incentiveAmount)}</span>}</div><strong className="text-sm text-blue-600">{money(p.totalAmount)}</strong></div>)}
+            </div>
+            <PaymentHistory payments={data?.payments} />
+          </>
+        )}
+      </section>
+      <div className={'hidden'}>
+      <section className={'bg-white rounded-2xl border border-[#E8D9DF] overflow-hidden'}>
+        <div className={'p-4 border-b border-[#E8D9DF] flex items-center justify-between'}>
+          <div><h3 className={'text-sm font-bold text-[#24151D]'}>Earning history</h3><p className={'text-[10px] text-gray-500 mt-0.5'}>Completed booking earnings</p></div>
+          <span className={'px-2 py-1 rounded-full bg-[#FCEBF3] text-[#720C3E] text-[10px] font-bold'}>{data?.earningsPagination?.total || 0} records</span>
+        </div>
+        {!data?.earnings?.length ? <div className={'px-5 py-8 text-center text-xs text-gray-400'}>No booking earnings yet.</div> : data.earnings.map((entry) => <div key={entry._id} className={'px-4 py-3 border-b border-gray-100 flex items-center gap-3'}><div className={'w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center'}><FiDollarSign className={'w-4 h-4'} /></div><div className={'flex-1 min-w-0'}><b className={'text-xs block truncate text-[#24151D]'}>{labelFor(entry.type)}</b><span className={'text-[10px] text-gray-500 block truncate'}>{entry.bookingId?.bookingNumber || entry.description}</span><span className={'text-[10px] text-gray-400'}>{dateText(entry.earningDate)}{entry.durationMinutes ? ' • ' + durationText(entry.durationMinutes) : ''}</span></div><strong className={'text-sm text-emerald-600'}>+{money(entry.amount)}</strong></div>)}
+      </section>
+      <section className={'bg-white rounded-2xl border border-[#E8D9DF] overflow-hidden'}>
+        <button type={'button'} onClick={() => setAdminSalaryOpen((open) => !open)} className={'w-full p-4 flex items-center justify-between text-left'}>
+          <span className={'flex items-center gap-3'}><span className={'w-9 h-9 rounded-lg bg-[#FCEBF3] text-[#720C3E] flex items-center justify-center'}><FiCreditCard className={'w-4 h-4'} /></span><span><b className={'text-sm block text-[#24151D]'}>Admin salary</b><span className={'text-[10px] text-gray-500'}>{data?.paymentsPagination?.total || 0} payment records</span></span></span>
+          <FiChevronDown className={'text-[#720C3E]'} style={{ transform: adminSalaryOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+        </button>
+        {adminSalaryOpen && <PaymentHistory payments={data?.payments} />}
+      </section>
+      </div>
+    </main>
+    <BottomNav />
+  </div>;
+}

@@ -13,11 +13,7 @@ const {
   getSettlementDashboard,
   blockVendor,
   unblockVendor,
-  updateCashLimit,
-  // Withdrawals
-  getWithdrawalRequests,
-  approveWithdrawal,
-  rejectWithdrawal
+  updateCashLimit
 } = require('../../controllers/adminControllers/settlementController');
 
 // Dashboard summary
@@ -57,10 +53,5 @@ router.post(
   [body('rejectionReason').notEmpty().withMessage('Rejection reason is required')],
   rejectSettlement
 );
-
-// Withdrawals
-router.get('/withdrawals', authenticate, isAdmin, getWithdrawalRequests);
-router.post('/withdrawals/:withdrawalId/approve', authenticate, isAdmin, approveWithdrawal);
-router.post('/withdrawals/:withdrawalId/reject', authenticate, isAdmin, rejectWithdrawal);
 
 module.exports = router;

@@ -42,7 +42,7 @@ const BottomNav = memo(() => {
   const navItems = useMemo(() => [
     { id: 'home', path: '/vendor/dashboard', icon: HiOutlineHome, activeIcon: HiHome, label: 'Home' },
     { id: 'jobs', path: '/vendor/jobs', icon: HiOutlineBriefcase, activeIcon: HiBriefcase, label: 'Jobs', badge: pendingJobsCount },
-    { id: 'wallet', path: '/vendor/wallet', icon: FaRegCreditCard, activeIcon: FaWallet, label: 'Wallet' },
+    { id: 'wallet', path: '/vendor/wallet', icon: FaRegCreditCard, activeIcon: FaWallet, label: 'Today Earn' },
   ], [pendingJobsCount]);
 
   const getActiveTab = () => {

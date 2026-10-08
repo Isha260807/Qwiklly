@@ -87,22 +87,6 @@ const vendorWalletService = {
   },
 
   /**
-   * Request settlement (vendor pays admin)
-   */
-  requestSettlement: async (data) => {
-    const response = await api.post('/vendors/wallet/settlement', data);
-    return response.data;
-  },
-
-  /**
-   * Get settlement history
-   */
-  getSettlements: async (params = {}) => {
-    const response = await api.get('/vendors/wallet/settlements', { params });
-    return response.data;
-  },
-
-  /**
    * Pay worker for a booking
    */
   payWorker: async (bookingId, amount, notes = '', transactionId = '', screenshot = '', paymentMethod = 'cash') => {

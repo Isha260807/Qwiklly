@@ -192,11 +192,11 @@ const BillingPage = () => {
 
         if (billRes.bill.payoutConfig) {
           const pc = billRes.bill.payoutConfig;
-          setPayoutSettings({
+            setPayoutSettings({
             serviceGstPct: pc.serviceGstPercentage ?? 0,
             partsGstPct: pc.partsGstPercentage ?? 0,
-            servicePayoutPct: pc.serviceSplitPercentage ?? 0,
-            partsPayoutPct: pc.partsSplitPercentage ?? 0
+            servicePayoutPct: 0,
+            partsPayoutPct: 0
           });
         }
 
@@ -418,11 +418,6 @@ const BillingPage = () => {
 
     const finalBillAmount = parseFloat(((totalServiceBase + totalServiceGST) + (totalPartsBase + totalPartsGST) + visitingCharges + finalTransportCharges).toFixed(2));
 
-    // Vendor Earnings estimate
-    const vendorServiceEarnings = parseFloat(((totalServiceBase * servicePayoutPct) / 100).toFixed(2));
-    const vendorPartsEarnings = parseFloat(((totalPartsBase * partsPayoutPct) / 100).toFixed(2));
-    const totalVendorEarnings = parseFloat((vendorServiceEarnings + vendorPartsEarnings).toFixed(2));
-
     return {
       originalBase,
       extraServiceBase,
@@ -435,11 +430,11 @@ const BillingPage = () => {
       visitingCharges,
       transportCharges: finalTransportCharges,
       finalBillAmount,
-      totalVendorEarnings,
-      vendorServiceEarnings,
-      vendorPartsEarnings,
-      servicePayoutPct,
-      partsPayoutPct
+      totalVendorEarnings: 0,
+      vendorServiceEarnings: 0,
+      vendorPartsEarnings: 0,
+      servicePayoutPct: 0,
+      partsPayoutPct: 0
     };
   }, [booking, selectedServices, selectedParts, customItems, transportCharges, payoutSettings, applyPartsGST]);
 
@@ -1194,24 +1189,24 @@ const BillingPage = () => {
                   </div>
                 )}
               </div>
-              {/* Earnings Footer - ONLY SHOW WHEN COMPLETED */}
+              {/* Salary Earnings Footer - ONLY SHOW WHEN COMPLETED */}
               {booking.status === 'completed' ? (
                 <div className="bg-emerald-50 px-6 py-4 border-t border-emerald-100">
                   <div className="space-y-2 mb-3">
                     <div className="flex justify-between items-center text-emerald-700 text-sm">
-                      <span>Service Earnings ({calculations.servicePayoutPct}%)</span>
-                      <span className="font-bold">₹{calculations.vendorServiceEarnings.toFixed(2)}</span>
+                      <span>Salary earning</span>
+                      <span className="font-bold">Added to Today Earn</span>
                     </div>
                     {(calculations.vendorPartsEarnings > 0) && (
                       <div className="flex justify-between items-center text-emerald-700 text-sm">
-                        <span>Parts Earnings ({calculations.partsPayoutPct}%)</span>
-                        <span className="font-bold">₹{calculations.vendorPartsEarnings.toFixed(2)}</span>
+                        <span>Performance bonus</span>
+                        <span className="font-bold">Included in payroll</span>
                       </div>
                     )}
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-emerald-200/50">
-                    <span className="text-emerald-800 font-bold text-xs uppercase tracking-wider">Total Net Earnings</span>
-                    <span className="text-emerald-700 font-black text-xl">₹{calculations.totalVendorEarnings.toFixed(2)}</span>
+                    <span className="text-emerald-800 font-bold text-xs uppercase tracking-wider">Payroll status</span>
+                    <span className="text-emerald-700 font-black text-sm">Added after admin payment</span>
                   </div>
                 </div>
               ) : (

@@ -231,6 +231,10 @@ export const SocketProvider = ({ children }) => {
           data={data}
           onClick={() => {
             toast.dismiss(t.id);
+            if (data.type === 'salary_payment_received' && userType === 'vendor') {
+              navigate('/vendor/wallet');
+              return;
+            }
             // Optional: navigate based on relatedId
             if (data.relatedId) {
               if (userType === 'vendor') navigate(`/vendor/booking/${data.relatedId}`);

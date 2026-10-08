@@ -108,17 +108,11 @@ export default function BookingDetails() {
         discount: parseFloat(apiData.discount || 0),
         platformCommission: parseFloat(apiData.adminCommission || apiData.platformFee || apiData.commission || 0),
         finalAmount: parseFloat(apiData.finalAmount || 0),
-        vendorEarnings: parseFloat(
-          billData?.vendorTotalEarning ||
-          apiData.vendorEarnings ||
-          (apiData.paymentMethod === 'plan_benefit'
-            ? (Number(apiData.basePrice || 0) * 0.7) // Fallback: 70% share from base
-            : (apiData.finalAmount ? apiData.finalAmount - (apiData.commission || 0) : 0)
-          )
-        ),
+        // Salary earnings are calculated by the backend from worked duration and
+        // the vendor's configured hourly/30-minute rate.
+        vendorEarnings: parseFloat(billData?.vendorTotalEarning || apiData.vendorEarnings || 0),
 
-        // Display Price (Vendor Earnings by default as requested)
-        price: (apiData.vendorEarnings || (apiData.finalAmount ? apiData.finalAmount - (apiData.commission || 0) : 0)).toFixed(2),
+        price: parseFloat(apiData.finalAmount || 0).toFixed(2),
 
         timeSlot: {
           date: apiData.scheduledDate ? new Date(apiData.scheduledDate).toLocaleDateString() : 'Today',
@@ -942,36 +936,16 @@ export default function BookingDetails() {
             )}
           </div>
 
-          {/* Vendor Earnings Footer - ONLY SHOW WHEN COMPLETED */}
+          {/* Salary Earnings Footer - ONLY SHOW WHEN COMPLETED */}
           {(booking.status === 'completed' || booking.status === 'work_done' || booking.cashCollected) ? (
             <div className="bg-emerald-50 px-4 py-3 border-t border-emerald-100">
-              <div className="space-y-1.5 mb-2 text-xs">
-                <div className="flex justify-between items-center text-emerald-700">
-                  <span>Service Earnings ({bill?.payoutConfig?.serviceSplitPercentage || 70}%)</span>
-                  <span className="font-bold">₹{(bill?.vendorServiceEarning || (booking.vendorEarnings || 0)).toFixed(2)}</span>
-                </div>
-                {(parts.length > 0 || customItems.length > 0 || bill?.vendorPartsEarning > 0) && (
-                  <div className="flex justify-between items-center text-emerald-700">
-                    <span>Parts Earnings ({bill?.payoutConfig?.partsSplitPercentage || 10}%)</span>
-                    <span className="font-bold">₹{(bill?.vendorPartsEarning || 0).toFixed(2)}</span>
-                  </div>
-                )}
+              <div className="flex justify-between items-center text-emerald-800">
+                <span className="font-bold text-[10px] uppercase tracking-wider">Salary earning</span>
+                <span className="font-bold text-xs">Added to Today Earn</span>
               </div>
-              <div className="flex justify-between items-center pt-1.5 border-t border-emerald-200/50">
-                <span className="text-emerald-800 font-bold text-[10px] uppercase tracking-wider">
-                  {(booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid' || booking?.cashCollected)
-                    ? 'Total Net Earnings'
-                    : 'Estimated Net Earnings'}
-                </span>
-                <span className="text-emerald-700 font-black text-base">
-                  ₹{(bill?.vendorTotalEarning || booking.vendorEarnings || 0).toFixed(2)}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-emerald-600/70 text-[9px] mt-1">
-                <span>Platform Commission</span>
-                <span>-₹{(booking.adminCommission || booking.platformCommission || 0).toFixed(2)}</span>
-              </div>
+              <p className="text-emerald-700/80 text-[10px] mt-1">
+                This booking is calculated from worked duration and your configured salary rate.
+              </p>
             </div>
           ) : (
             <div className="bg-gray-50 px-3 py-2 border-t border-gray-100/50 text-center">

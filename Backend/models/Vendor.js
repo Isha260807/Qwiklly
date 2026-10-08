@@ -185,6 +185,17 @@ const vendorSchema = new mongoose.Schema({
       default: ''
     }
   },
+  salaryConfig: {
+    rateAmount: { type: Number, default: 0, min: 0 },
+    rateUnitMinutes: { type: Number, enum: [30, 60], default: 60 },
+    effectiveFrom: { type: Date, default: Date.now },
+    rateHistory: [{
+      rateAmount: { type: Number, required: true, min: 0 },
+      rateUnitMinutes: { type: Number, enum: [30, 60], required: true },
+      effectiveFrom: { type: Date, required: true },
+      updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null }
+    }]
+  },
   isActive: {
     type: Boolean,
     default: true

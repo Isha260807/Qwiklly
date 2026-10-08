@@ -4,6 +4,7 @@ const Settlement = require('../../models/Settlement');
 const Withdrawal = require('../../models/Withdrawal');
 const Booking = require('../../models/Booking');
 const { uploadPaymentScreenshot } = require('../../utils/cloudinaryUpload');
+const { creditSalaryEarningForBooking } = require('../../services/salaryEarningService');
 
 /**
  * Get vendor wallet with ledger balance
@@ -185,7 +186,7 @@ const recordCashCollection = async (req, res) => {
     const grandTotal = amount;
 
     if (bill) {
-      vendorEarning = bill.vendorTotalEarning;
+      vendorEarning = 0;
       bill.status = 'paid';
       bill.paidAt = new Date();
       await bill.save();
@@ -253,6 +254,7 @@ const recordCashCollection = async (req, res) => {
     booking.paymentMethod = 'cash collected';
     booking.completedAt = new Date();
     await booking.save();
+    await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId });
 
     // Create transaction record for Cash Collection
     const transaction = await Transaction.create({

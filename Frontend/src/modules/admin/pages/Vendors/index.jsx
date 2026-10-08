@@ -14,6 +14,7 @@ import {
 import AllVendors from './AllVendors';
 import VendorBookings from './VendorBookings';
 import VendorAnalytics from './VendorAnalytics';
+import VendorSalaryWallets from './VendorSalaryWallets';
 
 const Vendors = () => {
   const location = useLocation();
@@ -22,6 +23,7 @@ const Vendors = () => {
     { name: 'All Vendors', path: '/admin/vendors/all', icon: FiUsers },
     { name: 'Vendor Bookings', path: '/admin/vendors/bookings', icon: FiBriefcase },
     { name: 'Vendor Analytics', path: '/admin/vendors/analytics', icon: FiActivity },
+    { name: 'Vendor Wallets', path: '/admin/vendors/wallets', icon: FiDollarSign },
   ];
 
   const getPageTitle = () => {
@@ -43,6 +45,7 @@ const Vendors = () => {
           <Route path="all" element={<AllVendors />} />
           <Route path="bookings" element={<VendorBookings />} />
           <Route path="analytics" element={<VendorAnalytics />} />
+          <Route path="wallets" element={<VendorSalaryWallets />} />
         </Routes>
       </motion.div>
     </div>

@@ -1,5 +1,6 @@
 const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
+const VendorSalaryEarning = require('../../models/VendorSalaryEarning');
 const Service = require('../../models/UserService');
 const Settings = require('../../models/Settings');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
@@ -131,9 +132,9 @@ const getDashboardStats = async (req, res) => {
         Promise.resolve(0),
 
         // 3. Earnings
-        VendorBill.aggregate([
-          { $match: { vendorId: vId, status: 'paid' } },
-          { $group: { _id: null, total: { $sum: '$vendorTotalEarning' } } }
+        VendorSalaryEarning.aggregate([
+          { $match: { vendorId: vId, status: { $ne: 'reversed' } } },
+          { $group: { _id: null, total: { $sum: '$amount' } } }
         ]).catch(() => [])
       ]);
     } catch (blastErr) {
@@ -202,12 +203,12 @@ const getRevenueAnalytics = async (req, res) => {
       groupFormat = '%Y-%m'; // Year-Month
     }
 
-    // Revenue analytics from VendorBill
-    const revenueData = await VendorBill.aggregate([
+    // Salary analytics from the vendor salary ledger
+    const revenueData = await VendorSalaryEarning.aggregate([
       {
         $match: {
           vendorId: vendorId,
-          status: 'paid'
+          status: { $ne: 'reversed' }
         }
       },
       {
@@ -215,12 +216,14 @@ const getRevenueAnalytics = async (req, res) => {
           _id: {
             $dateToString: {
               format: groupFormat,
-              date: '$paidAt'
+              date: '$earningDate'
             }
           },
-          revenue: { $sum: '$grandTotal' },
-          earnings: { $sum: '$vendorTotalEarning' },
-          bookings: { $sum: 1 }
+          revenue: { $sum: '$amount' },
+          earnings: { $sum: '$amount' },
+          bookings: {
+            $sum: { $cond: [{ $eq: ['$type', 'booking_earning'] }, 1, 0] }
+          }
         }
       },
       { $sort: { _id: 1 } }

@@ -34,7 +34,8 @@
     "children": [
       "All Vendors",
       "Vendor Bookings",
-      "Vendor Analytics"
+      "Vendor Analytics",
+      "Vendor Wallets"
     ]
   },
   {
@@ -136,7 +137,6 @@
     ],
     "children": [
       "Pending",
-      "Withdrawals",
       "History"
     ]
   },

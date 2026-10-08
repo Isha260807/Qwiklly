@@ -47,9 +47,8 @@ const BookingAlerts = lazyLoad(() => import('../pages/BookingAlerts'));
 const BookingDetails = lazyLoad(() => import('../pages/BookingDetails'));
 const BookingTimeline = lazyLoad(() => import('../pages/BookingTimeline'));
 const ActiveJobs = lazyLoad(() => import('../pages/ActiveJobs'));
-const Earnings = lazyLoad(() => import('../pages/Earnings'));
 const Wallet = lazyLoad(() => import('../pages/Wallet'));
-const WithdrawalRequest = lazyLoad(() => import('../pages/WithdrawalRequest'));
+const Earnings = Wallet;
 const Profile = lazyLoad(() => import('../pages/Profile'));
 const ProfileDetails = lazyLoad(() => import('../pages/Profile/ProfileDetails'));
 const EditProfile = lazyLoad(() => import('../pages/Profile/EditProfile'));
@@ -58,8 +57,6 @@ const BookingMap = lazyLoad(() => import('../pages/BookingMap'));
 const Settings = lazyLoad(() => import('../pages/Settings'));
 const AddressManagement = lazyLoad(() => import('../pages/AddressManagement'));
 const Notifications = lazyLoad(() => import('../pages/Notifications'));
-const SettlementRequest = lazyLoad(() => import('../pages/Wallet/SettlementRequest'));
-const SettlementHistory = lazyLoad(() => import('../pages/Wallet/SettlementHistory'));
 const MyRatings = lazyLoad(() => import('../pages/MyRatings'));
 const AboutQwiklly = lazyLoad(() => import('../pages/AboutHomster'));
 const BillingPage = lazyLoad(() => import('../pages/BillingPage'));
@@ -118,9 +115,6 @@ const VendorRoutes = () => {
               <Route path="/jobs" element={<ProtectedRoute userType="vendor"><ActiveJobs /></ProtectedRoute>} />
               <Route path="/earnings" element={<ProtectedRoute userType="vendor"><Earnings /></ProtectedRoute>} />
               <Route path="/wallet" element={<ProtectedRoute userType="vendor"><Wallet /></ProtectedRoute>} />
-              <Route path="/wallet/withdraw" element={<ProtectedRoute userType="vendor"><WithdrawalRequest /></ProtectedRoute>} />
-              <Route path="/wallet/settle" element={<ProtectedRoute userType="vendor"><SettlementRequest /></ProtectedRoute>} />
-              <Route path="/wallet/settlements" element={<ProtectedRoute userType="vendor"><SettlementHistory /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute userType="vendor"><Profile /></ProtectedRoute>} />
               <Route path="/profile/details" element={<ProtectedRoute userType="vendor"><ProfileDetails /></ProtectedRoute>} />
               <Route path="/profile/edit" element={<ProtectedRoute userType="vendor"><EditProfile /></ProtectedRoute>} />

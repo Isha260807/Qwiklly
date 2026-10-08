@@ -61,6 +61,7 @@ const getChildRoute = (parentRoute, childName) => {
       "All Vendors": "/admin/vendors/all",
       "Vendor Bookings": "/admin/vendors/bookings",
       "Vendor Analytics": "/admin/vendors/analytics",
+      "Vendor Wallets": "/admin/vendors/wallets",
       "Vendor Payments": "/admin/vendors/payments",
     },
     "/admin/bookings": {
@@ -97,7 +98,6 @@ const getChildRoute = (parentRoute, childName) => {
     },
     "/admin/settlements": {
       "Pending": "/admin/settlements/pending",
-      "Withdrawals": "/admin/settlements/withdrawals",
       "Vendors with Due": "/admin/settlements/vendors",
       "History": "/admin/settlements/history",
     },
@@ -116,8 +116,6 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   const [counts, setCounts] = useState({
     bookings: 0,
     vendors: 0,
-    withdrawals: 0,
-    pendingSettlements: 0
   });
 
   // Load admin user from storage
@@ -139,7 +137,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
 
   // Filter menu items by role and search query
   const filteredMenu = useMemo(() => {
-    return adminMenu.filter(item => {
+    return adminMenu.filter(item => item.title !== 'Settlements').filter(item => {
       // Role filter
       if (item.allowedRoles && !item.allowedRoles.includes(adminUser.role)) {
         return false;
@@ -176,8 +174,6 @@ const AdminSidebar = ({ isOpen, onClose }) => {
           setCounts({
             bookings: stats.pendingBookings || 0,
             vendors: stats.pendingVendors || 0,
-            withdrawals: stats.pendingWithdrawals || 0,
-            pendingSettlements: stats.pendingSettlements || 0
           });
         }
       } catch (error) {
@@ -328,9 +324,9 @@ const AdminSidebar = ({ isOpen, onClose }) => {
               {counts.vendors > 99 ? '99+' : counts.vendors}
             </span>
           )}
-          {item.title === "Settlements" && (counts.withdrawals + counts.pendingSettlements) > 0 && (
+          {item.title === "Settlements" && counts.pendingSettlements > 0 && (
             <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-1">
-              {(counts.withdrawals + counts.pendingSettlements) > 99 ? '99+' : (counts.withdrawals + counts.pendingSettlements)}
+              {counts.pendingSettlements > 99 ? '99+' : counts.pendingSettlements}
             </span>
           )}
 
@@ -375,11 +371,6 @@ const AdminSidebar = ({ isOpen, onClose }) => {
                       {item.title === "Settlements" && child === "Pending" && counts.pendingSettlements > 0 && (
                         <span className="bg-red-500 text-white text-[10px] h-4 min-w-[18px] px-1.5 flex items-center justify-center rounded-full">
                           {counts.pendingSettlements}
-                        </span>
-                      )}
-                      {item.title === "Settlements" && child === "Withdrawals" && counts.withdrawals > 0 && (
-                        <span className="bg-orange-500 text-white text-[10px] h-4 min-w-[18px] px-1.5 flex items-center justify-center rounded-full">
-                          {counts.withdrawals}
                         </span>
                       )}
                     </div>
@@ -457,7 +448,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             {/* Section Heading Title */}
             {sectionName !== "MAIN" && (
               <div className="text-[10.5px] font-bold text-slate-400 tracking-wider uppercase px-2.5 pt-2 pb-1">
-                {sectionName}
+                {sectionName === 'FINANCE & SETTLEMENTS' ? 'FINANCE' : sectionName}
               </div>
             )}
 

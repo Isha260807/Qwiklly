@@ -4,6 +4,7 @@ const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { sendNotificationToUser, sendNotificationToVendor } = require('../../services/firebaseAdmin');
+const { creditSalaryEarningForBooking } = require('../../services/salaryEarningService');
 
 /**
  * Get vendor bookings with filters
@@ -1291,6 +1292,7 @@ const completeSelfJob = async (req, res) => {
       booking.vendorBillId = existingBill._id;
       if (photoList.length > 0) booking.workPhotos = photoList;
       await booking.save();
+      await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId });
 
       return res.status(200).json({
         success: true,
@@ -1311,8 +1313,9 @@ const completeSelfJob = async (req, res) => {
     // ── Fetch Settings (frozen snapshot for this bill) ──
     const Settings = require('../../models/Settings');
     const settings = await Settings.findOne({ type: 'global' });
-    const serviceSplitPct = settings?.servicePayoutPercentage ?? 0;
-    const partsSplitPct = settings?.partsPayoutPercentage ?? 0;
+    // Vendor compensation is salary-based; booking bills never use percentage sharing.
+    const serviceSplitPct = 0;
+    const partsSplitPct = 0;
     const serviceGstPct = settings?.serviceGstPercentage ?? 0;
     const partsGstPct = settings?.partsGstPercentage ?? 0;
 
@@ -1335,10 +1338,10 @@ const completeSelfJob = async (req, res) => {
     // ═══════════════════════════════════════════
     // STEP 2: REVENUE SPLIT (Vendor % on service base)
     // ═══════════════════════════════════════════
-    const vendorServiceEarning = parseFloat(((totalServiceBase * serviceSplitPct) / 100).toFixed(2));
+    const vendorServiceEarning = 0;
     const vendorPartsEarning = 0;
-    const vendorTotalEarning = vendorServiceEarning;
-    const companyRevenue = parseFloat((grandTotal - vendorTotalEarning).toFixed(2));
+    const vendorTotalEarning = 0;
+    const companyRevenue = parseFloat(grandTotal.toFixed(2));
 
     // ═══════════════════════════════════════════
     // STEP 3: PERSIST BILL
@@ -1428,6 +1431,7 @@ const completeSelfJob = async (req, res) => {
     booking.markModified('workDoneDetails');
 
     await booking.save();
+    await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId });
 
     // ── Notify user (wrapped in try/catch to avoid failing response on notif error) ──
     try {
@@ -1532,7 +1536,7 @@ const collectSelfCash = async (req, res) => {
     if (!bill) return res.status(500).json({ success: false, message: 'Bill not found — cannot process payment' });
 
     const grandTotal = Number(bill.grandTotal) || 0;
-    const vendorEarning = Number(bill.vendorTotalEarning) || 0;
+    const vendorEarning = 0;
 
     // ── Update Booking status ──
     booking.status = BOOKING_STATUS.COMPLETED;
@@ -1545,6 +1549,7 @@ const collectSelfCash = async (req, res) => {
     booking.completedAt = new Date();
     booking.paymentOtp = undefined;
     await booking.save();
+    await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId });
 
     // ── Update VendorBill status ──
     bill.status = 'paid';

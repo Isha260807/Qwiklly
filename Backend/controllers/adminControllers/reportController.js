@@ -80,8 +80,9 @@ const getFinanceOverview = async (req, res) => {
         const fb = bookingFallback[0];
         const val = fb.totalValue || 0;
         revenueStats.totalTransactionValue = val;
-        revenueStats.totalPlatformRevenue = Math.round(val * 0.2);
-        revenueStats.totalVendorEarnings = Math.round(val * 0.8);
+        // Salary payroll is tracked in VendorSalaryEarning, not as a booking percentage.
+        revenueStats.totalPlatformRevenue = Math.round(val);
+        revenueStats.totalVendorEarnings = 0;
         revenueStats.totalTaxCollected = Math.round(val * 0.18);
         revenueStats.totalTDSCollected = Math.round(val * 0.01);
         revenueStats.count = fb.count;
@@ -229,8 +230,8 @@ const getPaymentTransactions = async (req, res) => {
         customer: b.userId?.name || 'Guest',
         vendor: b.vendorId?.businessName || 'Unassigned',
         amount: bill?.grandTotal || b.finalAmount || 0,
-        platformFee: bill?.companyRevenue || (b.finalAmount ? b.finalAmount * 0.2 : 0),
-        vendorEarnings: bill?.vendorTotalEarning || (b.finalAmount ? b.finalAmount * 0.8 : 0),
+        platformFee: bill?.companyRevenue || 0,
+        vendorEarnings: 0,
         tax: bill?.totalGST || 0,
         paymentMethod: b.paymentMethod || 'N/A',
         paymentStatus: b.paymentStatus || 'N/A',

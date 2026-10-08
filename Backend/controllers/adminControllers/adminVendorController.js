@@ -1,6 +1,7 @@
 const Vendor = require('../../models/Vendor');
 const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
+const VendorSalaryEarning = require('../../models/VendorSalaryEarning');
 const { validationResult } = require('express-validator');
 const { VENDOR_STATUS, BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
@@ -90,18 +91,17 @@ const getVendorDetails = async (req, res) => {
     const totalBookings = await Booking.countDocuments({ vendorId: vendor._id });
     const completedBookings = await Booking.countDocuments({ vendorId: vendor._id, status: BOOKING_STATUS.COMPLETED });
 
-    const earningsResult = await VendorBill.aggregate([
+    const earningsResult = await VendorSalaryEarning.aggregate([
       {
         $match: {
           vendorId: vendor._id,
-          status: 'paid'
+          status: { $ne: 'reversed' }
         }
       },
       {
         $group: {
           _id: null,
-          totalEarnings: { $sum: '$vendorTotalEarning' },
-          totalRevenue: { $sum: '$grandTotal' }
+          totalEarnings: { $sum: '$amount' }
         }
       }
     ]);
@@ -110,7 +110,7 @@ const getVendorDetails = async (req, res) => {
       totalBookings,
       completedBookings,
       totalEarnings: earningsResult[0]?.totalEarnings || 0,
-      totalRevenue: earningsResult[0]?.totalRevenue || 0
+      totalRevenue: 0
     }];
 
     res.status(200).json({
@@ -348,26 +348,25 @@ const getVendorEarnings = async (req, res) => {
     const { id } = req.params;
     const { startDate, endDate } = req.query;
 
-    // Get earnings from VendorBill (single source of truth)
-    const billQuery = {
+    const earningQuery = {
       vendorId: require('mongoose').Types.ObjectId(id),
-      status: 'paid'
+      status: { $ne: 'reversed' }
     };
 
     if (startDate || endDate) {
-      billQuery.paidAt = {};
-      if (startDate) billQuery.paidAt.$gte = new Date(startDate);
-      if (endDate) billQuery.paidAt.$lte = new Date(endDate);
+      earningQuery.earningDate = {};
+      if (startDate) earningQuery.earningDate.$gte = new Date(startDate);
+      if (endDate) earningQuery.earningDate.$lte = new Date(endDate);
     }
 
-    const earnings = await VendorBill.aggregate([
-      { $match: billQuery },
+    const earnings = await VendorSalaryEarning.aggregate([
+      { $match: earningQuery },
       {
         $group: {
           _id: null,
-          totalRevenue: { $sum: '$grandTotal' },
-          vendorEarnings: { $sum: '$vendorTotalEarning' },
-          platformCommission: { $sum: '$companyRevenue' },
+          totalRevenue: { $sum: '$amount' },
+          vendorEarnings: { $sum: '$amount' },
+          platformCommission: { $sum: 0 },
           totalBookings: { $sum: 1 }
         }
       }

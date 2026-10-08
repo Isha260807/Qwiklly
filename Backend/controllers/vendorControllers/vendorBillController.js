@@ -43,8 +43,9 @@ const createOrUpdateBill = async (req, res) => {
 
     // ── Fetch Settings (frozen snapshot) ──
     const settings = await Settings.findOne({ type: 'global' });
-    const serviceSplitPct = settings?.servicePayoutPercentage ?? 0;
-    const partsSplitPct = settings?.partsPayoutPercentage ?? 0;
+    // Vendor compensation is salary-based; booking bills never use percentage sharing.
+    const serviceSplitPct = 0;
+    const partsSplitPct = 0;
     const serviceGstPct = settings?.serviceGstPercentage ?? 0;
     const partsGstPct = settings?.partsGstPercentage ?? 0;
 
@@ -184,10 +185,10 @@ const createOrUpdateBill = async (req, res) => {
     // ═══════════════════════════════════════
     // 5. REVENUE SPLIT (% applied on BASE only)
     // ═══════════════════════════════════════
-    const vendorServiceEarning = parseFloat(((totalServiceBaseForEarnings * serviceSplitPct) / 100).toFixed(2));
-    const vendorPartsEarning = parseFloat(((totalPartsBase * partsSplitPct) / 100).toFixed(2));
-    const vendorTotalEarning = parseFloat((vendorServiceEarning + vendorPartsEarning).toFixed(2));
-    const companyRevenue = parseFloat((grandTotal - vendorTotalEarning).toFixed(2));
+    const vendorServiceEarning = 0;
+    const vendorPartsEarning = 0;
+    const vendorTotalEarning = 0;
+    const companyRevenue = parseFloat(grandTotal.toFixed(2));
 
     // ═══════════════════════════════════════
     // 6. ALL SERVICES (original + vendor-added)

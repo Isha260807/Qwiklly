@@ -7,6 +7,7 @@ const { PAYMENT_STATUS, BOOKING_STATUS } = require('../../utils/constants');
 const { createOrder, verifyPayment, verifyWebhookSignature, refundPayment } = require('../../services/razorpayService');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { recordBookingEarning } = require('../../services/earningTrackerService');
+const { creditSalaryEarningForBooking } = require('../../services/salaryEarningService');
 
 /**
  * Create Razorpay order for booking payment
@@ -334,12 +335,13 @@ const finalizePaymentSuccess = async (booking, paymentId) => {
   const bill = await VendorBill.findOne({ bookingId: booking._id });
 
   if (bill && booking.vendorId) {
-    const vendorEarning = bill.vendorTotalEarning;
+    const vendorEarning = 0;
 
     // Mark bill as paid
     bill.status = 'paid';
     bill.paidAt = new Date();
     await bill.save();
+    await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId: booking.vendorId });
 
     // Online payment: only earnings increase, NO dues (platform holds the money)
     await Vendor.findByIdAndUpdate(booking.vendorId, {
@@ -373,7 +375,7 @@ const finalizePaymentSuccess = async (booking, paymentId) => {
     date: new Date(),
     totalRevenue: Number(bill ? bill.grandTotal : booking.finalAmount) || 0,
     platformCommission: Number(bill ? bill.companyRevenue : (booking.finalAmount * 0.2)) || 0,
-    vendorEarnings: Number(bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8)) || 0,
+    vendorEarnings: 0,
     totalGST: Number(bill ? bill.totalGST : 0) || 0,
     totalTDS: 0 // Tracked in withdrawals
   }).catch(err => console.error('[Payment] Daily tracker failed:', err));
@@ -601,12 +603,13 @@ const processWalletPayment = async (req, res) => {
     const bill = await VendorBill.findOne({ bookingId: booking._id });
 
     if (bill && booking.vendorId) {
-      const vendorEarning = bill.vendorTotalEarning;
+      const vendorEarning = 0;
 
       // Mark bill as paid
       bill.status = 'paid';
       bill.paidAt = new Date();
       await bill.save();
+      await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId: booking.vendorId });
 
       // Wallet payment: only earnings increase, NO dues (platform holds the money)
       await Vendor.findByIdAndUpdate(booking.vendorId, {
@@ -639,7 +642,7 @@ const processWalletPayment = async (req, res) => {
       date: new Date(),
       totalRevenue: Number(bill ? bill.grandTotal : booking.finalAmount) || 0,
       platformCommission: Number(bill ? bill.companyRevenue : (booking.finalAmount * 0.2)) || 0,
-      vendorEarnings: Number(bill ? bill.vendorTotalEarning : (booking.finalAmount * 0.8)) || 0,
+      vendorEarnings: 0,
       totalGST: Number(bill ? bill.totalGST : 0) || 0,
       totalTDS: 0 // Tracked in withdrawals
     }).catch(err => console.error('[Wallet Payment] Daily tracker failed:', err));
