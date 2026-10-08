@@ -310,7 +310,9 @@ const calculateBookingPrice = async ({
         }
         basePrice += (refSvc.hourlyRate || 0) * hours;
       } else {
-        const price = item.card?.price ?? item.price ?? refSvc?.basePrice ?? 0;
+        // Fixed prices must also come from the referenced service whenever possible.
+        // Cart values are only a fallback for legacy items without a serviceId.
+        const price = refSvc ? Number(refSvc.basePrice || 0) : (item.card?.price ?? item.price ?? 0);
         const count = item.quantity ?? item.serviceCount ?? 1;
         basePrice += Number(price) * Number(count);
       }

@@ -63,6 +63,8 @@ export const brandService = {
     if (params.status) queryParams.append('status', params.status);
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
     if (params.cityId) queryParams.append('cityId', params.cityId);
+    if (params.zoneId) queryParams.append('zoneId', params.zoneId);
+    if (params.cityId) queryParams.append('cityId', params.cityId);
 
     const response = await api.get(`/admin/brands${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
     return response.data;
@@ -263,6 +265,8 @@ export const publicCatalogService = {
   getBrands: async (params = {}) => {
     const queryParams = new URLSearchParams();
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
+    if (params.cityId) queryParams.append('cityId', params.cityId);
+    if (params.zoneId) queryParams.append('zoneId', params.zoneId);
     if (params.categorySlug) queryParams.append('categorySlug', params.categorySlug);
     if (params.search) queryParams.append('search', params.search);
     if (params.cityId) queryParams.append('cityId', params.cityId);
@@ -285,6 +289,8 @@ export const publicCatalogService = {
     if (params.brandId) queryParams.append('brandId', params.brandId);
     if (params.brandSlug) queryParams.append('brandSlug', params.brandSlug);
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
+    if (params.cityId) queryParams.append('cityId', params.cityId);
+    if (params.zoneId) queryParams.append('zoneId', params.zoneId);
 
     const cacheKey = `public:services:${queryParams.toString()}`;
     const cached = apiCache.get(cacheKey);

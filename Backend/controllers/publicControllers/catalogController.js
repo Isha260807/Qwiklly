@@ -227,7 +227,7 @@ const getPublicBrandBySlug = async (req, res) => {
  */
 const getPublicServices = async (req, res) => {
   try {
-    const { brandId, brandSlug, categoryId, cityId, search } = req.query;
+    const { brandId, brandSlug, categoryId, cityId, zoneId, search } = req.query;
 
     const query = { status: 'active' };
 
@@ -253,12 +253,25 @@ const getPublicServices = async (req, res) => {
 
     const services = await Service.find(query)
       .populate('brandId', 'title iconUrl')
+      .populate('frequentlyAddedTogether', 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours rating ratingCount status zoneIds')
+      .populate('frequentlyAddedTogetherByZone.zoneId', 'name')
+      .populate('frequentlyAddedTogetherByZone.serviceIds', 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours rating ratingCount status zoneIds')
       .sort({ displayOrder: 1, createdAt: -1 })
       .lean();
 
     res.status(200).json({
       success: true,
-      services: services.map(svc => ({
+      services: services.map(svc => {
+        const zoneRecommendationGroup = zoneId
+          ? (svc.frequentlyAddedTogetherByZone || []).find(entry =>
+            String(entry.zoneId?._id || entry.zoneId) === String(zoneId)
+          )
+          : null;
+        const recommendedServices = zoneRecommendationGroup
+          ? zoneRecommendationGroup.serviceIds
+          : (svc.frequentlyAddedTogether || []);
+
+        return ({
         id: svc._id.toString(),
         title: svc.title,
         slug: svc.slug,
@@ -304,10 +317,44 @@ const getPublicServices = async (req, res) => {
         howItWorksTitle: svc.howItWorksTitle || "How it's done?",
         howItWorks: svc.howItWorks || [],
         faqs: svc.faqs || [],
+        frequentlyAddedTogether: recommendedServices
+          .filter(recommended => {
+            if (!recommended || recommended.status !== 'active') return false;
+            if (!zoneId) return true;
+            const recommendedZoneIds = (recommended.zoneIds || []).map(id => String(id?._id || id));
+            return recommendedZoneIds.length === 0 || recommendedZoneIds.includes(String(zoneId));
+          })
+          .map(recommended => ({
+            id: recommended._id.toString(),
+            title: recommended.title,
+            slug: recommended.slug,
+            icon: recommended.iconUrl || '',
+            iconUrl: recommended.iconUrl || '',
+            image: recommended.iconUrl || '',
+            imageUrl: recommended.iconUrl || '',
+            price: recommended.basePrice || 0,
+            basePrice: recommended.basePrice || 0,
+            originalPrice: recommended.originalPrice || 0,
+            discountPrice: recommended.discountPrice || null,
+            pricingType: recommended.pricingType || 'FIXED',
+            estimatedDurationMinutes: recommended.estimatedDurationMinutes ?? 45,
+            pricePerUnit: recommended.pricePerUnit ?? recommended.durationPricing?.pricePerUnit ?? recommended.pricePer30Minutes ?? null,
+            billingUnitMinutes: recommended.billingUnitMinutes ?? recommended.durationPricing?.billingUnitMinutes ?? 30,
+            durationStepMinutes: recommended.durationStepMinutes ?? recommended.durationPricing?.durationStepMinutes ?? 30,
+            minDurationMinutes: recommended.minDurationMinutes ?? recommended.durationPricing?.minDurationMinutes ?? 30,
+            maxDurationMinutes: recommended.maxDurationMinutes ?? recommended.durationPricing?.maxDurationMinutes ?? 240,
+            durationPricing: recommended.durationPricing || null,
+            hourlyRate: recommended.hourlyRate ?? null,
+            minHours: recommended.minHours ?? 1,
+            maxHours: recommended.maxHours ?? 8,
+            rating: recommended.rating || 4.9,
+            ratingCount: recommended.ratingCount || '4.9 (237.6k)'
+          })),
         brandId: svc.brandId?._id,
         brandName: svc.brandId?.title,
         brandIcon: svc.brandId?.iconUrl
-      }))
+      });
+      })
     });
   } catch (error) {
     console.error('Get public services error:', error);

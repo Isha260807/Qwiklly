@@ -186,9 +186,10 @@ const addToCart = async (req, res) => {
       itemTotalPrice = itemUnitPrice * itemHours;
     } else {
       // FIXED Pricing
-      itemUnitPrice = Number(unitPrice ?? price ?? service?.basePrice ?? 0);
+      // Use the current catalog price for identified services so stale client cards cannot change the cart total.
+      itemUnitPrice = Number(service?.basePrice ?? unitPrice ?? price ?? 0);
       itemCount = Number(serviceCount || 1);
-      itemTotalPrice = Number(price ?? (itemUnitPrice * itemCount));
+      itemTotalPrice = itemUnitPrice * itemCount;
       itemEstimatedDurationMinutes = Number(
         service?.estimatedDurationMinutes ?? estimatedDurationMinutes ?? 45
       );

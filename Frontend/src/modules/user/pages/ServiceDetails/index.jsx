@@ -10,7 +10,9 @@ import {
   FiMinus,
   FiShield,
   FiChevronDown,
-  FiChevronUp
+  FiChevronUp,
+  FiShoppingBag,
+  FiX,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../../../../context/CartContext';
@@ -104,6 +106,58 @@ const defaultFaqs = [
   }
 ];
 
+const FlyingCartItem = ({ item, onComplete }) => {
+  const [animating, setAnimating] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setAnimating(true);
+    });
+    const timer = setTimeout(() => {
+      onComplete?.();
+    }, 620);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const dx = item.endX - item.startX;
+  const dy = item.endY - item.startY;
+
+  return (
+    <div
+      className="fixed pointer-events-none z-[99999]"
+      style={{
+        left: `${item.startX}px`,
+        top: `${item.startY}px`,
+        transform: animating ? `translateX(${dx}px)` : 'translateX(0px)',
+        transition: 'transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+        willChange: 'transform',
+      }}
+    >
+      <div
+        style={{
+          transform: animating
+            ? `translateY(${dy}px) scale(0.22) rotate(15deg)`
+            : 'translateY(0px) scale(1) rotate(0deg)',
+          opacity: animating ? 0.35 : 1,
+          transition: 'transform 0.6s cubic-bezier(0.5, 0.05, 0.8, 0.4), opacity 0.6s ease-in',
+          willChange: 'transform, opacity',
+        }}
+      >
+        <div className="w-16 h-16 rounded-2xl bg-white shadow-[0_12px_32px_rgba(114,12,62,0.38)] border-2 border-[#720C3E] p-1.5 flex items-center justify-center overflow-hidden ring-4 ring-[#720C3E]/20">
+          {item.image ? (
+            <img src={toAssetUrl(item.image)} alt={item.title} className="w-full h-full object-contain" />
+          ) : (
+            <span className="text-2xl font-black text-[#720C3E]">{item.title?.charAt(0) || 'S'}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ServiceDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -114,6 +168,11 @@ const ServiceDetails = () => {
   const [service, setService] = useState(location.state?.service || null);
   const [loading, setLoading] = useState(!location.state?.service);
   const [addingToCart, setAddingToCart] = useState(false);
+  const [showBookingOptions, setShowBookingOptions] = useState(false);
+  const [showReviewServices, setShowReviewServices] = useState(false);
+  const [selectedFrequentlyAdded, setSelectedFrequentlyAdded] = useState([]);
+  const [flyingItems, setFlyingItems] = useState([]);
+  const [cartBounced, setCartBounced] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState(0);
   // true until proven otherwise - only hides the Book button for the
   // hard-block reasons the backend also refuses at booking creation
@@ -142,7 +201,20 @@ const ServiceDetails = () => {
       try {
         setLoading(true);
         const cityId = currentCity?._id || currentCity?.id;
-        const res = await publicCatalogService.getServices({ cityId });
+        const latitude = parseFloat(localStorage.getItem('userLat'));
+        const longitude = parseFloat(localStorage.getItem('userLng'));
+        let zoneId = '';
+
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          try {
+            const zoneResponse = await zoneService.resolve(latitude, longitude);
+            zoneId = zoneResponse?.zoneStatus?.zoneId || '';
+          } catch (zoneError) {
+            // Recommendations fall back to the global mapping if the zone cannot be resolved.
+          }
+        }
+
+        const res = await publicCatalogService.getServices({ cityId, zoneId });
 
         let found = null;
         if (res.success && res.services) {
@@ -257,6 +329,103 @@ const ServiceDetails = () => {
   const howItWorksTitle = service.howItWorksTitle || "How it's done?";
   const faqs = service.faqs && service.faqs.length > 0 ? service.faqs : defaultFaqs;
 
+  const frequentlyAddedServices = Array.isArray(service.frequentlyAddedTogether)
+    ? service.frequentlyAddedTogether.filter((item) => item && item.status !== 'inactive')
+    : [];
+
+  const buildCartItemData = (serviceItem, durationOverride = null, quantityOverride = 1) => {
+    const itemIsDuration = serviceItem.pricingType === 'DURATION' || serviceItem.pricingType === 'HOURLY';
+    const itemBillingUnit = Number(serviceItem.billingUnitMinutes ?? serviceItem.durationPricing?.billingUnitMinutes ?? 30);
+    const itemPricePerUnit = Number(
+      serviceItem.pricePerUnit ??
+      serviceItem.durationPricing?.pricePerUnit ??
+      serviceItem.pricePer30Minutes ??
+      (serviceItem.hourlyRate ? serviceItem.hourlyRate * (itemBillingUnit / 60) : (serviceItem.basePrice || serviceItem.price || 0))
+    );
+    const itemMinDuration = Number(
+      serviceItem.minDurationMinutes ??
+      serviceItem.durationPricing?.minDurationMinutes ??
+      (serviceItem.minHours ? serviceItem.minHours * 60 : itemBillingUnit)
+    );
+    const itemMaxDuration = Number(
+      serviceItem.maxDurationMinutes ??
+      serviceItem.durationPricing?.maxDurationMinutes ??
+      (serviceItem.maxHours ? serviceItem.maxHours * 60 : 240)
+    );
+    const itemDuration = Number(durationOverride || itemMinDuration);
+    const itemQuantity = Number(quantityOverride || 1);
+    const itemDisplayPrice = itemIsDuration
+      ? (itemDuration / itemBillingUnit) * itemPricePerUnit
+      : (Number(serviceItem.basePrice ?? serviceItem.price ?? serviceItem.discountPrice ?? 0)) * itemQuantity;
+    const itemOriginalPrice = itemIsDuration
+      ? null
+      : (serviceItem.originalPrice || (serviceItem.discountPrice && serviceItem.basePrice ? serviceItem.basePrice * itemQuantity : null));
+    const latitude = parseFloat(localStorage.getItem('userLat'));
+    const longitude = parseFloat(localStorage.getItem('userLng'));
+
+    return {
+      serviceId: serviceItem.id || serviceItem._id,
+      title: serviceItem.title,
+      category: serviceItem.category?.title || serviceItem.category || serviceItem.brandName || serviceItem.title || 'General',
+      sectionTitle: serviceItem.brandName || serviceItem.title || '',
+      description: serviceItem.tagline || serviceItem.description || '',
+      icon: serviceItem.image || serviceItem.icon || serviceItem.imageUrl || serviceItem.iconUrl || '',
+      pricingType: itemIsDuration ? 'DURATION' : 'FIXED',
+      price: Number(itemDisplayPrice),
+      originalPrice: itemOriginalPrice ? Number(itemOriginalPrice) : null,
+      unitPrice: itemIsDuration ? itemPricePerUnit : Number(serviceItem.basePrice ?? serviceItem.price ?? 0),
+      pricePerUnit: itemIsDuration ? itemPricePerUnit : null,
+      billingUnitMinutes: itemIsDuration ? itemBillingUnit : null,
+      estimatedDurationMinutes: itemIsDuration ? null : Number(serviceItem.estimatedDurationMinutes || 45),
+      serviceCount: itemQuantity,
+      quantity: itemQuantity,
+      rating: serviceItem.rating || '4.9',
+      reviews: serviceItem.ratingCount || '237.6k',
+      inclusions: serviceItem.inclusions || [],
+      ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {}),
+      ...(itemIsDuration ? {
+        durationMinutes: itemDuration,
+        pricePer30Minutes: itemBillingUnit === 30 ? itemPricePerUnit : null,
+        minDurationMinutes: itemMinDuration,
+        maxDurationMinutes: itemMaxDuration,
+        hours: itemDuration / 60
+      } : {})
+    };
+  };
+
+  const addSelectedServicesToCart = async (selectedServices = selectedFrequentlyAdded) => {
+    setAddingToCart(true);
+    try {
+      const cartItems = [
+        buildCartItemData(service, isDurationBased ? selectedDurationMinutes : null, 1),
+        ...selectedServices.map((item) =>
+          buildCartItemData(
+            item,
+            item.selectedDurationMinutes || item.durationMinutes || null,
+            item.quantity || 1
+          )
+        )
+      ];
+
+      for (const item of cartItems) {
+        const response = await addToCart(item);
+        if (!response?.success) {
+          throw new Error(response?.message || 'Failed to add a service to cart');
+        }
+      }
+
+      setShowBookingOptions(false);
+      setShowReviewServices(false);
+      setSelectedFrequentlyAdded([]);
+      toast.success(cartItems.length + ' service' + (cartItems.length > 1 ? 's' : '') + ' added to cart');
+      navigate('/user/cart');
+    } catch (error) {
+      toast.error(error.message || 'Failed to add services to cart');
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
   const handleBookNow = async () => {
     if (!canBook) {
       toast.error('This service is not available at your location yet.');
@@ -270,54 +439,13 @@ const ServiceDetails = () => {
       return;
     }
 
-    try {
-      setAddingToCart(true);
-      const latitude = parseFloat(localStorage.getItem('userLat'));
-      const longitude = parseFloat(localStorage.getItem('userLng'));
-      const cartItemData = {
-        serviceId: service.id || service._id,
-        title: service.title,
-        category: service.category?.title || service.category || service.brandName || service.title || 'General',
-        sectionTitle: service.brandName || service.title || '',
-        description: service.tagline || service.description || '',
-        icon: service.image || service.icon || service.imageUrl || service.iconUrl || '',
-        pricingType: isDurationBased ? 'DURATION' : 'FIXED',
-        price: Number(displayPrice),
-        originalPrice: originalPrice ? Number(originalPrice) : null,
-        unitPrice: isDurationBased ? pricePerUnit : Number(displayPrice),
-        pricePerUnit: isDurationBased ? pricePerUnit : null,
-        billingUnitMinutes: isDurationBased ? billingUnitMinutes : null,
-        estimatedDurationMinutes: isDurationBased
-          ? null
-          : Number(service.estimatedDurationMinutes || 45),
-        serviceCount: 1,
-        rating: service.rating || '4.9',
-        reviews: service.ratingCount || '237.6k',
-        inclusions: inclusions,
-        ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {}),
-        ...(isDurationBased ? {
-          durationMinutes: selectedDurationMinutes,
-          pricePer30Minutes: billingUnitMinutes === 30 ? pricePerUnit : null,
-          minDurationMinutes: minDurationMinutes,
-          maxDurationMinutes: maxDurationMinutes,
-          hours: selectedDurationMinutes / 60
-        } : {})
-      };
-
-      const response = await addToCart(cartItemData);
-      if (response.success) {
-        toast.success(`${service.title} added to cart!`);
-        navigate('/user/cart');
-      } else {
-        toast.error(response.message || 'Failed to add to cart');
-      }
-    } catch (error) {
-      toast.error('Failed to book service');
-    } finally {
-      setAddingToCart(false);
+    if ((isDurationBased || frequentlyAddedServices.length > 0) && !showBookingOptions) {
+      setShowBookingOptions(true);
+      return;
     }
-  };
 
+    await addSelectedServicesToCart();
+  };
   const handleShare = () => {
     if (navigator.share) {
       navigator.share({ title: service.title, url: window.location.href }).catch(() => {});
@@ -334,6 +462,271 @@ const ServiceDetails = () => {
   };
 
   const bannerImage = service.heroBanner?.imageUrl || service.iconUrl || service.image || service.imageUrl;
+  const reviewServices = [
+    { ...service, isPrimary: true },
+    ...selectedFrequentlyAdded.map((item) => ({ ...item, isPrimary: false }))
+  ];
+
+  const getReviewItemDuration = (reviewItem) => {
+    if (reviewItem.isPrimary) return selectedDurationMinutes;
+    return Number(
+      reviewItem.selectedDurationMinutes ??
+      reviewItem.durationMinutes ??
+      reviewItem.minDurationMinutes ??
+      reviewItem.durationPricing?.minDurationMinutes ??
+      reviewItem.billingUnitMinutes ??
+      30
+    );
+  };
+
+  const getReviewItemPrice = (reviewItem) => {
+    if (reviewItem.isPrimary) return Number(displayPrice);
+    const itemIsDurationBased = reviewItem.pricingType === 'DURATION' || reviewItem.pricingType === 'HOURLY';
+    if (!itemIsDurationBased) {
+      const qty = reviewItem.quantity || 1;
+      return Number(reviewItem.basePrice ?? reviewItem.price ?? reviewItem.discountPrice ?? 0) * qty;
+    }
+    const itemBillingUnit = Number(reviewItem.billingUnitMinutes ?? reviewItem.durationPricing?.billingUnitMinutes ?? 30);
+    const itemPricePerUnit = Number(
+      reviewItem.pricePerUnit ??
+      reviewItem.durationPricing?.pricePerUnit ??
+      reviewItem.pricePer30Minutes ??
+      (reviewItem.hourlyRate ? reviewItem.hourlyRate * (itemBillingUnit / 60) : (reviewItem.basePrice || reviewItem.price || 0))
+    );
+    return (getReviewItemDuration(reviewItem) / itemBillingUnit) * itemPricePerUnit;
+  };
+
+  const handleIncrementFrequentlyAdded = (e, item) => {
+    e.stopPropagation();
+    const itemId = item.id || item._id;
+    const existingIndex = selectedFrequentlyAdded.findIndex(
+      (selectedItem) => (selectedItem.id || selectedItem._id) === itemId
+    );
+
+    const isItemDuration = item.pricingType === 'DURATION' || item.pricingType === 'HOURLY';
+    const billingUnit = Number(item.billingUnitMinutes ?? item.durationPricing?.billingUnitMinutes ?? 30);
+    const minDuration = Number(
+      item.minDurationMinutes ??
+      item.durationPricing?.minDurationMinutes ??
+      (item.minHours ? item.minHours * 60 : billingUnit)
+    );
+    const maxDuration = Number(
+      item.maxDurationMinutes ??
+      item.durationPricing?.maxDurationMinutes ??
+      (item.maxHours ? item.maxHours * 60 : 240)
+    );
+    const stepMinutes = Number(item.durationStepMinutes ?? item.durationPricing?.durationStepMinutes ?? billingUnit);
+
+    if (existingIndex === -1) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const isMobile = window.innerWidth < 768;
+      const targetEl = isMobile
+        ? (document.getElementById('mobile-cart-btn-action') || document.getElementById('mobile-cart-btn') || document.getElementById('mobile-cart-target'))
+        : (document.getElementById('desktop-cart-btn') || document.getElementById('desktop-cart-target'));
+
+      if (targetEl) {
+        const targetRect = targetEl.getBoundingClientRect();
+        const startX = rect.left + rect.width / 2 - 32;
+        const startY = rect.top + rect.height / 2 - 32;
+        const endX = targetRect.left + targetRect.width / 2 - 32;
+        const endY = targetRect.top + targetRect.height / 2 - 32;
+
+        const flyId = `${Date.now()}_${Math.random()}`;
+        setFlyingItems((current) => [
+          ...current,
+          {
+            id: flyId,
+            startX,
+            startY,
+            endX,
+            endY,
+            image: item.image || item.icon || item.iconUrl,
+            title: item.title,
+          },
+        ]);
+      }
+
+      setSelectedFrequentlyAdded((current) => [
+        ...current,
+        {
+          ...item,
+          selectedDurationMinutes: isItemDuration ? minDuration : null,
+          quantity: 1
+        }
+      ]);
+    } else {
+      setSelectedFrequentlyAdded((current) => {
+        const updated = [...current];
+        const target = { ...updated[existingIndex] };
+        if (isItemDuration) {
+          const currentDur = target.selectedDurationMinutes || minDuration;
+          target.selectedDurationMinutes = Math.min(maxDuration, currentDur + stepMinutes);
+        } else {
+          target.quantity = (target.quantity || 1) + 1;
+        }
+        updated[existingIndex] = target;
+        return updated;
+      });
+    }
+  };
+
+  const handleDecrementFrequentlyAdded = (e, item) => {
+    e.stopPropagation();
+    const itemId = item.id || item._id;
+    const existingIndex = selectedFrequentlyAdded.findIndex(
+      (selectedItem) => (selectedItem.id || selectedItem._id) === itemId
+    );
+
+    if (existingIndex === -1) return;
+
+    const isItemDuration = item.pricingType === 'DURATION' || item.pricingType === 'HOURLY';
+    const billingUnit = Number(item.billingUnitMinutes ?? item.durationPricing?.billingUnitMinutes ?? 30);
+    const minDuration = Number(
+      item.minDurationMinutes ??
+      item.durationPricing?.minDurationMinutes ??
+      (item.minHours ? item.minHours * 60 : billingUnit)
+    );
+    const stepMinutes = Number(item.durationStepMinutes ?? item.durationPricing?.durationStepMinutes ?? billingUnit);
+
+    setSelectedFrequentlyAdded((current) => {
+      const target = current[existingIndex];
+      if (isItemDuration) {
+        const currentDur = target.selectedDurationMinutes || minDuration;
+        if (currentDur - stepMinutes < minDuration) {
+          return current.filter((selectedItem) => (selectedItem.id || selectedItem._id) !== itemId);
+        }
+        const updated = [...current];
+        updated[existingIndex] = { ...target, selectedDurationMinutes: currentDur - stepMinutes };
+        return updated;
+      } else {
+        const currentQty = target.quantity || 1;
+        if (currentQty <= 1) {
+          return current.filter((selectedItem) => (selectedItem.id || selectedItem._id) !== itemId);
+        }
+        const updated = [...current];
+        updated[existingIndex] = { ...target, quantity: currentQty - 1 };
+        return updated;
+      }
+    });
+  };
+
+  const frequentlyAddedSection = showBookingOptions && frequentlyAddedServices.length > 0 ? (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">
+          Frequently added together
+        </h3>
+        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          Add more
+        </span>
+      </div>
+      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {frequentlyAddedServices.map((item) => {
+          const itemId = item.id || item._id;
+          const selectedItem = selectedFrequentlyAdded.find((selected) => (selected.id || selected._id) === itemId);
+          const isItemDuration = item.pricingType === 'DURATION' || item.pricingType === 'HOURLY';
+          const billingUnit = Number(item.billingUnitMinutes ?? item.durationPricing?.billingUnitMinutes ?? 30);
+          const pricePerUnit = Number(
+            item.pricePerUnit ??
+            item.durationPricing?.pricePerUnit ??
+            item.pricePer30Minutes ??
+            (item.hourlyRate ? item.hourlyRate * (billingUnit / 60) : (item.basePrice || item.price || 0))
+          );
+          const minDuration = Number(
+            item.minDurationMinutes ??
+            item.durationPricing?.minDurationMinutes ??
+            (item.minHours ? item.minHours * 60 : billingUnit)
+          );
+          const maxDuration = Number(
+            item.maxDurationMinutes ??
+            item.durationPricing?.maxDurationMinutes ??
+            (item.maxHours ? item.maxHours * 60 : 240)
+          );
+
+          const currentDuration = selectedItem?.selectedDurationMinutes || minDuration;
+          const currentQty = selectedItem?.quantity || 1;
+
+          const calculatedPrice = isItemDuration
+            ? (currentDuration / billingUnit) * pricePerUnit
+            : (Number(item.basePrice ?? item.price ?? item.discountPrice ?? 0)) * currentQty;
+
+          const itemOriginalPrice = isItemDuration
+            ? null
+            : (item.originalPrice || (item.discountPrice && item.basePrice ? item.basePrice * currentQty : null));
+
+          return (
+            <div
+              key={itemId}
+              onClick={(e) => handleToggleFrequentlyAdded(e, item)}
+              style={{ flex: "0 0 calc((100% - 24px) / 2.3)" }}
+              className="relative min-w-0 snap-start rounded-2xl border border-slate-200/90 p-2.5 text-left transition-all bg-white flex flex-col justify-between cursor-pointer active:scale-95 hover:border-slate-300"
+            >
+              {/* Rating badge */}
+              {item.rating && (
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-white/95 backdrop-blur-xs px-1.5 py-0.5 rounded-md border border-slate-100 shadow-2xs text-[9px] font-bold text-slate-700 pointer-events-none">
+                  <span className="text-[#F59E0B]">★</span>
+                  <span>{item.rating}</span>
+                  {item.ratingCount && (
+                    <span className="text-slate-400 font-normal">({String(item.ratingCount).replace(/ratings?|\(|\)/gi, '').trim()})</span>
+                  )}
+                </div>
+              )}
+
+              {/* Image box with action button */}
+              <div className="relative h-24 sm:h-28 rounded-xl bg-[#F8F9FA] border border-slate-100 flex items-center justify-center mb-2 p-2">
+                <div className="w-full h-full flex items-center justify-center overflow-hidden">
+                  {item.image || item.icon || item.iconUrl ? (
+                    <img src={toAssetUrl(item.image || item.icon || item.iconUrl)} alt={item.title} className="w-full h-full object-contain" />
+                  ) : (
+                    <span className="text-2xl font-black text-[#720C3E]">{item.title?.charAt(0) || 'S'}</span>
+                  )}
+                </div>
+
+                {/* Plus (+) or Tick (✓) Button positioned on bottom right */}
+                <div className="absolute bottom-1.5 right-1.5 z-10">
+                  {selectedItem ? (
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleFrequentlyAdded(e, item)}
+                      className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-[#831843] text-white shadow-md hover:bg-[#720C3E] transition-all active:scale-90 cursor-pointer"
+                      aria-label={`Remove ${item.title}`}
+                    >
+                      <FiCheckCircle className="text-base font-bold" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleFrequentlyAdded(e, item)}
+                      className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-white border border-[#E8D9DF] text-[#831843] shadow-md hover:bg-[#831843] hover:text-white transition-all active:scale-90 cursor-pointer"
+                      aria-label={`Add ${item.title}`}
+                    >
+                      <FiPlus className="text-base font-bold" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Text content */}
+              <div>
+                <p className="text-xs font-bold text-slate-900 line-clamp-2 min-h-[30px] leading-snug">{item.title}</p>
+                <div className="mt-1 flex items-baseline gap-1.5">
+                  <span className="text-sm font-black text-slate-900">&#8377;{Math.round(calculatedPrice)}</span>
+                  {itemOriginalPrice && Number(itemOriginalPrice) > Number(calculatedPrice) && (
+                    <span className="text-[11px] text-slate-400 line-through">&#8377;{Math.round(itemOriginalPrice)}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-slate-500">
+        {selectedFrequentlyAdded.length > 0
+          ? `${selectedFrequentlyAdded.length} add-on${selectedFrequentlyAdded.length > 1 ? 's' : ''} selected`
+          : 'Tap + to add another service'}
+      </p>
+    </section>
+  ) : null;
 
   return (
     <div className="min-h-screen bg-[#FFF9FB] text-slate-900 pb-28 md:pb-16 font-sans antialiased relative">
@@ -465,7 +858,7 @@ const ServiceDetails = () => {
                   </div>
                 </div>
                 {/* Compact duration selector, matching the service card pattern */}
-                {isDurationBased ? (
+                {showBookingOptions && isDurationBased ? (
                   <div className="flex items-center gap-1 rounded-xl border border-[#E8D9DF] bg-white px-1.5 py-1 shadow-sm shrink-0">
                     <button
                       type="button"
@@ -496,7 +889,7 @@ const ServiceDetails = () => {
                     disabled={addingToCart}
                     className="px-5 py-1.5 bg-[#831843] hover:bg-[#720C3E] text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 shadow-sm shadow-[#831843]/20 cursor-pointer disabled:opacity-50 shrink-0"
                   >
-                    {addingToCart ? 'Booking...' : 'BOOK'}
+                    {addingToCart ? 'Booking...' : showBookingOptions ? 'GO TO CART' : 'BOOK'}
                   </button>
                 ) : (
                   <span className="px-3 py-1.5 bg-slate-100 text-slate-400 rounded-xl text-[10px] font-bold uppercase tracking-wider shrink-0">
@@ -505,6 +898,8 @@ const ServiceDetails = () => {
                 )}
               </div>
             </div>
+
+            {frequentlyAddedSection}
 
             {/* Tagline & Description */}
             <div className="space-y-1.5 pb-2">
@@ -531,7 +926,7 @@ const ServiceDetails = () => {
                   </div>
                   <button
                     onClick={scrollToHowItWorks}
-                    className="text-xs font-bold text-[#137333] hover:underline cursor-pointer"
+                    className="text-xs font-bold text-[#831843] hover:text-[#720C3E] hover:underline cursor-pointer"
                   >
                     How it's done?
                   </button>
@@ -553,7 +948,7 @@ const ServiceDetails = () => {
                             loading="lazy"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-xl bg-white shadow-xs flex items-center justify-center text-[#137333] font-bold text-sm">
+                          <div className="w-10 h-10 rounded-xl bg-white shadow-xs flex items-center justify-center text-[#831843] font-bold text-sm">
                             {(task.title || task.name || 'T').charAt(0)}
                           </div>
                         )}
@@ -585,7 +980,7 @@ const ServiceDetails = () => {
                 <ul className="space-y-2.5">
                   {whyLove.map((item, idx) => (
                     <li key={idx} className="flex items-center gap-3 text-xs sm:text-sm font-medium text-slate-800">
-                      <span className="w-5 h-5 rounded-full bg-[#137333] text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-2xs">
+                      <span className="w-5 h-5 rounded-full bg-[#831843] text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-2xs">
                         ✓
                       </span>
                       <span>{item.text || item}</span>
@@ -628,11 +1023,11 @@ const ServiceDetails = () => {
                       key={idx}
                       className="flex items-start gap-3.5 p-3.5 bg-white rounded-2xl border border-slate-100 shadow-2xs hover:shadow-xs transition-shadow"
                     >
-                      <div className="w-12 h-12 rounded-2xl bg-[#F5F8F5] flex items-center justify-center text-[#137333] shrink-0 border border-[#E6F4EA] overflow-hidden p-1.5">
+                      <div className="w-12 h-12 rounded-2xl bg-[#FFF7FA] flex items-center justify-center text-[#831843] shrink-0 border border-[#E8D9DF] overflow-hidden p-1.5">
                         {step.iconUrl ? (
                           <img src={toAssetUrl(step.iconUrl)} alt={step.title} className="w-full h-full object-contain" />
                         ) : (
-                          <span className="font-black text-sm text-[#137333]">0{idx + 1}</span>
+                          <span className="font-black text-sm text-[#831843]">0{idx + 1}</span>
                         )}
                       </div>
 
@@ -783,6 +1178,8 @@ const ServiceDetails = () => {
                   </div>
                 </div>
 
+                {frequentlyAddedSection}
+
                 {/* Tagline & Description Card */}
                 <div className="space-y-2 p-6 bg-white rounded-3xl border border-slate-100 shadow-2xs">
                   <h2 className="text-lg lg:text-xl font-extrabold text-slate-900 tracking-tight">
@@ -823,7 +1220,7 @@ const ServiceDetails = () => {
                                 loading="lazy"
                               />
                             ) : (
-                              <div className="w-10 h-10 rounded-xl bg-white shadow-xs flex items-center justify-center text-[#137333] font-bold text-sm">
+                              <div className="w-10 h-10 rounded-xl bg-white shadow-xs flex items-center justify-center text-[#831843] font-bold text-sm">
                                 {(task.title || task.name || 'T').charAt(0)}
                               </div>
                             )}
@@ -856,7 +1253,7 @@ const ServiceDetails = () => {
                       <ul className="space-y-2.5">
                         {whyLove.map((item, idx) => (
                           <li key={idx} className="flex items-center gap-3 text-xs sm:text-sm font-medium text-slate-800">
-                            <span className="w-5 h-5 rounded-full bg-[#137333] text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-2xs">
+                            <span className="w-5 h-5 rounded-full bg-[#831843] text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-2xs">
                               ✓
                             </span>
                             <span>{item.text || item}</span>
@@ -897,13 +1294,13 @@ const ServiceDetails = () => {
                       {howItWorks.map((step, idx) => (
                         <div
                           key={idx}
-                          className="flex flex-col items-start gap-3 p-4 bg-[#F9FBFA] rounded-2xl border border-slate-100 shadow-2xs hover:shadow-xs transition-shadow"
+                          className="flex flex-col items-start gap-3 p-4 bg-[#FFF7FA] rounded-2xl border border-[#E8D9DF]/60 shadow-2xs hover:shadow-xs transition-shadow"
                         >
-                          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#137333] shrink-0 border border-[#E6F4EA] shadow-2xs overflow-hidden p-1">
+                          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#831843] shrink-0 border border-[#E8D9DF] shadow-2xs overflow-hidden p-1">
                             {step.iconUrl ? (
                               <img src={toAssetUrl(step.iconUrl)} alt={step.title} className="w-full h-full object-contain" />
                             ) : (
-                              <span className="font-black text-xs text-[#137333]">0{idx + 1}</span>
+                              <span className="font-black text-xs text-[#831843]">0{idx + 1}</span>
                             )}
                           </div>
 
@@ -972,8 +1369,15 @@ const ServiceDetails = () => {
               </div>
 
               {/* Right Column (Sticky Booking Card) */}
-              <div className="col-span-5 xl:col-span-4 sticky top-20 lg:top-24 space-y-5">
-                <div className="bg-white rounded-3xl p-6 border border-[#E8D9DF]/80 shadow-[0_4px_24px_rgba(0,0,0,0.04)] space-y-5">
+              <div
+                id="desktop-cart-target"
+                className={`col-span-5 xl:col-span-4 sticky top-20 lg:top-24 space-y-5 transition-transform duration-300 ${
+                  cartBounced ? 'scale-[1.02]' : ''
+                }`}
+              >
+                <div className={`bg-white rounded-3xl p-6 border border-[#E8D9DF]/80 shadow-[0_4px_24px_rgba(0,0,0,0.04)] space-y-5 transition-all duration-300 ${
+                  cartBounced ? 'ring-4 ring-[#720C3E]/20 shadow-xl' : ''
+                }`}>
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <span className="px-2.5 py-0.5 bg-[#FFF7FA] text-[#720C3E] border border-[#E8D9DF] rounded-md text-[10px] font-black uppercase tracking-wider">
@@ -1015,7 +1419,7 @@ const ServiceDetails = () => {
                     )}
                   </div>
                   {/* Compact duration selector */}
-                  {isDurationBased && (
+                  {showBookingOptions && isDurationBased && (
                     <div className="flex items-center justify-between rounded-xl border border-[#E8D9DF] bg-[#FFF7FA] p-2">
                       <span className="text-[11px] font-bold text-slate-500">Duration</span>
                       <div className="flex items-center gap-1 rounded-lg border border-[#E8D9DF] bg-white px-1 py-1">
@@ -1048,11 +1452,14 @@ const ServiceDetails = () => {
                   {/* Book Action Button */}
                   {canBook ? (
                     <button
+                      id="desktop-cart-btn"
                       onClick={handleBookNow}
                       disabled={addingToCart}
-                      className="w-full py-3.5 px-6 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#4D082A] hover:to-[#720C3E] text-white font-extrabold text-sm uppercase tracking-wider rounded-2xl shadow-md shadow-[#720C3E]/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50 text-center"
+                      className={`w-full py-3.5 px-6 bg-gradient-to-r from-[#720C3E] to-[#9A2459] hover:from-[#4D082A] hover:to-[#720C3E] text-white font-extrabold text-sm uppercase tracking-wider rounded-2xl shadow-md shadow-[#720C3E]/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50 text-center ${
+                        cartBounced ? 'scale-105 shadow-xl ring-2 ring-[#720C3E]/40' : ''
+                      }`}
                     >
-                      {addingToCart ? 'Booking...' : 'Book Service Now'}
+                      {addingToCart ? 'Booking...' : showBookingOptions ? 'Go to cart' : 'Book Service Now'}
                     </button>
                   ) : (
                     <div className="w-full py-3 px-4 bg-slate-100 text-slate-500 font-bold text-xs uppercase tracking-wider rounded-2xl text-center">
@@ -1063,11 +1470,11 @@ const ServiceDetails = () => {
                   {/* Trust Badges */}
                   <div className="pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
                     <div className="flex items-center gap-2">
-                      <FiShield className="text-[#137333] shrink-0" />
+                      <FiShield className="text-[#831843] shrink-0" />
                       <span>Verified & Background-Checked Experts</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <FiCheckCircle className="text-[#137333] shrink-0" />
+                      <FiCheckCircle className="text-[#831843] shrink-0" />
                       <span>Transparent Pricing & No Hidden Charges</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1084,29 +1491,53 @@ const ServiceDetails = () => {
         </div>
 
         {/* Sticky Bottom Action Bar (Mobile ONLY < md / < 768px) */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/90 px-4 py-3 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        <div
+          id="mobile-cart-target"
+          className={`md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200/90 px-4 py-3 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] transition-all duration-300 ${
+            cartBounced ? 'ring-4 ring-[#720C3E]/20 bg-[#FFF7FA]' : ''
+          }`}
+        >
           <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
-            <div>
+            {showBookingOptions ? (
+            <button
+              type="button"
+              id="mobile-cart-btn"
+              onClick={() => setShowReviewServices(true)}
+              className={`flex items-center gap-1.5 text-left text-slate-900 transition-transform duration-200 ${
+                cartBounced ? 'scale-110' : ''
+              }`}
+              aria-label="Review selected services"
+            >
+              <FiShoppingBag className={`text-sm text-[#831843] transition-transform duration-200 ${cartBounced ? 'scale-125 rotate-[-12deg]' : ''}`} />
+              <span className="text-sm font-extrabold">{selectedFrequentlyAdded.length + 1} services</span>
+              <FiChevronUp className="text-sm text-[#831843]" />
+            </button>
+          ) : (
+            <div className="min-w-0">
               <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">TOTAL PRICE</p>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
-                  ₹{displayPrice}
+                  &#8377;{displayPrice}
                 </span>
                 {hasDiscount && (
                   <span className="text-xs text-slate-400 line-through">
-                    ₹{originalPrice}
+                    &#8377;{originalPrice}
                   </span>
                 )}
               </div>
             </div>
+          )}
 
             {canBook ? (
               <button
+                id="mobile-cart-btn-action"
                 onClick={handleBookNow}
                 disabled={addingToCart}
-                className="flex-1 max-w-xs py-3 px-6 bg-[#831843] hover:bg-[#720C3E] text-white font-extrabold text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-md shadow-[#831843]/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50 text-center"
+                className={`flex-1 max-w-xs py-3 px-6 text-white font-extrabold text-xs sm:text-sm tracking-wider rounded-xl shadow-md bg-[#831843] hover:bg-[#720C3E] shadow-[#831843]/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50 text-center ${
+                  cartBounced ? 'scale-105 shadow-xl shadow-[#831843]/40' : ''
+                } ${showBookingOptions ? 'normal-case' : 'uppercase'}`}
               >
-                {addingToCart ? 'Booking...' : 'BOOK SERVICE NOW'}
+                {addingToCart ? 'Booking...' : showBookingOptions ? 'Go to cart' : 'BOOK SERVICE NOW'}
               </button>
             ) : (
               <div className="flex-1 max-w-xs py-3 px-6 bg-slate-100 text-slate-500 font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl text-center">
@@ -1115,6 +1546,161 @@ const ServiceDetails = () => {
             )}
           </div>
         </div>
+
+        {showReviewServices && (
+          <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-end justify-center p-0 md:p-6">
+            <div className="w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-t-3xl md:rounded-3xl bg-[#FFF9FB] shadow-2xl">
+              <div className="sticky top-0 z-10 bg-[#FFF9FB] border-b border-[#E8D9DF] px-4 py-4 flex items-center justify-between">
+                <h3 className="text-base font-extrabold text-slate-900">Review Services</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowReviewServices(false)}
+                  className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center"
+                  aria-label="Close review services"
+                >
+                  <FiX />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-3">
+                <div className="space-y-3">
+                  {reviewServices.map((reviewItem, reviewIndex) => {
+                    const itemIsDurationBased = reviewItem.pricingType === 'DURATION' || reviewItem.pricingType === 'HOURLY';
+                    const itemDuration = getReviewItemDuration(reviewItem);
+                    const itemPrice = getReviewItemPrice(reviewItem);
+                    const itemOriginalPrice = reviewItem.isPrimary
+                      ? originalPrice
+                      : (reviewItem.originalPrice || (reviewItem.discountPrice && reviewItem.basePrice ? reviewItem.basePrice : null));
+                    const itemImage = reviewItem.image || reviewItem.icon || reviewItem.iconUrl || reviewItem.imageUrl;
+
+                    return (
+                      <div key={reviewItem.id || reviewItem._id || reviewIndex} className="rounded-2xl bg-white border border-slate-100 p-3 shadow-2xs">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-[#FFF7FA] border border-[#E8D9DF] flex items-center justify-center overflow-hidden shrink-0">
+                            {itemImage ? (
+                              <img src={toAssetUrl(itemImage)} alt={reviewItem.title} className="w-full h-full object-contain" />
+                            ) : (
+                              <span className="text-lg font-black text-[#831843]">{reviewItem.title?.charAt(0) || 'S'}</span>
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] text-slate-400">{reviewItem.isPrimary ? 'Main service' : 'Added service'}</p>
+                            <p className="text-sm font-bold text-slate-800 truncate">{reviewItem.title}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              {itemOriginalPrice && Number(itemOriginalPrice) > Number(itemPrice) && (
+                                <span className="text-xs text-slate-400 line-through">&#8377;{itemOriginalPrice}</span>
+                              )}
+                              <span className="text-sm font-black text-[#831843]">&#8377;{Math.round(itemPrice)}</span>
+                            </div>
+                          </div>
+
+                          {reviewItem.isPrimary && itemIsDurationBased ? (
+                            <div className="flex items-center gap-1 rounded-xl border border-[#E8D9DF] bg-[#FFF7FA] px-1 py-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={handleDurationDecrement}
+                                disabled={selectedDurationMinutes <= minDurationMinutes}
+                                className="w-7 h-7 rounded-lg text-[#831843] text-lg leading-none disabled:opacity-30"
+                                aria-label="Decrease duration"
+                              >
+                                −
+                              </button>
+                              <div className="min-w-[42px] text-center leading-none">
+                                <div className="text-sm font-black text-[#831843]">{selectedDurationMinutes}</div>
+                                <div className="text-[8px] font-semibold text-slate-400 mt-0.5">Minutes</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleDurationIncrement}
+                                disabled={selectedDurationMinutes >= maxDurationMinutes}
+                                className="w-7 h-7 rounded-lg bg-[#831843] text-white text-lg leading-none disabled:opacity-30"
+                                aria-label="Increase duration"
+                              >
+                                +
+                              </button>
+                            </div>
+                          ) : itemIsDurationBased ? (
+                            <div className="flex items-center gap-1 rounded-xl border border-[#E8D9DF] bg-[#FFF7FA] px-1 py-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => handleDecrementFrequentlyAdded(e, reviewItem)}
+                                className="w-7 h-7 rounded-lg text-[#831843] text-lg leading-none hover:bg-white flex items-center justify-center cursor-pointer"
+                                aria-label="Decrease duration"
+                              >
+                                −
+                              </button>
+                              <div className="min-w-[42px] text-center leading-none">
+                                <div className="text-sm font-black text-[#831843]">{itemDuration}</div>
+                                <div className="text-[8px] font-semibold text-slate-400 mt-0.5">Minutes</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => handleIncrementFrequentlyAdded(e, reviewItem)}
+                                className="w-7 h-7 rounded-lg bg-[#831843] text-white text-lg leading-none hover:bg-[#720C3E] flex items-center justify-center cursor-pointer"
+                                aria-label="Increase duration"
+                              >
+                                +
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 rounded-xl border border-[#E8D9DF] bg-[#FFF7FA] px-1 py-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => handleDecrementFrequentlyAdded(e, reviewItem)}
+                                className="w-7 h-7 rounded-lg text-[#831843] text-lg leading-none hover:bg-white flex items-center justify-center cursor-pointer"
+                                aria-label="Decrease quantity"
+                              >
+                                −
+                              </button>
+                              <div className="min-w-[32px] text-center leading-none">
+                                <div className="text-sm font-black text-[#831843]">{reviewItem.quantity || 1}</div>
+                                <div className="text-[8px] font-semibold text-slate-400 mt-0.5">Qty</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => handleIncrementFrequentlyAdded(e, reviewItem)}
+                                className="w-7 h-7 rounded-lg bg-[#831843] text-white text-lg leading-none hover:bg-[#720C3E] flex items-center justify-center cursor-pointer"
+                                aria-label="Increase quantity"
+                              >
+                                +
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="sticky bottom-0 bg-[#FFF9FB] border-t border-[#E8D9DF] p-4">
+                <button
+                  type="button"
+                  onClick={() => addSelectedServicesToCart()}
+                  disabled={addingToCart}
+                  className="w-full rounded-xl bg-[#831843] hover:bg-[#720C3E] py-3.5 text-sm font-extrabold text-white shadow-md shadow-[#831843]/20 disabled:opacity-50"
+                >
+                  {addingToCart ? 'Adding...' : 'Go to cart'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Flying Cart Items (Fly to cart animation) */}
+        {flyingItems.map((item) => (
+          <FlyingCartItem
+            key={item.id}
+            item={item}
+            onComplete={() => {
+              setFlyingItems((current) => current.filter((f) => f.id !== item.id));
+              setCartBounced(true);
+              setTimeout(() => setCartBounced(false), 450);
+            }}
+          />
+        ))}
+
       </div>
     </div>
   );

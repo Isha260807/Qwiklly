@@ -201,6 +201,23 @@ const userServiceSchema = new mongoose.Schema({
     question: { type: String, trim: true },
     answer: { type: String, trim: true }
   }],
+  // Services shown as curated recommendations after this service is booked.
+  frequentlyAddedTogether: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'UserService'
+  }],
+  // Optional zone-specific overrides for the global recommendations above.
+  frequentlyAddedTogetherByZone: [{
+    zoneId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Zone',
+      required: true
+    },
+    serviceIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'UserService'
+    }]
+  }],
   cityIds: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'City',

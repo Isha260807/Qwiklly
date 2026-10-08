@@ -1,9 +1,26 @@
+const mongoose = require('mongoose');
 const Service = require('../../models/UserService');
 const Brand = require('../../models/Brand');
 const { validationResult } = require('express-validator');
 const { SERVICE_STATUS } = require('../../utils/constants');
 
 const SUPPORTED_BILLING_UNITS = [15, 30, 60];
+
+const normalizeFrequentlyAddedTogether = (ids, selfId = null) => [...new Set(
+  (Array.isArray(ids) ? ids : [])
+    .filter(id => mongoose.Types.ObjectId.isValid(id))
+    .map(id => String(id))
+    .filter(id => !selfId || id !== String(selfId))
+)];
+
+const frequentlyAddedTogetherFields = 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours rating ratingCount status zoneIds';
+
+const normalizeFrequentlyAddedTogetherByZone = (entries, selfId = null) => (Array.isArray(entries) ? entries : [])
+  .map(entry => ({
+    zoneId: entry?.zoneId?._id || entry?.zoneId,
+    serviceIds: normalizeFrequentlyAddedTogether(entry?.serviceIds, selfId)
+  }))
+  .filter(entry => mongoose.Types.ObjectId.isValid(entry.zoneId));
 
 /**
  * Get all services (with optional filters)
@@ -36,6 +53,9 @@ const getAllServices = async (req, res) => {
       .populate('brandId', 'title')
       .populate('categoryId', 'title')
       .populate('zoneIds', 'name')
+      .populate('frequentlyAddedTogether', frequentlyAddedTogetherFields)
+      .populate('frequentlyAddedTogetherByZone.zoneId', 'name')
+      .populate('frequentlyAddedTogetherByZone.serviceIds', frequentlyAddedTogetherFields)
       .sort({ displayOrder: 1, createdAt: -1 });
 
     res.status(200).json({
@@ -61,7 +81,10 @@ const getServiceById = async (req, res) => {
     const service = await Service.findById(req.params.id)
       .populate('brandId', 'title')
       .populate('categoryId', 'title')
-      .populate('zoneIds', 'name');
+      .populate('zoneIds', 'name')
+      .populate('frequentlyAddedTogether', frequentlyAddedTogetherFields)
+      .populate('frequentlyAddedTogetherByZone.zoneId', 'name')
+      .populate('frequentlyAddedTogetherByZone.serviceIds', frequentlyAddedTogetherFields);
 
     if (!service) {
       return res.status(404).json({
@@ -134,6 +157,8 @@ const createService = async (req, res) => {
       howItWorksTitle,
       howItWorks,
       faqs,
+      frequentlyAddedTogether,
+      frequentlyAddedTogetherByZone,
       zoneIds,
       description,
       status,
@@ -248,6 +273,8 @@ const createService = async (req, res) => {
       howItWorksTitle: howItWorksTitle ? howItWorksTitle.trim() : null,
       howItWorks: Array.isArray(howItWorks) ? howItWorks : [],
       faqs: Array.isArray(faqs) ? faqs : [],
+      frequentlyAddedTogether: normalizeFrequentlyAddedTogether(frequentlyAddedTogether),
+      frequentlyAddedTogetherByZone: normalizeFrequentlyAddedTogetherByZone(frequentlyAddedTogetherByZone),
       zoneIds: Array.isArray(zoneIds) ? zoneIds : [],
       description: description ? description.trim() : '',
       status: status || SERVICE_STATUS.ACTIVE,
@@ -395,6 +422,12 @@ const updateService = async (req, res) => {
     if (updates.howItWorksTitle !== undefined) service.howItWorksTitle = updates.howItWorksTitle;
     if (updates.howItWorks !== undefined) service.howItWorks = updates.howItWorks;
     if (updates.faqs !== undefined) service.faqs = updates.faqs;
+    if (updates.frequentlyAddedTogether !== undefined) {
+      service.frequentlyAddedTogether = normalizeFrequentlyAddedTogether(updates.frequentlyAddedTogether, service._id);
+    }
+    if (updates.frequentlyAddedTogetherByZone !== undefined) {
+      service.frequentlyAddedTogetherByZone = normalizeFrequentlyAddedTogetherByZone(updates.frequentlyAddedTogetherByZone, service._id);
+    }
     if (updates.zoneIds !== undefined) service.zoneIds = updates.zoneIds;
     if (updates.description !== undefined) service.description = updates.description;
     if (updates.status !== undefined) service.status = updates.status;

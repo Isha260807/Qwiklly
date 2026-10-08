@@ -16,11 +16,13 @@ import {
   FiImage,
   FiExternalLink,
   FiCheck,
-  FiEye
+  FiEye,
+  FiShoppingBag
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-hot-toast";
-import { serviceService } from "../../../../../services/catalogService";
+import { serviceService, publicCatalogService } from "../../../../../services/catalogService";
+import { zoneService } from "../../../../../services/zoneService";
 import { toAssetUrl } from "../utils";
 
 const defaultPageTemplate = {
@@ -77,6 +79,8 @@ const defaultPageTemplate = {
       iconUrl: ""
     }
   ],
+  frequentlyAddedServiceIds: [],
+  frequentlyAddedTogetherByZone: [],
   faqs: [
     {
       question: "What if the cleaning isn't completed within the selected time?",
@@ -106,6 +110,8 @@ const ServicePageBuilder = ({ selectedCity }) => {
   const navigate = useNavigate();
 
   const [services, setServices] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [selectedRecommendationZoneId, setSelectedRecommendationZoneId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState(searchParams.get("serviceId") || "");
   const [selectedService, setSelectedService] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -149,6 +155,20 @@ const ServicePageBuilder = ({ selectedCity }) => {
     fetchServices();
   }, [selectedCity]);
 
+  // Load available zones once so recommendations can be curated independently per zone.
+  useEffect(() => {
+    const fetchZones = async () => {
+      try {
+        const res = await zoneService.getAll({ isActive: true });
+        if (res.success) setZones(res.zones || []);
+      } catch (error) {
+        toast.error("Failed to load zones");
+      }
+    };
+
+    fetchZones();
+  }, []);
+
   // Load selected service data into form
   const loadServiceIntoForm = (service) => {
     setSelectedService(service);
@@ -178,12 +198,44 @@ const ServicePageBuilder = ({ selectedCity }) => {
         service.howItWorks && service.howItWorks.length > 0
           ? service.howItWorks
           : defaultPageTemplate.howItWorks,
+      frequentlyAddedServiceIds: (service.frequentlyAddedTogether || []).map((item) =>
+        typeof item === "object" ? (item._id || item.id) : item
+      ).filter(Boolean),
+      frequentlyAddedTogetherByZone: (service.frequentlyAddedTogetherByZone || []).map((entry) => ({
+        zoneId: typeof entry.zoneId === "object" ? (entry.zoneId._id || entry.zoneId.id) : entry.zoneId,
+        serviceIds: (entry.serviceIds || []).map((item) =>
+          typeof item === "object" ? (item._id || item.id) : item
+        ).filter(Boolean)
+      })),
       faqs:
         service.faqs && service.faqs.length > 0
           ? service.faqs
           : defaultPageTemplate.faqs
     });
   };
+
+  useEffect(() => {
+    if (!selectedService) return;
+
+    const serviceZoneIds = (selectedService.zoneIds || []).map((zone) =>
+      String(zone?._id || zone?.id || zone)
+    );
+    const availableZone = zones.find((zone) =>
+      zone.isActive !== false &&
+      (!serviceZoneIds.length || serviceZoneIds.includes(String(zone._id)))
+    );
+
+    const selectedZoneIsAvailable = serviceZoneIds.length === 0
+      || serviceZoneIds.includes(String(selectedRecommendationZoneId));
+
+    if (
+      !selectedRecommendationZoneId ||
+      !selectedZoneIsAvailable ||
+      !zones.some((zone) => String(zone._id) === String(selectedRecommendationZoneId))
+    ) {
+      setSelectedRecommendationZoneId(availableZone?._id || "");
+    }
+  }, [selectedService, zones]);
 
   const handleSelectService = (serviceId) => {
     setSelectedServiceId(serviceId);
@@ -352,6 +404,50 @@ const ServicePageBuilder = ({ selectedCity }) => {
     });
   };
 
+  const serviceIdOf = (value) => String(value?._id || value?.id || value);
+
+  const availableRecommendationZones = zones.filter((zone) => {
+    if (zone.isActive === false) return false;
+    const baseServiceZoneIds = (selectedService?.zoneIds || []).map(serviceIdOf);
+    return !baseServiceZoneIds.length || baseServiceZoneIds.includes(String(zone._id));
+  });
+
+  const selectedRecommendationEntry = (formData.frequentlyAddedTogetherByZone || []).find(
+    (entry) => serviceIdOf(entry.zoneId) === String(selectedRecommendationZoneId)
+  );
+
+  const selectedRecommendationServiceIds = selectedRecommendationEntry
+    ? (selectedRecommendationEntry.serviceIds || []).map(serviceIdOf)
+    : (formData.frequentlyAddedServiceIds || []).map(serviceIdOf);
+
+  const toggleFrequentlyAddedForZone = (recommendationServiceId) => {
+    if (!selectedRecommendationZoneId) {
+      toast.error("Select a zone first");
+      return;
+    }
+
+    setFormData((prev) => {
+      const entries = [...(prev.frequentlyAddedTogetherByZone || [])];
+      const entryIndex = entries.findIndex(
+        (entry) => serviceIdOf(entry.zoneId) === String(selectedRecommendationZoneId)
+      );
+      const currentIds = entryIndex >= 0
+        ? (entries[entryIndex].serviceIds || []).map(serviceIdOf)
+        : (prev.frequentlyAddedServiceIds || []).map(serviceIdOf);
+      const nextIds = currentIds.includes(String(recommendationServiceId))
+        ? currentIds.filter((id) => id !== String(recommendationServiceId))
+        : [...currentIds, String(recommendationServiceId)];
+
+      if (entryIndex >= 0) {
+        entries[entryIndex] = { ...entries[entryIndex], serviceIds: nextIds };
+      } else {
+        entries.push({ zoneId: selectedRecommendationZoneId, serviceIds: nextIds });
+      }
+
+      return { ...prev, frequentlyAddedTogetherByZone: entries };
+    });
+  };
+
   // Save entire page builder configuration
   const handleSavePage = async () => {
     if (!selectedServiceId) {
@@ -372,11 +468,19 @@ const ServicePageBuilder = ({ selectedCity }) => {
         exclusions: formData.exclusions.filter((item) => item.text?.trim() !== ""),
         howItWorksTitle: formData.howItWorksTitle?.trim(),
         howItWorks: formData.howItWorks.filter((item) => item.title?.trim() !== ""),
-        faqs: formData.faqs.filter((item) => item.question?.trim() !== "")
+        faqs: formData.faqs.filter((item) => item.question?.trim() !== ""),
+        frequentlyAddedTogether: formData.frequentlyAddedServiceIds || [],
+        frequentlyAddedTogetherByZone: (formData.frequentlyAddedTogetherByZone || []).map((entry) => ({
+          zoneId: typeof entry.zoneId === "object" ? (entry.zoneId._id || entry.zoneId.id) : entry.zoneId,
+          serviceIds: (entry.serviceIds || []).map((item) =>
+            typeof item === "object" ? (item._id || item.id) : item
+          ).filter(Boolean)
+        }))
       };
 
       const res = await serviceService.update(selectedServiceId, payload);
       if (res.success) {
+        publicCatalogService.invalidateCache();
         toast.success(`Page Builder saved for ${selectedService?.title || "Service"}!`);
       } else {
         toast.error(res.message || "Failed to save page");
@@ -467,7 +571,8 @@ const ServicePageBuilder = ({ selectedCity }) => {
               { id: "inclusions", label: "2. Included Tasks & Duration", icon: FiList },
               { id: "benefits", label: "3. Benefits & Exclusions", icon: FiShield },
               { id: "howItWorks", label: "4. Step-by-Step Process", icon: FiLayers },
-              { id: "faqs", label: "5. FAQ Accordion", icon: FiHelpCircle }
+              { id: "faqs", label: "5. FAQ Accordion", icon: FiHelpCircle },
+              { id: "frequentlyAdded", label: "6. Frequently Added", icon: FiShoppingBag }
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -885,6 +990,99 @@ const ServicePageBuilder = ({ selectedCity }) => {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Tab 6: Frequently Added Together */}
+          {activeTab === "frequentlyAdded" && (
+            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-5">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <FiShoppingBag className="text-[#720C3E]" /> Frequently Added Together
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Configure recommendations separately for every service zone.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl bg-[#FFF7FA] border border-[#E8D9DF]">
+                <label className="text-xs font-black text-slate-700 uppercase tracking-wider whitespace-nowrap">
+                  Select Zone
+                </label>
+                <select
+                  value={selectedRecommendationZoneId}
+                  onChange={(event) => setSelectedRecommendationZoneId(event.target.value)}
+                  className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                >
+                  <option value="">Choose a zone</option>
+                  {availableRecommendationZones.map((zone) => (
+                    <option key={zone._id} value={zone._id}>{zone.name}</option>
+                  ))}
+                </select>
+                {selectedRecommendationZoneId && (
+                  <span className="text-[11px] font-bold text-[#720C3E]">
+                    {selectedRecommendationServiceIds.length} selected
+                  </span>
+                )}
+              </div>
+
+              {!availableRecommendationZones.length && (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-800">
+                  No active zone is assigned to this base service. Assign zones to the service first.
+                </div>
+              )}
+
+              {selectedRecommendationZoneId && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {services
+                    .filter((svc) => {
+                      const serviceId = serviceIdOf(svc);
+                      if (serviceId === String(selectedServiceId) || svc.status !== "active") return false;
+                      const svcZoneIds = (svc.zoneIds || []).map(serviceIdOf);
+                      return !svcZoneIds.length || svcZoneIds.includes(String(selectedRecommendationZoneId));
+                    })
+                    .map((svc) => {
+                      const serviceId = serviceIdOf(svc);
+                      const selected = selectedRecommendationServiceIds.includes(serviceId);
+                      return (
+                        <button
+                          type="button"
+                          key={serviceId}
+                          onClick={() => toggleFrequentlyAddedForZone(serviceId)}
+                          className={selected
+                            ? "relative text-left p-3 rounded-2xl border border-[#720C3E] bg-[#FFF7FA] ring-2 ring-[#720C3E]/10 cursor-pointer"
+                            : "relative text-left p-3 rounded-2xl border border-slate-200 bg-slate-50 hover:border-[#C99AB1] cursor-pointer"}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 flex items-center justify-center overflow-hidden shrink-0">
+                              {svc.iconUrl ? (
+                                <img src={toAssetUrl(svc.iconUrl)} alt="" className="w-full h-full object-contain" />
+                              ) : (
+                                <span className="text-[#720C3E] font-black">{svc.title?.charAt(0) || "S"}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-black text-slate-800 truncate">{svc.title}</p>
+                              <p className="text-[11px] text-slate-500 mt-1">₹{svc.basePrice || 0}</p>
+                            </div>
+                            <span className={selected
+                              ? "w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-[#720C3E] text-white"
+                              : "w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-white text-[#720C3E] border border-[#E8D9DF]"}
+                            >
+                              {selected ? <FiCheck /> : <FiPlus />}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              )}
+
+              {selectedRecommendationZoneId && (
+                <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-600">
+                  <span className="font-black text-slate-800">{selectedRecommendationServiceIds.length}</span> service(s) selected for this zone. Users will see only these recommendations when they are inside this zone.
+                </div>
+              )}
             </div>
           )}
         </div>
