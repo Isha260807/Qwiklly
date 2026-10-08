@@ -106,7 +106,6 @@ export default function BookingDetails() {
         tax: parseFloat(apiData.tax || 0),
         visitingCharges: parseFloat(apiData.visitingCharges || apiData.visitationFee || (apiData.paymentMethod === 'plan_benefit' ? 49 : 0)),
         discount: parseFloat(apiData.discount || 0),
-        platformCommission: parseFloat(apiData.adminCommission || apiData.platformFee || apiData.commission || 0),
         finalAmount: parseFloat(apiData.finalAmount || 0),
         // Salary earnings are calculated by the backend from worked duration and
         // the vendor's configured hourly/30-minute rate.

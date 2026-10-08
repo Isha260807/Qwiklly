@@ -478,8 +478,6 @@ exports.confirmCashCollection = async (req, res) => {
     recordBookingEarning({
       date: new Date(),
       totalRevenue: bill ? bill.grandTotal : collectionAmount,
-      platformCommission: bill ? (bill.companyRevenue || 0) : (collectionAmount * 0.2),
-      vendorEarnings: 0,
       totalGST: bill ? (bill.totalGST || 0) : 0,
       totalTDS: 0 // Captured separately during withdrawal
     }).catch(err => console.error('[ConfirmCash] Daily tracker failed:', err));
@@ -660,8 +658,6 @@ exports.verifyOnlinePayment = async (req, res) => {
         recordBookingEarning({
           date: new Date(),
           totalRevenue: Number(bill ? bill.grandTotal : booking.finalAmount) || 0,
-          platformCommission: Number(bill ? bill.companyRevenue : (booking.finalAmount * 0.2)) || 0,
-          vendorEarnings: Number(vendorEarning) || 0,
           totalGST: Number(bill ? bill.totalGST : 0) || 0,
           totalTDS: 0
         }).catch(err => console.error('[ConfirmCash] Daily tracker failed:', err));
@@ -798,8 +794,6 @@ exports.confirmManualOnlinePayment = async (req, res) => {
     recordBookingEarning({
       date: new Date(),
       totalRevenue: Number(bill ? bill.grandTotal : booking.finalAmount) || 0,
-      platformCommission: Number(bill ? bill.companyRevenue : (booking.finalAmount * 0.2)) || 0,
-      vendorEarnings: Number(vendorEarning) || 0,
       totalGST: Number(bill ? bill.totalGST : 0) || 0,
       totalTDS: 0
     }).catch(err => console.error('[ConfirmManual] Daily tracker failed:', err));

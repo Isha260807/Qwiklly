@@ -374,8 +374,6 @@ const finalizePaymentSuccess = async (booking, paymentId) => {
   recordBookingEarning({
     date: new Date(),
     totalRevenue: Number(bill ? bill.grandTotal : booking.finalAmount) || 0,
-    platformCommission: Number(bill ? bill.companyRevenue : (booking.finalAmount * 0.2)) || 0,
-    vendorEarnings: 0,
     totalGST: Number(bill ? bill.totalGST : 0) || 0,
     totalTDS: 0 // Tracked in withdrawals
   }).catch(err => console.error('[Payment] Daily tracker failed:', err));
@@ -641,8 +639,6 @@ const processWalletPayment = async (req, res) => {
     recordBookingEarning({
       date: new Date(),
       totalRevenue: Number(bill ? bill.grandTotal : booking.finalAmount) || 0,
-      platformCommission: Number(bill ? bill.companyRevenue : (booking.finalAmount * 0.2)) || 0,
-      vendorEarnings: 0,
       totalGST: Number(bill ? bill.totalGST : 0) || 0,
       totalTDS: 0 // Tracked in withdrawals
     }).catch(err => console.error('[Wallet Payment] Daily tracker failed:', err));

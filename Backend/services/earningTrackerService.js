@@ -15,8 +15,6 @@ const getTodayDateString = (dateInput) => {
 const recordBookingEarning = async ({
   date,
   totalRevenue = 0,
-  platformCommission = 0,
-  vendorEarnings = 0,
   totalGST = 0,
   totalTDS = 0,
 }) => {
@@ -29,8 +27,6 @@ const recordBookingEarning = async ({
         $inc: {
           totalRevenue: totalRevenue,
           totalBookings: 1,
-          platformCommission: platformCommission,
-          vendorEarnings: vendorEarnings,
           totalGST: totalGST,
           totalTDS: totalTDS
         }

@@ -82,7 +82,7 @@ const Earnings = () => {
       const amount = Number(t.amount || 0);
 
       // Only count positive earning credits or cash collections
-      if (t.type === 'earnings_credit' || t.type === 'commission' || amount > 0) {
+      if (t.type === 'earnings_credit' || amount > 0) {
         if (tDate >= todayStart) todayTotal += amount;
         if (tDate >= weekStart) weekTotal += amount;
         if (tDate >= monthStart) monthTotal += amount;

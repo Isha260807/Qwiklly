@@ -1,11 +1,9 @@
 const Booking = require('../../models/Booking');
 const Vendor = require('../../models/Vendor');
 const User = require('../../models/User');
-const UserService = require('../../models/UserService');
-const VendorBill = require('../../models/VendorBill');
-const PlatformEarning = require('../../models/PlatformEarning');
 const VendorSalaryEarning = require('../../models/VendorSalaryEarning');
-const { BOOKING_STATUS, PAYMENT_STATUS, VENDOR_STATUS } = require('../../utils/constants');
+const VendorPayrollPayment = require('../../models/VendorPayrollPayment');
+const { BOOKING_STATUS } = require('../../utils/constants');
 
 /**
  * Helper: Helper to generate continuous date slots for timeline charts
@@ -21,7 +19,7 @@ const generateDateSlots = (period = 'monthly', count = 6) => {
       d.setDate(d.getDate() - i);
       const key = d.toISOString().slice(0, 10); // YYYY-MM-DD
       const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      slots.push({ key, label, revenue: 0, commission: 0, bookings: 0, completed: 0, cancelled: 0 });
+      slots.push({ key, label, revenue: 0, bookings: 0, completed: 0, cancelled: 0 });
     }
   } else if (period === 'weekly') {
     const weeks = count || 8;
@@ -29,7 +27,7 @@ const generateDateSlots = (period = 'monthly', count = 6) => {
       const d = new Date(now);
       d.setDate(d.getDate() - (i * 7));
       const key = `W${Math.ceil(d.getDate() / 7)}-${d.toLocaleString('en-US', { month: 'short' })}`;
-      slots.push({ key, label: key, revenue: 0, commission: 0, bookings: 0, completed: 0, cancelled: 0 });
+      slots.push({ key, label: key, revenue: 0, bookings: 0, completed: 0, cancelled: 0 });
     }
   } else {
     // Monthly
@@ -38,7 +36,7 @@ const generateDateSlots = (period = 'monthly', count = 6) => {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = d.toISOString().slice(0, 7); // YYYY-MM
       const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-      slots.push({ key, label, revenue: 0, commission: 0, bookings: 0, completed: 0, cancelled: 0 });
+      slots.push({ key, label, revenue: 0, bookings: 0, completed: 0, cancelled: 0 });
     }
   }
   return slots;
@@ -580,14 +578,6 @@ exports.getRevenueReport = async (req, res) => {
             }
           },
           revenue: { $sum: { $ifNull: ['$finalAmount', '$basePrice', '$totalAmount', 0] } },
-          commission: {
-            $sum: {
-              $ifNull: [
-                '$adminCommission',
-                { $multiply: [{ $ifNull: ['$finalAmount', '$basePrice', '$totalAmount', 0] }, 0.2] }
-              ]
-            }
-          },
           bookings: { $sum: 1 }
         }
       },
@@ -602,13 +592,11 @@ exports.getRevenueReport = async (req, res) => {
     const revenueTrends = slots.map(slot => {
       const match = trendMap.get(slot.key);
       const rev = match ? match.revenue : 0;
-      const comm = match ? match.commission : 0;
       const cnt = match ? match.bookings : 0;
       return {
         _id: slot.label || slot.key,
         dateKey: slot.key,
         revenue: rev,
-        commission: comm,
         bookings: cnt
       };
     });
@@ -620,14 +608,6 @@ exports.getRevenueReport = async (req, res) => {
         $group: {
           _id: { $ifNull: ['$serviceName', '$serviceCategory', 'General Service'] },
           revenue: { $sum: { $ifNull: ['$finalAmount', '$basePrice', '$totalAmount', 0] } },
-          commission: {
-            $sum: {
-              $ifNull: [
-                '$adminCommission',
-                { $multiply: [{ $ifNull: ['$finalAmount', '$basePrice', '$totalAmount', 0] }, 0.2] }
-              ]
-            }
-          },
           count: { $sum: 1 }
         }
       },
@@ -636,10 +616,10 @@ exports.getRevenueReport = async (req, res) => {
     ]);
 
     const revenueByService = revenueByServiceRaw.length > 0 ? revenueByServiceRaw : [
-      { _id: 'Home Cleaning', revenue: 0, count: 0, commission: 0 },
-      { _id: 'AC Repair', revenue: 0, count: 0, commission: 0 },
-      { _id: 'Plumbing', revenue: 0, count: 0, commission: 0 },
-      { _id: 'Electrical', revenue: 0, count: 0, commission: 0 }
+      { _id: 'Home Cleaning', revenue: 0, count: 0 },
+      { _id: 'AC Repair', revenue: 0, count: 0 },
+      { _id: 'Plumbing', revenue: 0, count: 0 },
+      { _id: 'Electrical', revenue: 0, count: 0 }
     ];
 
     // 3. Revenue by Payment Method
@@ -662,24 +642,27 @@ exports.getRevenueReport = async (req, res) => {
         $group: {
           _id: null,
           totalRevenue: { $sum: { $ifNull: ['$finalAmount', '$basePrice', '$totalAmount', 0] } },
-          totalCommission: {
-            $sum: {
-              $ifNull: [
-                '$adminCommission',
-                { $multiply: [{ $ifNull: ['$finalAmount', '$basePrice', '$totalAmount', 0] }, 0.2] }
-              ]
-            }
-          },
           totalBookings: { $sum: 1 }
         }
       }
     ]);
 
     const totalRev = overallTotals[0]?.totalRevenue || 0;
-    const totalComm = overallTotals[0]?.totalCommission || 0;
     const totalBookingsCount = overallTotals[0]?.totalBookings || 0;
     const avgOrderValue = totalBookingsCount > 0 ? Math.round(totalRev / totalBookingsCount) : 0;
-    const vendorPayout = Math.max(0, totalRev - totalComm);
+    const payrollMatch = { status: 'paid' };
+    if (startDate && endDate) {
+      payrollMatch.paidAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+      };
+    }
+
+    const payrollStats = await VendorPayrollPayment.aggregate([
+      { $match: payrollMatch },
+      { $group: { _id: null, totalSalaryPaid: { $sum: '$totalAmount' } } }
+    ]);
+    const totalSalaryPaid = payrollStats[0]?.totalSalaryPaid || 0;
 
     // 5. Recent Revenue Bookings
     const recentTransactions = await Booking.find(matchFilter)
@@ -695,11 +678,11 @@ exports.getRevenueReport = async (req, res) => {
       data: {
         summary: {
           totalRevenue: totalRev,
-          platformCommission: totalComm,
-          vendorPayout,
+          salaryPaid: totalSalaryPaid,
+          netAdminBalance: totalRev - totalSalaryPaid,
+
           totalBookings: totalBookingsCount,
-          avgOrderValue,
-          growth: '+14.5%'
+          avgOrderValue
         },
         revenueTrends,
         revenueByService,
@@ -711,7 +694,7 @@ exports.getRevenueReport = async (req, res) => {
           vendor: b.vendorId?.businessName || b.vendorId?.name || 'Unassigned',
           service: b.serviceName || 'Service',
           amount: b.finalAmount || b.basePrice || 0,
-          commission: Math.round((b.finalAmount || b.basePrice || 0) * 0.2),
+
           paymentMethod: b.paymentMethod || 'Online',
           status: b.status,
           date: b.createdAt

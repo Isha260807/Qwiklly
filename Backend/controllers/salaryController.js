@@ -626,6 +626,81 @@ const getAdminVendorPayrollPayments = async (req, res) => {
   }
 };
 
+const getAdminSalaryEarnings = async (req, res) => {
+  try {
+    const { search, status, type, startDate, endDate, page = 1, limit = 50 } = req.query;
+    const parsedPage = Math.max(1, Number(page) || 1);
+    const parsedLimit = Math.min(100, Math.max(1, Number(limit) || 50));
+    const filter = {
+      ...getDateFilter(startDate, endDate, 'earningDate'),
+      status: status && status !== 'all' ? status : { $ne: 'reversed' }
+    };
+
+    if (type && type !== 'all') filter.type = type;
+
+    if (search) {
+      const vendors = await Vendor.find({
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { businessName: { $regex: search, $options: 'i' } },
+          { phone: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
+        ]
+      }).select('_id').lean();
+      filter.vendorId = { $in: vendors.map((vendor) => vendor._id) };
+    }
+
+    const [data, total, summary] = await Promise.all([
+      VendorSalaryEarning.find(filter)
+        .populate('vendorId', 'name businessName email phone')
+        .populate('bookingId', 'bookingNumber serviceName')
+        .sort({ earningDate: -1, createdAt: -1 })
+        .skip((parsedPage - 1) * parsedLimit)
+        .limit(parsedLimit)
+        .lean(),
+      VendorSalaryEarning.countDocuments(filter),
+      VendorSalaryEarning.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: null,
+            totalEarning: { $sum: '$amount' },
+            pendingEarning: { $sum: { $cond: [{ $in: ['$status', ['accrued', 'pending_rate']] }, '$amount', 0] } },
+            paidEarning: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$amount', 0] } },
+            bookingEarning: { $sum: { $cond: [{ $eq: ['$type', 'booking_earning'] }, '$amount', 0] } },
+            salaryAmount: { $sum: { $cond: [{ $eq: ['$type', 'salary'] }, '$amount', 0] } },
+            bonusAmount: { $sum: { $cond: [{ $eq: ['$type', 'bonus'] }, '$amount', 0] } },
+            incentiveAmount: { $sum: { $cond: [{ $eq: ['$type', 'incentive'] }, '$amount', 0] } },
+            adjustmentAmount: { $sum: { $cond: [{ $eq: ['$type', 'adjustment'] }, '$amount', 0] } },
+            customAmount: { $sum: { $cond: [{ $eq: ['$type', 'custom'] }, '$amount', 0] } },
+            recordCount: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
+
+    res.json({
+      success: true,
+      data,
+      summary: summary[0] || {
+        totalEarning: 0,
+        pendingEarning: 0,
+        paidEarning: 0,
+        bookingEarning: 0,
+        salaryAmount: 0,
+        bonusAmount: 0,
+        incentiveAmount: 0,
+        adjustmentAmount: 0,
+        customAmount: 0,
+        recordCount: 0
+      },
+      pagination: { page: parsedPage, limit: parsedLimit, total, pages: Math.ceil(total / parsedLimit) }
+    });
+  } catch (error) {
+    console.error('Get admin salary earnings error:', error);
+    res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Failed to fetch salary earnings' });
+  }
+};
 const getAdminSalaryPayments = async (req, res) => {
   try {
     const {
@@ -715,6 +790,7 @@ module.exports = {
   getAdminVendorSalaryWallet,
   getAdminVendorPayrollPayments,
   getAdminSalaryPayments,
+  getAdminSalaryEarnings,
   updateSalaryRate,
   createPayrollPayment
 };

@@ -1,9 +1,9 @@
 const Transaction = require('../../models/Transaction');
 const Booking = require('../../models/Booking');
-const VendorBill = require('../../models/VendorBill');
 const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
 const PlatformEarning = require('../../models/PlatformEarning');
+const VendorPayrollPayment = require('../../models/VendorPayrollPayment');
 
 /**
  * Auto-sync paid/completed bookings to Transaction collection
@@ -77,7 +77,7 @@ const getAllTransactions = async (req, res) => {
         ];
       }
 
-      const shouldInclude = (t) => type === 'all' || type === t;
+      const shouldInclude = (t) => !type || type === 'all' || type === t;
 
       const bookings = await Booking.find(bookingQuery)
         .populate('userId', 'name email phone')
@@ -88,31 +88,9 @@ const getAllTransactions = async (req, res) => {
 
       const totalBookings = await Booking.countDocuments(bookingQuery);
 
-      const bookingIds = bookings.map(b => b._id);
-      const bills = await VendorBill.find({ bookingId: { $in: bookingIds } });
-      const billMap = {};
-      bills.forEach(b => { billMap[b.bookingId.toString()] = b; });
-
       let virtualTransactions = [];
 
       bookings.forEach(booking => {
-        const bill = billMap[booking._id.toString()];
-
-        if (shouldInclude('commission') && bill && bill.companyRevenue > 0) {
-          virtualTransactions.push({
-            _id: `${booking._id}_comm`,
-            referenceId: `REV-${booking.bookingNumber}`,
-            bookingId: booking,
-            userId: booking.userId,
-            vendorId: booking.vendorId,
-            type: 'commission',
-            amount: bill.companyRevenue,
-            status: 'completed',
-            paymentMethod: 'system',
-            createdAt: bill.paidAt || booking.completedAt || booking.updatedAt || booking.createdAt,
-            description: `Company revenue for booking ${booking.bookingNumber}`
-          });
-        }
 
         if (shouldInclude('payment')) {
           virtualTransactions.push({
@@ -121,12 +99,12 @@ const getAllTransactions = async (req, res) => {
             bookingId: booking,
             userId: booking.userId,
             vendorId: booking.vendorId,
-            type: booking.paymentMethod === 'pay_at_home' ? 'cash_collected' : 'payment',
+            type: 'payment',
             amount: booking.finalAmount || 0,
             status: 'completed',
             paymentMethod: booking.paymentMethod || 'online',
             createdAt: booking.createdAt,
-            description: `Payment for booking ${booking.bookingNumber}`
+            description: 'Booking payment received by admin for ' + booking.bookingNumber
           });
         }
       });
@@ -135,10 +113,10 @@ const getAllTransactions = async (req, res) => {
         success: true,
         data: virtualTransactions,
         pagination: {
-          total: totalBookings,
+          total: shouldInclude('payment') ? totalBookings : 0,
           page: parseInt(page),
           limit: parseInt(limit),
-          pages: Math.ceil(totalBookings / parseInt(limit)) || 1
+          pages: Math.ceil((shouldInclude('payment') ? totalBookings : 0) / parseInt(limit)) || 1
         }
       });
     }
@@ -260,28 +238,32 @@ const getTransactionStats = async (req, res) => {
 
     // --- SPECIAL HANDLING FOR ADMIN REVENUE ---
     if (entity === 'admin') {
-      const stats = await PlatformEarning.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalRevenue: { $sum: '$totalRevenue' },
-            totalCommission: { $sum: '$platformCommission' },
-            totalGST: { $sum: '$totalGST' },
-            totalVendorEarnings: { $sum: '$vendorEarnings' }
+      const [stats, payrollStats] = await Promise.all([
+        PlatformEarning.aggregate([
+          {
+            $group: {
+              _id: null,
+              totalRevenue: { $sum: '$totalRevenue' },
+              totalGST: { $sum: '$totalGST' }
+            }
           }
-        }
+        ]),
+        VendorPayrollPayment.aggregate([
+          { $match: { status: 'paid' } },
+          { $group: { _id: null, totalSalaryPaid: { $sum: '$totalAmount' } } }
+        ])
       ]);
 
-      const data = stats[0] || { totalRevenue: 0, totalCommission: 0, totalGST: 0, totalVendorEarnings: 0 };
-
+      const data = stats[0] || { totalRevenue: 0, totalGST: 0 };
+      const totalSalaryPaid = payrollStats[0]?.totalSalaryPaid || 0;
       return res.status(200).json({
         success: true,
         data: {
           totalRevenue: data.totalRevenue,
-          totalCommission: data.totalCommission,
+          totalBookingRevenue: data.totalRevenue,
+          totalSalaryPaid,
           totalGST: data.totalGST,
-          totalVendorEarnings: data.totalVendorEarnings,
-          netRevenue: data.totalCommission
+          netRevenue: data.totalRevenue - totalSalaryPaid
         }
       });
     }

@@ -93,8 +93,8 @@ const ReportsOverview = () => {
       link: '/admin/reports/revenue'
     },
     {
-      title: 'Platform Comm.',
-      value: `₹${(stats?.platformCommission || 0).toLocaleString('en-IN')}`,
+      title: 'Booking Revenue',
+      value: `₹${(stats?.totalRevenue || 0).toLocaleString('en-IN')}`,
       icon: FiTrendingUp,
       color: 'text-emerald-600',
       bg: 'bg-emerald-50',
@@ -127,7 +127,7 @@ const ReportsOverview = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-blue-100 font-bold uppercase tracking-wider text-[10px]">Financial Analytics</p>
-                <h3 className="text-base font-extrabold mt-0.5">Revenue & Commission</h3>
+                <h3 className="text-base font-extrabold mt-0.5">Revenue & Salary</h3>
               </div>
               <div className="bg-white/20 p-2 rounded-xl">
                 <FiDollarSign size={18} />

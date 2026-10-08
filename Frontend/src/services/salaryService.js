@@ -32,6 +32,10 @@ export const adminSalaryService = {
     const response = await api.get('/admin/salary-payments', { params });
     return response.data;
   },
+  getAllEarnings: async (params = {}) => {
+    const response = await api.get('/admin/salary-earnings', { params });
+    return response.data;
+  },
   updateRate: async (vendorId, data) => {
     const response = await api.patch(`/admin/vendors/${vendorId}/salary-rate`, data);
     return response.data;

@@ -1,8 +1,6 @@
 const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
 const Booking = require('../../models/Booking');
-const Withdrawal = require('../../models/Withdrawal');
-const Settlement = require('../../models/Settlement');
 const { BOOKING_STATUS, PAYMENT_STATUS, VENDOR_STATUS } = require('../../utils/constants');
 
 /**
@@ -63,15 +61,10 @@ const getDashboardStats = async (req, res) => {
     ]);
 
     const revenue = revenueResult[0] || { totalRevenue: 0, totalBookings: 0 };
-    const platformCommission = revenue.totalRevenue * 0.2; // 20% commission
 
     // Vendor approval stats
     const pendingVendors = await Vendor.countDocuments({ approvalStatus: VENDOR_STATUS.PENDING, ...dateFilter });
     const approvedVendors = await Vendor.countDocuments({ approvalStatus: VENDOR_STATUS.APPROVED, ...dateFilter });
-
-    // Withdrawal & Settlement stats
-    const pendingWithdrawals = await Withdrawal.countDocuments({ status: 'pending', ...dateFilter });
-    const pendingSettlementsCount = await Settlement.countDocuments({ status: 'pending', ...dateFilter });
 
     // Recent activities (filtered by period)
     const recentActivityDocs = await Booking.find(dateFilter)
@@ -110,11 +103,8 @@ const getDashboardStats = async (req, res) => {
           completedBookings,
           cancelledBookings,
           totalRevenue: revenue.totalRevenue,
-          platformCommission,
           pendingVendors,
           approvedVendors,
-          pendingWithdrawals,
-          pendingSettlements: pendingSettlementsCount
         },
         recentBookings
       }
@@ -177,20 +167,6 @@ const getRevenueAnalytics = async (req, res) => {
             }
           },
           bookings: { $sum: 1 },
-          platformCommission: {
-            $sum: {
-              $cond: [
-                {
-                  $or: [
-                    { $in: ['$status', [BOOKING_STATUS.COMPLETED, 'completed', 'work_done']] },
-                    { $in: ['$paymentStatus', [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, 'success', 'collected_by_vendor', 'collected_by_worker', 'paid']] }
-                  ]
-                },
-                { $multiply: [{ $ifNull: ['$finalAmount', '$basePrice', 0] }, 0.2] },
-                0
-              ]
-            }
-          }
         }
       },
       { $sort: { _id: 1 } }
@@ -217,7 +193,6 @@ const getRevenueAnalytics = async (req, res) => {
           _id: key,
           revenue: existing ? existing.revenue : 0,
           bookings: existing ? existing.bookings : 0,
-          platformCommission: existing ? existing.platformCommission : 0
         });
         d.setMonth(d.getMonth() + 1);
       }
@@ -234,7 +209,6 @@ const getRevenueAnalytics = async (req, res) => {
           _id: key,
           revenue: existing ? existing.revenue : 0,
           bookings: existing ? existing.bookings : 0,
-          platformCommission: existing ? existing.platformCommission : 0
         });
         d.setDate(d.getDate() + 1);
       }

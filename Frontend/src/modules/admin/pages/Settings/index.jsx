@@ -8,19 +8,10 @@ import VendorSlotAvailabilityPanel from './VendorSlotAvailabilityPanel';
 import { toast } from 'react-hot-toast';
 
 const AdminSettings = () => {
-  const [settings, setSettings] = useState({
-    workerAutoAssignment: true,
-  });
-
   const [financialSettings, setFinancialSettings] = useState({
     visitedCharges: 0,
     instantBookingCharges: 0,
-    serviceGstPercentage: 0,
-    partsGstPercentage: 0,
-    servicePayoutPercentage: 0,
-    partsPayoutPercentage: 0,
     cancellationPenalty: 0,
-    platformFeePercentage: 0,
     maxSearchTime: 5,
     paymentTimeoutMinutes: 15,
     isOnlinePaymentEnabled: true
@@ -112,16 +103,6 @@ const AdminSettings = () => {
       }
     };
 
-    const loadSettings = () => {
-      try {
-        const adminSettings = JSON.parse(localStorage.getItem('adminSettings') || '{}');
-        if (Object.keys(adminSettings).length > 0) {
-          setSettings(prev => ({ ...prev, ...adminSettings }));
-        }
-      } catch (error) {
-        console.error('Error loading admin settings:', error);
-      }
-    };
 
     const loadFinancialSettings = async () => {
       try {
@@ -130,11 +111,6 @@ const AdminSettings = () => {
           setFinancialSettings({
             visitedCharges: res.settings.visitedCharges || 0,
             instantBookingCharges: res.settings.instantBookingCharges !== undefined ? res.settings.instantBookingCharges : 0,
-            serviceGstPercentage: res.settings.serviceGstPercentage ?? 0,
-            partsGstPercentage: res.settings.partsGstPercentage ?? 0,
-            servicePayoutPercentage: res.settings.servicePayoutPercentage ?? 0,
-            partsPayoutPercentage: res.settings.partsPayoutPercentage ?? 0,
-            platformFeePercentage: res.settings.platformFeePercentage ?? 0,
             cancellationPenalty: res.settings.cancellationPenalty !== undefined ? res.settings.cancellationPenalty : 0,
             maxSearchTime: res.settings.maxSearchTime || 5,
             paymentTimeoutMinutes: res.settings.paymentTimeoutMinutes || 15,
@@ -182,7 +158,6 @@ const AdminSettings = () => {
     };
 
     loadProfile();
-    loadSettings();
     loadFinancialSettings();
   }, []);
 
@@ -219,12 +194,6 @@ const AdminSettings = () => {
     }
   }, [isSuperAdmin, activeView]);
 
-  const handleToggle = (key) => {
-    const updated = { ...settings, [key]: !settings[key] };
-    setSettings(updated);
-    localStorage.setItem('adminSettings', JSON.stringify(updated));
-    window.dispatchEvent(new Event('adminSettingsUpdated'));
-  };
 
   const handleFinancialChange = (e) => {
     const { name, value } = e.target;
@@ -576,7 +545,7 @@ const AdminSettings = () => {
             <FiDollarSign className="w-6 h-6 text-green-600" />
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">Financial Info</h3>
-          <p className="text-sm text-gray-500">Configure charges, commissions, and billing details</p>
+          <p className="text-sm text-gray-500">Configure booking charges and billing details</p>
         </div>
       )}
 
@@ -659,7 +628,7 @@ const AdminSettings = () => {
 
         {/* Profile View */}
         {activeView === 'profile' && (
-          <motion.div key="profile" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+          <motion.div key="profile" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="space-y-8">
             <div className="max-w-2xl mx-auto bg-white rounded-xl p-8 shadow-sm border border-gray-100">
               <div className="flex items-center gap-4 mb-8">
                 <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-2xl">
@@ -719,6 +688,49 @@ const AdminSettings = () => {
                 </div>
               </form>
             </div>
+                          {/* Support Settings */}
+              <div className="max-w-2xl mx-auto bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-fit">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <FiHeadphones className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <h2 className="text-lg font-bold text-gray-800">Contact & Support</h2>
+                </div>
+
+                <form onSubmit={handleSupportSave} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Support Email</label>
+                    <div className="relative">
+                      <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input type="email" name="supportEmail" value={supportSettings.supportEmail} onChange={handleSupportChange}
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Support Phone</label>
+                    <div className="relative">
+                      <FiPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input type="tel" name="supportPhone" value={supportSettings.supportPhone} onChange={handleSupportChange}
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">WhatsApp Support</label>
+                    <div className="relative">
+                      <FiMessageCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input type="tel" name="supportWhatsapp" value={supportSettings.supportWhatsapp} onChange={handleSupportChange}
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-2">
+                    <button type="submit" disabled={supportLoading}
+                      className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 flex items-center gap-2 disabled:opacity-60 shadow-lg shadow-blue-200">
+                      {supportLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiSave className="w-4 h-4" />}
+                      Save Details
+                    </button>
+                  </div>
+                </form>
+              </div>
           </motion.div >
         )}
 
@@ -757,40 +769,6 @@ const AdminSettings = () => {
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Vendor Cash Limit (₹)</label>
                       <input type="number" name="vendorCashLimit" value={financialSettings.vendorCashLimit} onChange={handleFinancialChange}
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Service GST (%)</label>
-                      <input type="number" name="serviceGstPercentage" value={financialSettings.serviceGstPercentage} onChange={handleFinancialChange}
-                        min="0" max="100"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">GST rate applied to services</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Parts GST (%)</label>
-                      <input type="number" name="partsGstPercentage" value={financialSettings.partsGstPercentage} onChange={handleFinancialChange}
-                        min="0" max="100"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">GST rate applied to parts &amp; materials</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Service Payout (%)</label>
-                      <input type="number" name="servicePayoutPercentage" value={financialSettings.servicePayoutPercentage} onChange={handleFinancialChange}
-                        min="0" max="100"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">Vendor keeps this % of service charges</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Parts Payout (%)</label>
-                      <input type="number" name="partsPayoutPercentage" value={financialSettings.partsPayoutPercentage} onChange={handleFinancialChange}
-                        min="0" max="100"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">Vendor keeps this % of parts charges</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Platform Fee (%)</label>
-                      <input type="number" name="platformFeePercentage" value={financialSettings.platformFeePercentage} onChange={handleFinancialChange}
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">Fee charged on vendor withdrawals</p>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Cancellation Penalty (₹)</label>
@@ -949,10 +927,10 @@ const AdminSettings = () => {
                     <button
                       type="button"
                       onClick={() => setReferralSettings(prev => ({ ...prev, referralEnabled: !prev.referralEnabled }))}
-                      className={`relative w-12 h-7 rounded-full transition-all ${referralSettings.referralEnabled ? 'bg-pink-600' : 'bg-gray-300'}`}
-                      aria-label="Toggle referral rewards"
+                      className={`relative inline-flex w-12 h-7 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#720C3E]/30 ${referralSettings.referralEnabled ? 'bg-[#720C3E]' : 'bg-gray-300'}`}
+                      aria-label="Toggle referral rewards" aria-pressed={referralSettings.referralEnabled}
                     >
-                      <span className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${referralSettings.referralEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                      <span className={`absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${referralSettings.referralEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
                   </div>
 
@@ -984,11 +962,11 @@ const AdminSettings = () => {
           )
         }
 
-        {/* System & Support View */}
+        {/* System Preferences View */}
         {
           activeView === 'system' && (
             <motion.div key="system" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}
-              className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              className="max-w-2xl">
 
               {/* System Settings */}
               <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-fit">
@@ -1000,16 +978,6 @@ const AdminSettings = () => {
                 </div>
 
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-800">Auto-Assign Workers</p>
-                      <p className="text-xs text-gray-500 mt-1">Automatically find new worker if booking is rejected</p>
-                    </div>
-                    <button onClick={() => handleToggle('workerAutoAssignment')}
-                      className={`relative w-12 h-7 rounded-full transition-all duration-300 ${settings.workerAutoAssignment ? 'bg-blue-600' : 'bg-gray-200'}`}>
-                      <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${settings.workerAutoAssignment ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                  </div>
 
                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
                     <div className="flex-1">
@@ -1029,49 +997,6 @@ const AdminSettings = () => {
                 </div>
               </div>
 
-              {/* Support Settings */}
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-fit">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <FiHeadphones className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <h2 className="text-lg font-bold text-gray-800">Contact & Support</h2>
-                </div>
-
-                <form onSubmit={handleSupportSave} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Support Email</label>
-                    <div className="relative">
-                      <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <input type="email" name="supportEmail" value={supportSettings.supportEmail} onChange={handleSupportChange}
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Support Phone</label>
-                    <div className="relative">
-                      <FiPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <input type="tel" name="supportPhone" value={supportSettings.supportPhone} onChange={handleSupportChange}
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">WhatsApp Support</label>
-                    <div className="relative">
-                      <FiMessageCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <input type="tel" name="supportWhatsapp" value={supportSettings.supportWhatsapp} onChange={handleSupportChange}
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
-                    </div>
-                  </div>
-                  <div className="flex justify-end pt-2">
-                    <button type="submit" disabled={supportLoading}
-                      className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 flex items-center gap-2 disabled:opacity-60 shadow-lg shadow-blue-200">
-                      {supportLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiSave className="w-4 h-4" />}
-                      Save Details
-                    </button>
-                  </div>
-                </form>
-              </div>
             </motion.div>
           )
         }

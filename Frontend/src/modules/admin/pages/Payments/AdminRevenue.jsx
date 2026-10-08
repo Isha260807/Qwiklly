@@ -20,8 +20,9 @@ const AdminRevenue = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalRevenue: 0,
-    totalCommission: 0,
-    pendingSettlements: 0
+    totalBookingRevenue: 0,
+    totalSalaryPaid: 0,
+    netRevenue: 0
   });
   const [pagination, setPagination] = useState({
     page: 1,
@@ -53,7 +54,7 @@ const AdminRevenue = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Using 'admin' entity to fetch platform revenue/commission data
+      // Admin receives the full booking amount; vendor payouts are tracked as salary payroll.
       const [response, statsRes] = await Promise.all([
         adminTransactionService.getAllTransactions({
           page: pagination.page,
@@ -105,8 +106,7 @@ const AdminRevenue = () => {
 
   const getTypeColor = (type) => {
     switch (type) {
-      case 'commission': return 'text-green-600';
-      case 'platform_fee': return 'text-purple-600';
+      case 'payment': return 'text-green-600';
       case 'convenience_fee': return 'text-blue-600';
       case 'gst': return 'text-indigo-600';
       case 'refund': return 'text-red-600';
@@ -150,12 +150,12 @@ const AdminRevenue = () => {
               <FiDollarSign className="w-6 h-6 text-green-600" />
             </div>
           </div>
-          <p className="text-gray-500 text-sm font-medium">Total Revenue</p>
+          <p className="text-gray-500 text-sm font-medium">Total Booking Revenue</p>
           <h3 className="text-2xl font-bold text-gray-900 mt-1">
             {loading ? (
               <div className="h-8 w-24 bg-gray-100 animate-pulse rounded"></div>
             ) : (
-              formatCurrency(stats.totalRevenue)
+              formatCurrency(stats.totalBookingRevenue ?? stats.totalRevenue)
             )}
           </h3>
         </motion.div>
@@ -171,12 +171,12 @@ const AdminRevenue = () => {
               <FiPieChart className="w-6 h-6 text-blue-600" />
             </div>
           </div>
-          <p className="text-gray-500 text-sm font-medium">Total Commissions</p>
+          <p className="text-gray-500 text-sm font-medium">Salary Paid</p>
           <h3 className="text-2xl font-bold text-blue-600 mt-1">
             {loading ? (
               <div className="h-8 w-24 bg-gray-100 animate-pulse rounded"></div>
             ) : (
-              formatCurrency(stats.totalCommission || stats.totalRevenue) // Fallback if API keys differ
+              formatCurrency(stats.totalSalaryPaid)
             )}
           </h3>
         </motion.div>
@@ -192,12 +192,12 @@ const AdminRevenue = () => {
               <FiActivity className="w-6 h-6 text-purple-600" />
             </div>
           </div>
-          <p className="text-gray-500 text-sm font-medium">Net Income</p>
+          <p className="text-gray-500 text-sm font-medium">Net Admin Balance</p>
           <h3 className="text-2xl font-bold text-gray-900 mt-1">
             {loading ? (
               <div className="h-8 w-24 bg-gray-100 animate-pulse rounded"></div>
             ) : (
-              formatCurrency(stats.netRevenue || stats.totalRevenue)
+              formatCurrency(stats.netRevenue ?? 0)
             )}
           </h3>
         </motion.div>
@@ -234,8 +234,7 @@ const AdminRevenue = () => {
             className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all text-sm font-medium text-gray-600 min-w-[150px]"
           >
             <option value="all">All Types</option>
-            <option value="commission">Commission</option>
-            <option value="platform_fee">Platform Fee</option>
+            <option value="payment">Booking Payment</option>
             <option value="convenience_fee">Convenience Fee</option>
             <option value="gst">GST</option>
             <option value="penalty">Penalty</option>
@@ -294,13 +293,13 @@ const AdminRevenue = () => {
                           {tx.bookingId?.bookingNumber || 'Direct Transaction'}
                         </span>
                         <span className="text-xs text-gray-500">
-                          {tx.bookingId ? 'Booking Commission' : 'System Adjustments'}
+                          {tx.bookingId ? 'Booking payment received' : 'System Adjustments'}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-gray-50 border border-gray-100 ${getTypeColor(tx.type)}`}>
-                        {tx.type?.replace('_', ' ')}
+                        {tx.type === 'payment' ? 'Booking payment' : tx.type?.replace('_', ' ')}
                       </span>
                     </td>
                     <td className="px-6 py-4">

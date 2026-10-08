@@ -7,12 +7,14 @@ const {
   getAdminVendorSalaryWallet,
   getAdminVendorPayrollPayments,
   getAdminSalaryPayments,
+  getAdminSalaryEarnings,
   updateSalaryRate,
   createPayrollPayment
 } = require('../../controllers/salaryController');
 
 router.get('/vendor-wallets', authenticate, isAdmin, getAdminSalaryWallets);
 router.get('/salary-payments', authenticate, isAdmin, getAdminSalaryPayments);
+router.get('/salary-earnings', authenticate, isAdmin, getAdminSalaryEarnings);
 router.get('/vendors/:vendorId/salary-wallet', authenticate, isAdmin, getAdminVendorSalaryWallet);
 router.get('/vendors/:vendorId/salary-payments', authenticate, isAdmin, getAdminVendorPayrollPayments);
 router.patch('/vendors/:vendorId/salary-rate', authenticate, isAdmin, updateSalaryRate);

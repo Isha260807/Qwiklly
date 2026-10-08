@@ -1,10 +1,10 @@
 const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
-const Settlement = require('../../models/Settlement');
 const Vendor = require('../../models/Vendor');
 const User = require('../../models/User');
 const Settings = require('../../models/Settings');
 const PlatformEarning = require('../../models/PlatformEarning');
+const VendorPayrollPayment = require('../../models/VendorPayrollPayment');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 
 /**
@@ -31,8 +31,6 @@ const getFinanceOverview = async (req, res) => {
         $group: {
           _id: null,
           totalTransactionValue: { $sum: '$totalRevenue' },
-          totalPlatformRevenue: { $sum: '$platformCommission' },
-          totalVendorEarnings: { $sum: '$vendorEarnings' },
           totalTaxCollected: { $sum: '$totalGST' },
           totalTDSCollected: { $sum: '$totalTDS' },
           count: { $sum: '$totalBookings' },
@@ -44,8 +42,6 @@ const getFinanceOverview = async (req, res) => {
 
     let revenueStats = revenueDocs[0] || {
       totalTransactionValue: 0,
-      totalPlatformRevenue: 0,
-      totalVendorEarnings: 0,
       totalTaxCollected: 0,
       totalTDSCollected: 0,
       count: 0,
@@ -81,39 +77,28 @@ const getFinanceOverview = async (req, res) => {
         const val = fb.totalValue || 0;
         revenueStats.totalTransactionValue = val;
         // Salary payroll is tracked in VendorSalaryEarning, not as a booking percentage.
-        revenueStats.totalPlatformRevenue = Math.round(val);
-        revenueStats.totalVendorEarnings = 0;
         revenueStats.totalTaxCollected = Math.round(val * 0.18);
         revenueStats.totalTDSCollected = Math.round(val * 0.01);
         revenueStats.count = fb.count;
       }
     }
 
-    // Grab the live "Pending" snapshot from the latest today record to avoid manual calc
-    const todayStr = new Date().toISOString().split('T')[0];
-    const latestSnapshot = await PlatformEarning.findOne({ date: todayStr });
+    const payrollMatch = { status: 'paid' };
+    if (startDate && endDate) {
+      payrollMatch.paidAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+      };
+    }
 
-    // Mount the extra stats securely
-    revenueStats.totalPendingSettlement = latestSnapshot?.totalPendingSettlement || 0;
-    revenueStats.totalPendingPayout = latestSnapshot?.totalPendingAmountToVendors || 0;
-
-    // 2. Pending Settlements (What we owe vendors)
-    const pendingSettlements = await Settlement.aggregate([
-      {
-        $match: {
-          status: 'PENDING'
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalPendingAmount: { $sum: '$amount' },
-          count: { $sum: 1 }
-        }
-      }
+    const payrollStats = await VendorPayrollPayment.aggregate([
+      { $match: payrollMatch },
+      { $group: { _id: null, totalSalaryPaid: { $sum: '$totalAmount' } } }
     ]);
 
-    // 3. Payment Method Breakdown (Keep this based on Booking model)
+    revenueStats.totalBookingRevenue = revenueStats.totalTransactionValue || 0;
+    revenueStats.totalSalaryPaid = payrollStats[0]?.totalSalaryPaid || 0;
+    // Payment Method Breakdown (Keep this based on Booking model)
     const paymentMethods = await Booking.aggregate([
       {
         $match: {
@@ -135,14 +120,14 @@ const getFinanceOverview = async (req, res) => {
     const thirtyDaysStr = thirtyDaysAgo.toISOString().split('T')[0];
 
     const dailyRevenue = await PlatformEarning.find({ date: { $gte: thirtyDaysStr } })
-      .select('date totalRevenue platformCommission')
+      .select('date totalRevenue')
       .sort({ date: 1 })
       .lean();
 
     let formattedDaily = dailyRevenue.map(d => ({
       _id: d.date,
       revenue: d.totalRevenue,
-      commission: d.platformCommission
+      adminRevenue: d.totalRevenue
     }));
 
     if (formattedDaily.length === 0) {
@@ -157,7 +142,7 @@ const getFinanceOverview = async (req, res) => {
           $group: {
             _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
             revenue: { $sum: '$finalAmount' },
-            commission: { $sum: { $multiply: ['$finalAmount', 0.2] } }
+            adminRevenue: { $sum: '$finalAmount' }
           }
         },
         { $sort: { _id: 1 } }
@@ -169,7 +154,6 @@ const getFinanceOverview = async (req, res) => {
       success: true,
       data: {
         revenue: revenueStats,
-        pendingSettlements: pendingSettlements[0] || { totalPendingAmount: 0, count: 0 },
         paymentMethods,
         dailyRevenue: formattedDaily
       }
@@ -230,8 +214,7 @@ const getPaymentTransactions = async (req, res) => {
         customer: b.userId?.name || 'Guest',
         vendor: b.vendorId?.businessName || 'Unassigned',
         amount: bill?.grandTotal || b.finalAmount || 0,
-        platformFee: bill?.companyRevenue || 0,
-        vendorEarnings: 0,
+
         tax: bill?.totalGST || 0,
         paymentMethod: b.paymentMethod || 'N/A',
         paymentStatus: b.paymentStatus || 'N/A',
@@ -243,11 +226,9 @@ const getPaymentTransactions = async (req, res) => {
     // Calculate totals matching exactly what is mapped above
     const totalsResult = reportData.reduce((acc, row) => {
       acc.totalAmount += row.amount;
-      acc.totalCommission += row.platformFee;
-      acc.totalVendorEarnings += row.vendorEarnings;
       acc.totalTax += row.tax;
       return acc;
-    }, { totalAmount: 0, totalCommission: 0, totalVendorEarnings: 0, totalTax: 0 });
+    }, { totalAmount: 0, totalTax: 0 });
 
     if (format === 'csv') {
       return sendCSV(res, reportData, 'payment_transactions');
@@ -380,7 +361,7 @@ const getGSTRReport = async (req, res) => {
 
 /**
  * Get Cash Collected Report (formerly COD Reconciliation)
- * Track Cash Collected by Vendor vs Commission Owed
+ * Track customer cash collected by vendors for operational reconciliation
  */
 const getCODReport = async (req, res) => {
   try {
@@ -428,22 +409,10 @@ const getCODReport = async (req, res) => {
           }
         }
       ]);
-
-      // Get company revenue from VendorBills for these cash bookings
-      const vendorBillStats = await VendorBill.aggregate([
-        { $match: { vendorId: v._id, status: 'paid' } },
-        {
-          $group: {
-            _id: null,
-            platformCommission: { $sum: '$companyRevenue' }
-          }
-        }
-      ]);
-
       const cashData = cashBookings[0] || { totalCashCollected: 0, count: 0 };
-      const billData = vendorBillStats[0] || { platformCommission: 0 };
 
-      // Outstanding dues = Commission they owe platform (if negative wallet, they owe)
+
+      // Outstanding cash dues from vendor-collected bookings
       const outstandingDues = v.walletBalance < 0 ? Math.abs(v.walletBalance) : 0;
       const riskLevel = outstandingDues > 5000 ? 'HIGH' : (outstandingDues > 1000 ? 'MEDIUM' : 'LOW');
 
@@ -451,7 +420,6 @@ const getCODReport = async (req, res) => {
         vendorName: v.businessName || 'Unknown',
         phone: v.phone,
         totalCashCollected: cashData.totalCashCollected,
-        platformCommissionDue: billData.platformCommission,
         cashBookingCount: cashData.count,
         walletBalance: v.walletBalance, // Current live wallet status
         outstandingDues,
@@ -542,7 +510,7 @@ const getRevenueBreakdown = async (req, res) => {
         $group: {
           _id: '$service.title',
           revenue: { $sum: '$grandTotal' },
-          commission: { $sum: '$companyRevenue' },
+          adminRevenue: { $sum: '$grandTotal' },
           count: { $sum: 1 }
         }
       },
@@ -570,7 +538,7 @@ const getRevenueBreakdown = async (req, res) => {
         $group: {
           _id: '$booking.paymentMethod',
           revenue: { $sum: '$grandTotal' },
-          commission: { $sum: '$companyRevenue' },
+          adminRevenue: { $sum: '$grandTotal' },
           count: { $sum: 1 }
         }
       }
@@ -597,7 +565,7 @@ const getRevenueBreakdown = async (req, res) => {
         $group: {
           _id: '$booking.address.city',
           revenue: { $sum: '$grandTotal' },
-          commission: { $sum: '$companyRevenue' },
+          adminRevenue: { $sum: '$grandTotal' },
           count: { $sum: 1 }
         }
       },
