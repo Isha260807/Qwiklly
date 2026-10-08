@@ -109,7 +109,6 @@ const AdminRevenue = () => {
       case 'platform_fee': return 'text-purple-600';
       case 'convenience_fee': return 'text-blue-600';
       case 'gst': return 'text-indigo-600';
-      case 'tds_deduction': return 'text-amber-600';
       case 'refund': return 'text-red-600';
       case 'penalty': return 'text-orange-600';
       default: return 'text-gray-700';
@@ -240,7 +239,6 @@ const AdminRevenue = () => {
             <option value="convenience_fee">Convenience Fee</option>
             <option value="gst">GST</option>
             <option value="penalty">Penalty</option>
-            <option value="tds_deduction">TDS Deduction</option>
             <option value="refund">Refund</option>
           </select>
 

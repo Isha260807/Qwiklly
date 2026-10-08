@@ -4,6 +4,7 @@ const User = require('../../models/User');
 const UserService = require('../../models/UserService');
 const VendorBill = require('../../models/VendorBill');
 const PlatformEarning = require('../../models/PlatformEarning');
+const VendorSalaryEarning = require('../../models/VendorSalaryEarning');
 const { BOOKING_STATUS, PAYMENT_STATUS, VENDOR_STATUS } = require('../../utils/constants');
 
 /**
@@ -198,26 +199,40 @@ exports.getVendorReport = async (req, res) => {
       growthRate = 100;
     }
 
-    // Top vendors by revenue & bookings
-    const topVendors = await Booking.aggregate([
+    const bookingCounts = await Booking.aggregate([
       { $match: { vendorId: { $ne: null } } },
+      { $group: { _id: '$vendorId', bookingsCount: { $sum: 1 } } }
+    ]);
+    const bookingCountByVendor = new Map(bookingCounts.map((item) => [String(item._id), item.bookingsCount]));
+
+    // Salary-based vendor earnings replace the old booking revenue/share metric.
+    const salaryByVendor = await VendorSalaryEarning.aggregate([
+      { $match: { status: { $ne: 'reversed' } } },
       {
         $group: {
           _id: '$vendorId',
-          totalRevenue: {
-            $sum: {
-              $cond: [
-                { $in: ['$status', [BOOKING_STATUS.COMPLETED, 'completed', 'COMPLETED', 'work_done', 'final_settlement', 'paid']] },
-                { $ifNull: ['$finalAmount', '$basePrice', 0] },
-                0
-              ]
-            }
+          totalSalaryEarning: { $sum: '$amount' },
+          pendingSalaryEarning: {
+            $sum: { $cond: [{ $in: ['$status', ['accrued', 'pending_rate']] }, '$amount', 0] }
           },
-          bookingsCount: { $sum: 1 }
+          paidSalaryEarning: {
+            $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$amount', 0] }
+          },
+          bookingEarning: {
+            $sum: { $cond: [{ $eq: ['$type', 'booking_earning'] }, '$amount', 0] }
+          },
+          salaryAmount: {
+            $sum: { $cond: [{ $eq: ['$type', 'salary'] }, '$amount', 0] }
+          },
+          bonusAmount: {
+            $sum: { $cond: [{ $eq: ['$type', 'bonus'] }, '$amount', 0] }
+          },
+          incentiveAmount: {
+            $sum: { $cond: [{ $eq: ['$type', 'incentive'] }, '$amount', 0] }
+          }
         }
       },
-      { $sort: { totalRevenue: -1, bookingsCount: -1 } },
-      { $limit: 10 },
+      { $sort: { totalSalaryEarning: -1 } },
       {
         $lookup: {
           from: 'vendors',
@@ -233,11 +248,41 @@ exports.getVendorReport = async (req, res) => {
           name: { $ifNull: ['$vendor.name', 'Partner'] },
           phone: { $ifNull: ['$vendor.phone', ''] },
           service: { $ifNull: ['$vendor.service', []] },
-          totalRevenue: 1,
-          bookingsCount: 1
+          totalSalaryEarning: 1,
+          pendingSalaryEarning: 1,
+          paidSalaryEarning: 1,
+          bookingEarning: 1,
+          salaryAmount: 1,
+          bonusAmount: 1,
+          incentiveAmount: 1
         }
       }
-    ]);
+    ]).then((items) => items.map((item) => ({
+      ...item,
+      bookingsCount: bookingCountByVendor.get(String(item._id)) || 0
+    })));
+
+    const topVendors = salaryByVendor.slice(0, 10).map((item) => ({
+      ...item,
+      totalRevenue: item.totalSalaryEarning || 0
+    }));
+    const salaryTotals = salaryByVendor.reduce((totals, item) => ({
+      totalEarning: totals.totalEarning + (item.totalSalaryEarning || 0),
+      pendingEarning: totals.pendingEarning + (item.pendingSalaryEarning || 0),
+      paidEarning: totals.paidEarning + (item.paidSalaryEarning || 0),
+      bookingEarning: totals.bookingEarning + (item.bookingEarning || 0),
+      salaryAmount: totals.salaryAmount + (item.salaryAmount || 0),
+      bonusAmount: totals.bonusAmount + (item.bonusAmount || 0),
+      incentiveAmount: totals.incentiveAmount + (item.incentiveAmount || 0)
+    }), {
+      totalEarning: 0,
+      pendingEarning: 0,
+      paidEarning: 0,
+      bookingEarning: 0,
+      salaryAmount: 0,
+      bonusAmount: 0,
+      incentiveAmount: 0
+    });
 
     // Vendor status distribution
     const statusDistributionRaw = await Vendor.aggregate([
@@ -301,6 +346,7 @@ exports.getVendorReport = async (req, res) => {
         totalBookings,
         growth: `${growthRate > 0 ? '+' : ''}${growthRate}%`,
         topVendors,
+        salarySummary: salaryTotals,
         statusDistribution,
         categoryDistribution,
         monthlyTrend,

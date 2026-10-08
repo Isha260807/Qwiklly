@@ -379,97 +379,6 @@ const getGSTRReport = async (req, res) => {
 };
 
 /**
- * Get TDS Report
- * Uses global TDS Settings from Admin
- */
-const getTDSReport = async (req, res) => {
-  try {
-    const { startDate, endDate, format = 'json' } = req.query;
-
-    // Fetch TDS setting
-    const settings = await Settings.findOne({ type: 'global' });
-    const tdsRate = settings?.tdsPercentage || 1; // Default 1% if not set
-
-    const query = {
-      status: { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'COMPLETED', 'work_done', 'WORK_DONE', 'paid', 'PAID'] },
-      vendorId: { $ne: null }
-    };
-
-    if (startDate && endDate) {
-      query.$or = [
-        {
-          completedAt: {
-            $gte: new Date(startDate),
-            $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
-          }
-        },
-        {
-          createdAt: {
-            $gte: new Date(startDate),
-            $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
-          }
-        }
-      ];
-    }
-
-    // Group by Vendor for the period
-    const vendorStats = await Booking.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: '$vendorId',
-          grossSales: { $sum: '$finalAmount' },
-          bookingCount: { $sum: 1 }
-        }
-      },
-      {
-        $lookup: {
-          from: 'vendors',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'vendor'
-        }
-      },
-      { $unwind: '$vendor' },
-      {
-        $project: {
-          vendorName: '$vendor.businessName',
-          vendorPhone: '$vendor.phone',
-          panNumber: { $ifNull: ['$vendor.panNumber', 'Not Provided'] },
-          grossSales: 1,
-          tdsRate: { $literal: tdsRate },
-          tdsAmount: { $multiply: ['$grossSales', (tdsRate / 100)] }, // Use Admin Setting Rate
-          bookingCount: 1
-        }
-      },
-      { $sort: { grossSales: -1 } }
-    ]);
-
-    // Summary
-    const summary = vendorStats.reduce((acc, row) => {
-      acc.totalGrossSales += row.grossSales;
-      acc.totalTDS += row.tdsAmount;
-      acc.vendorCount++;
-      return acc;
-    }, { totalGrossSales: 0, totalTDS: 0, vendorCount: 0 });
-
-    if (format === 'csv') {
-      return sendCSV(res, vendorStats, 'tds_report_admin');
-    }
-
-    res.status(200).json({
-      success: true,
-      data: vendorStats,
-      summary
-    });
-
-  } catch (error) {
-    console.error('TDS report error:', error);
-    res.status(500).json({ success: false, message: 'Failed to generate TDS report' });
-  }
-};
-
-/**
  * Get Cash Collected Report (formerly COD Reconciliation)
  * Track Cash Collected by Vendor vs Commission Owed
  */
@@ -747,7 +656,6 @@ module.exports = {
   getFinanceOverview,
   getPaymentTransactions,
   getGSTRReport,
-  getTDSReport,
   getCODReport,
   getRevenueBreakdown
 };

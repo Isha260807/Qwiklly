@@ -5,7 +5,6 @@ const { isAdmin } = require('../../middleware/roleMiddleware');
 const {
   getFinanceOverview,
   getGSTRReport,
-  getTDSReport,
   getCODReport,
   getPaymentTransactions,
   getRevenueBreakdown
@@ -20,7 +19,6 @@ router.get('/payments/overview', getFinanceOverview);
 // Payment Reports - /api/admin/payments/reports
 router.get('/payments/reports', getPaymentTransactions);
 router.get('/payments/reports/gst', getGSTRReport);
-router.get('/payments/reports/tds', getTDSReport);
 router.get('/payments/reports/cod', getCODReport);
 router.get('/payments/reports/revenue-breakdown', getRevenueBreakdown);
 

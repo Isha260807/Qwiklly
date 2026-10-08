@@ -139,7 +139,6 @@ const VendorPayments = () => {
       case 'debit': return 'text-orange-600 bg-orange-50 border-orange-100';
       case 'withdrawal': return 'text-red-600 bg-red-50 border-red-100';
       case 'cash_collected': return 'text-amber-600 bg-amber-50 border-amber-100';
-      case 'tds_deduction': return 'text-pink-600 bg-pink-50 border-pink-100';
       case 'settlement': return 'text-blue-600 bg-blue-50 border-blue-100';
       case 'platform_fee': return 'text-rose-600 bg-rose-50 border-rose-100';
       default: return 'text-gray-600 bg-gray-50 border-gray-100';
@@ -271,7 +270,6 @@ const VendorPayments = () => {
             <option value="cash_collected">Cash Collected</option>
             <option value="settlement">Settlement</option>
             <option value="withdrawal">Withdrawal</option>
-            <option value="tds_deduction">TDS Deduction</option>
             <option value="platform_fee">Platform Charge</option>
           </select>
 
@@ -333,7 +331,7 @@ const VendorPayments = () => {
                     </td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${getTypeColor(tx.type)}`}>
-                        {tx.type === 'tds_deduction' ? 'TDS Deduction' : tx.type.replace('_', ' ')}
+                        {tx.type.replace('_', ' ')}
                       </span>
                     </td>
                     <td className="py-3 px-4">

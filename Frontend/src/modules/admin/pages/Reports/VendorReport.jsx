@@ -78,7 +78,7 @@ const VendorReport = () => {
             <FiBriefcase className="text-emerald-600 w-4 h-4" />
             Vendor Analytics & Partner Performance
           </h2>
-          <p className="text-[11px] text-gray-400 mt-0.5">Top-performing partners, onboarding status, and revenue generation</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">Top salary-earning partners, onboarding status, and payroll performance</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -150,15 +150,15 @@ const VendorReport = () => {
 
       {/* Main Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Top Vendors by Revenue Bar Chart */}
+        {/* Top Vendors by Salary Earning Bar Chart */}
         <div className="bg-white rounded-xl p-4 shadow-xs border border-gray-100 lg:col-span-2">
           <div className="flex justify-between items-center mb-3">
             <div>
               <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
                 <FiTrendingUp className="text-primary-600" />
-                Top Partners by Revenue Generated
+                Top Partners by Salary Earning
               </h3>
-              <p className="text-[10px] text-gray-400">Total gross earnings per vendor</p>
+              <p className="text-[10px] text-gray-400">Salary ledger earning per partner</p>
             </div>
           </div>
 
@@ -173,8 +173,8 @@ const VendorReport = () => {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                   <XAxis dataKey="businessName" axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 10, fontWeight: 600 }} dy={6} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748B', fontSize: 10, fontWeight: 600 }} tickFormatter={(v) => `₹${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
-                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '11px' }} formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, 'Revenue']} />
-                  <Bar dataKey="totalRevenue" name="Revenue" fill="#2874F0" radius={[4, 4, 0, 0]} maxBarSize={36}>
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #E2E8F0', fontSize: '11px' }} formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, 'Salary earning']} />
+                  <Bar dataKey="totalSalaryEarning" name="Salary earning" fill="#2874F0" radius={[4, 4, 0, 0]} maxBarSize={36}>
                     {(data?.topVendors || []).map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}

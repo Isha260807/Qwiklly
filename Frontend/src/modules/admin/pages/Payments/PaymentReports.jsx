@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   FiFileText,
   FiDownload,
@@ -9,11 +9,7 @@ import {
   FiAlertTriangle,
   FiPercent,
   FiCreditCard,
-  FiUsers,
-  FiRefreshCw,
-  FiChevronDown,
-  FiX,
-  FiCheck
+  FiRefreshCw
 } from 'react-icons/fi';
 import api from '../../../../services/api';
 import toast from 'react-hot-toast';
@@ -223,8 +219,6 @@ const PaymentReports = () => {
   const fetchReportData = async () => {
     try {
       setReportLoading(true);
-      const token = localStorage.getItem('adminToken') || sessionStorage.getItem('adminToken');
-
       let endpoint = '';
       switch (activeReport) {
         case 'transactions':
@@ -232,9 +226,6 @@ const PaymentReports = () => {
           break;
         case 'gst':
           endpoint = `/admin/payments/reports/gst?startDate=${startDate}&endDate=${endDate}`;
-          break;
-        case 'tds':
-          endpoint = `/admin/payments/reports/tds?startDate=${startDate}&endDate=${endDate}`;
           break;
         case 'cod':
           endpoint = `/admin/payments/reports/cod`;
@@ -261,8 +252,6 @@ const PaymentReports = () => {
   const downloadReport = async (reportType) => {
     try {
       setDownloadingReport(reportType);
-      const token = localStorage.getItem('adminToken') || sessionStorage.getItem('adminToken');
-
       let endpoint = '';
       switch (reportType) {
         case 'transactions':
@@ -270,9 +259,6 @@ const PaymentReports = () => {
           break;
         case 'gst':
           endpoint = `/admin/payments/reports/gst?startDate=${startDate}&endDate=${endDate}&format=csv`;
-          break;
-        case 'tds':
-          endpoint = `/admin/payments/reports/tds?startDate=${startDate}&endDate=${endDate}&format=csv`;
           break;
         case 'cod':
           endpoint = `/admin/payments/reports/cod?format=csv`;
@@ -323,14 +309,6 @@ const PaymentReports = () => {
       status: 'available'
     },
     {
-      id: 'tds',
-      title: 'TDS Report (194-O)',
-      description: 'E-commerce TDS liability report based on Admin Settings rate (Default 1%).',
-      icon: FiUsers,
-      color: 'purple',
-      status: 'available'
-    },
-    {
       id: 'cod',
       title: 'Cash Collected by Vendor',
       description: 'Track cash collected by vendors vs commission owed. Identify high-risk vendors.',
@@ -374,15 +352,6 @@ const PaymentReports = () => {
           { key: 'totalTax', header: 'Total Tax', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` },
           { key: 'invoiceValue', header: 'Total', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` }
         ];
-      case 'tds':
-        return [
-          { key: 'vendorName', header: 'Vendor Name' },
-          { key: 'panNumber', header: 'PAN Number' },
-          { key: 'grossSales', header: 'Gross Sales', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` },
-          { key: 'tdsRate', header: 'Rate (%)', render: (val) => `${val}%` },
-          { key: 'tdsAmount', header: 'TDS Deducted', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` },
-          { key: 'bookingCount', header: 'Bookings' }
-        ];
       case 'cod':
         return [
           { key: 'vendorName', header: 'Vendor Name' },
@@ -416,7 +385,7 @@ const PaymentReports = () => {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6"
     >
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Row 1: Revenue Core */}
         <StatsCard
           title="Total Revenue"
@@ -440,13 +409,6 @@ const PaymentReports = () => {
           color="purple"
         />
         <StatsCard
-          title="TDS Deducted"
-          value={`₹${(overview?.revenue?.totalTDSCollected || 0).toLocaleString('en-IN')}`}
-          subtitle="From Payouts"
-          icon={FiPercent}
-          color="indigo"
-        />
-        <StatsCard
           title="Vendor Earnings"
           value={`₹${(overview?.revenue?.totalVendorEarnings || 0).toLocaleString('en-IN')}`}
           subtitle="Total Vendors Gross"
@@ -454,35 +416,6 @@ const PaymentReports = () => {
           color="teal"
         />
 
-        {/* Row 2: Settlements & Payouts */}
-        <StatsCard
-          title="Settlements Received"
-          value={`₹${(overview?.revenue?.totalSettlementReceived || 0).toLocaleString('en-IN')}`}
-          subtitle="Vendors paid Platform"
-          icon={FiTrendingUp}
-          color="emerald"
-        />
-        <StatsCard
-          title="Pending Settlements (Owed)"
-          value={`₹${(overview?.revenue?.totalPendingSettlement || 0).toLocaleString('en-IN')}`}
-          subtitle="Vendors negative balance"
-          icon={FiAlertTriangle}
-          color="orange"
-        />
-        <StatsCard
-          title="Payouts Completed"
-          value={`₹${(overview?.revenue?.totalAmountPaidToVendors || 0).toLocaleString('en-IN')}`}
-          subtitle="Platform paid Vendors"
-          icon={FiCheck}
-          color="blue"
-        />
-        <StatsCard
-          title="Pending Payouts"
-          value={`₹${(overview?.revenue?.totalPendingPayout || 0).toLocaleString('en-IN')}`}
-          subtitle="Vendors awaiting withdrawal"
-          icon={FiAlertTriangle}
-          color="red"
-        />
       </div>
 
       {/* Quick Download Cards */}
@@ -516,7 +449,7 @@ const PaymentReports = () => {
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {reports.map((report) => (
             <ReportCard
               key={report.id}
@@ -559,13 +492,6 @@ const PaymentReports = () => {
                   <div><span className="text-gray-500">CGST:</span> <span className="font-semibold">₹{(reportSummary.totalCGST || 0).toLocaleString('en-IN')}</span></div>
                   <div><span className="text-gray-500">SGST:</span> <span className="font-semibold">₹{(reportSummary.totalSGST || 0).toLocaleString('en-IN')}</span></div>
                   <div><span className="text-gray-500">Total Tax:</span> <span className="font-semibold text-green-600">₹{(reportSummary.totalTax || 0).toLocaleString('en-IN')}</span></div>
-                </>
-              )}
-              {activeReport === 'tds' && (
-                <>
-                  <div><span className="text-gray-500">Total Gross Sales:</span> <span className="font-semibold">₹{(reportSummary.totalGrossSales || 0).toLocaleString('en-IN')}</span></div>
-                  <div><span className="text-gray-500">Total TDS Liability:</span> <span className="font-semibold text-purple-600">₹{(reportSummary.totalTDS || 0).toFixed(2)}</span></div>
-                  <div><span className="text-gray-500">Vendors:</span> <span className="font-semibold">{reportSummary.vendorCount || 0}</span></div>
                 </>
               )}
               {activeReport === 'cod' && (
@@ -626,7 +552,6 @@ const PaymentReports = () => {
             <p className="font-semibold text-amber-800">Indian Tax Compliance Notes</p>
             <ul className="mt-2 text-amber-700 space-y-1">
               <li>• <strong>GSTR-1</strong>: Monthly sales return to be filed by the 11th of the following month.</li>
-              <li>• <strong>TDS u/s 194-O</strong>: 1% TDS on vendor gross sales (if annual sales exceed ₹5 Lakhs). Deposit by 7th of next month.</li>
               <li>• <strong>HSN/SAC Code 9988</strong>: Used for "Other Professional, Technical and Business Services".</li>
               <li>• This report is for reference. Please consult your CA for official filing.</li>
             </ul>

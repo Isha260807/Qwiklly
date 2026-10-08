@@ -75,6 +75,7 @@ const VendorAnalytics = () => {
   const totalVendors = data.totalVendors || 0;
   const approvedCount = data.approvedVendors || 0;
   const activeRate = totalVendors > 0 ? Math.round((approvedCount / totalVendors) * 100) : 0;
+  const salarySummary = data.salarySummary || {};
 
   return (
     <motion.div
@@ -152,7 +153,7 @@ const VendorAnalytics = () => {
         </div>
       </div>
 
-      {/* Row 1: Approval Status Donut & Top Performing Partners */}
+      {/* Row 1: Approval Status Donut & Top Salary-Earning Partners */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Status Distribution */}
         <CardShell icon={FiPieChart} title="Partner Approval Breakdown">
@@ -185,7 +186,7 @@ const VendorAnalytics = () => {
         </CardShell>
 
         {/* Top Performers */}
-        <CardShell icon={FiTrendingUp} title="Top Performing Partners">
+        <CardShell icon={FiTrendingUp} title={'Top Salary-Earning Partners'}>
           <div className="space-y-3 pt-2">
             {data.topVendors && data.topVendors.length > 0 ? (
               data.topVendors.map((vendor, idx) => (
@@ -203,7 +204,7 @@ const VendorAnalytics = () => {
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0 ml-3">
-                    <span className="font-bold text-sm text-gray-900">{formatCurrency(vendor.totalRevenue || 0)}</span>
+                    <span className="font-bold text-sm text-gray-900">{formatCurrency(vendor.totalSalaryEarning || 0)}</span>
                     <p className="text-xs text-teal-600 font-semibold">{vendor.bookingsCount} jobs</p>
                   </div>
                 </div>
@@ -214,6 +215,24 @@ const VendorAnalytics = () => {
           </div>
         </CardShell>
       </div>
+
+      {/* Salary Earnings Overview */}
+      <CardShell icon={FiDollarSign} title={'Salary Earnings Overview'}>
+        <div className={'grid grid-cols-2 lg:grid-cols-4 gap-3 pt-2'}>
+          {[
+            ['Total salary earning', salarySummary.totalEarning],
+            ['Pending payment', salarySummary.pendingEarning],
+            ['Paid salary', salarySummary.paidEarning],
+            ['Bonus + incentive', (salarySummary.bonusAmount || 0) + (salarySummary.incentiveAmount || 0)]
+          ].map(([label, amount]) => (
+            <div key={label} className={'rounded-xl border border-gray-100 bg-gray-50 p-3'}>
+              <p className={'text-[10px] uppercase tracking-wide text-gray-500 font-semibold'}>{label}</p>
+              <p className={'text-lg font-extrabold text-emerald-700 mt-1'}>{formatCurrency(amount || 0)}</p>
+            </div>
+          ))}
+        </div>
+        <p className={'text-[11px] text-gray-500 mt-3'}>Partner earnings are calculated from completed booking duration and admin payroll credits. Booking revenue sharing is not used.</p>
+      </CardShell>
 
       {/* Row 2: Registration Trend */}
       <CardShell icon={FiTrendingUp} title="Partner Onboarding Timeline (Past 6 Months)">
