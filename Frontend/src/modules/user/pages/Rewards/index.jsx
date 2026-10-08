@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 
 import { FiCopy, FiArrowLeft, FiGift } from 'react-icons/fi';
-import { FaWhatsapp, FaFacebookMessenger } from 'react-icons/fa';
-import { themeColors } from '../../../../theme';
+import { FaWhatsapp } from 'react-icons/fa';
 import NotificationBell from '../../components/common/NotificationBell';
 import referralService from '../../../../services/referralService';
 
@@ -37,10 +36,6 @@ const Rewards = () => {
     window.open(`https://wa.me/?text=${encodeURIComponent(text + ' ' + shareUrl)}`, '_blank');
   };
 
-  const handleShareMessenger = () => {
-    if (!shareUrl) return toast.error('Referral link is not ready yet');
-    window.open(`https://www.facebook.com/dialog/send?link=${encodeURIComponent(shareUrl)}&app_id=your-app-id`, '_blank');
-  };
   return (
     <div className="min-h-screen bg-transparent pb-12">
       {/* Theme Gradient Header */}
@@ -112,16 +107,6 @@ const Rewards = () => {
                   <span className="text-[10px] text-gray-700">Whatsapp</span>
                 </button>
 
-                {/* Messenger */}
-                <button
-                  onClick={handleShareMessenger}
-                  className="flex flex-col items-center gap-1.5"
-                >
-                  <div className="w-12 h-12 bg-[#0084FF] rounded-full flex items-center justify-center">
-                    <FaFacebookMessenger className="w-6 h-6 text-white" />
-                  </div>
-                  <span className="text-[10px] text-gray-700">Messenger</span>
-                </button>
 
                 {/* Copy Link */}
                 <button

@@ -66,6 +66,7 @@ const createBooking = async (req, res) => {
       timeSlot,
       userNotes,
       paymentMethod,
+      useWalletPayment,
       amount,
       isPlusAdded,
       bookedItems, // Array of specific items from cart
@@ -563,6 +564,7 @@ const createBooking = async (req, res) => {
         vendorId: v._id,
         distance: null
       })),
+      useWalletPayment: Boolean(useWalletPayment && finalAmount > 0 && !pricing.isFreeUnderPlan),
       paymentMethod: paymentMethod || null,
       status: bookingStatus,
       assignedAt: assignedSlotVendor ? new Date() : null,
@@ -655,6 +657,7 @@ const createBooking = async (req, res) => {
       data: {
         _id: booking._id,
         bookingNumber: booking.bookingNumber,
+        useWalletPayment: booking.useWalletPayment,
         status: booking.status,
         paymentStatus: booking.paymentStatus,
         vendorId: booking.vendorId || null,

@@ -14,10 +14,12 @@ import {
   FiLoader,
   FiArrowLeft,
   FiBell,
-  FiXCircle
+  FiXCircle,
 } from 'react-icons/fi';
 import { bookingService } from '../../../../services/bookingService';
+import { MdAccountBalanceWallet } from 'react-icons/md';
 import { paymentService } from '../../../../services/paymentService';
+import { walletService } from '../../../../services/walletService';
 import NotificationBell from '../../components/common/NotificationBell';
 import ConfirmDialog from '../../../../components/common/ConfirmDialog';
 
@@ -102,13 +104,21 @@ const BookingConfirmation = () => {
   ); // Normal SLOT bookings are already assigned at creation.
   const [confirmDialog, setConfirmDialog] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [useWallet, setUseWallet] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(true);
+  const [paymentBreakdown, setPaymentBreakdown] = useState(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
 
   const handlePayNow = async () => {
     if (paying || !booking) return;
+    const bookingId = booking._id || booking.id;
+    const totalAmount = Number(booking.finalAmount || 0);
+
     try {
       setPaying(true);
-      toast.loading('Opening secure payment gateway...');
-      const orderResponse = await paymentService.createOrder(booking._id || booking.id);
+      toast.loading(useWallet ? 'Calculating wallet discount...' : 'Opening secure payment gateway...');
+      const orderResponse = await paymentService.createOrder(bookingId, useWallet);
       toast.dismiss();
 
       if (!orderResponse.success) {
@@ -117,7 +127,35 @@ const BookingConfirmation = () => {
         return;
       }
 
-      const razorpayKey = orderResponse.data?.key || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_8sYbzHWidwe5Zw';
+      const paymentData = orderResponse.data || {};
+      if (paymentData.onlineAmount !== undefined || paymentData.walletAmount !== undefined) setPaymentBreakdown({ totalAmount: Number(paymentData.totalAmount ?? totalAmount), walletAmount: Number(paymentData.walletAmount || 0), onlineAmount: Number(paymentData.onlineAmount ?? paymentData.amount ?? 0), walletBalance: Number(paymentData.walletBalance ?? walletBalance) });
+
+      // Wallet covers the whole booking amount: complete it without Razorpay.
+      if (paymentData.requiresWalletPayment || Number(paymentData.amount || 0) <= 0) {
+        toast.loading('Applying wallet balance...');
+        const walletResponse = await paymentService.processWalletPayment(bookingId);
+        toast.dismiss();
+
+        if (!walletResponse.success) {
+          toast.error(walletResponse.message || 'Wallet payment failed');
+          setPaying(false);
+          return;
+        }
+
+        setWalletBalance(Number(walletResponse.data?.remainingBalance || 0));
+        setBooking(prev => prev ? {
+          ...prev,
+          paymentStatus: 'success',
+          paymentMethod: 'wallet',
+          walletAmount: totalAmount,
+          onlineAmount: 0
+        } : prev);
+        toast.success('Wallet payment successful!');
+        setPaying(false);
+        return;
+      }
+
+      const razorpayKey = paymentData.key || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_8sYbzHWidwe5Zw';
       if (!window.Razorpay || !razorpayKey) {
         toast.error('Payment gateway is not available right now. Please try again.');
         setPaying(false);
@@ -126,9 +164,9 @@ const BookingConfirmation = () => {
 
       const options = {
         key: razorpayKey,
-        amount: orderResponse.data.amount * 100,
-        currency: orderResponse.data.currency || 'INR',
-        order_id: orderResponse.data.orderId,
+        amount: Number(paymentData.amount) * 100,
+        currency: paymentData.currency || 'INR',
+        order_id: paymentData.orderId,
         name: 'Qwiklly',
         description: `Booking #${booking.bookingNumber || ''}`,
         handler: async function (response) {
@@ -142,12 +180,14 @@ const BookingConfirmation = () => {
             toast.dismiss();
 
             if (verifyResponse.success) {
+              const refreshed = await bookingService.getById(bookingId);
+              if (refreshed.success) setBooking(refreshed.data);
+              setWalletBalance(prev => Math.max(0, prev - Number(paymentData.walletAmount || 0)));
               toast.success('Payment successful! You can now start your service journey.');
-              setBooking(prev => prev ? { ...prev, paymentStatus: 'success' } : prev);
             } else {
               toast.error(verifyResponse.message || 'Payment verification failed');
             }
-          } catch (error) {
+          } catch {
             toast.dismiss();
             toast.error('Failed to verify payment');
           } finally {
@@ -172,12 +212,56 @@ const BookingConfirmation = () => {
       razorpay.open();
     } catch (error) {
       toast.dismiss();
-      toast.error('Something went wrong. Please try again.');
+      toast.error(error?.response?.data?.message || 'Something went wrong. Please try again.');
       setPaying(false);
     }
   };
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadWalletBalance = async () => {
+      try {
+        const response = await walletService.getBalance();
+        if (!cancelled && response.success) {
+          setWalletBalance(Number(response.data?.balance || 0));
+        }
+      } catch {
+        // Wallet is optional; the normal online payment flow remains available.
+        if (!cancelled) setWalletBalance(0);
+      } finally {
+        if (!cancelled) setWalletLoading(false);
+      }
+    };
+
+    loadWalletBalance();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const paymentBookingId = booking?._id || booking?.id;
+    if (!paymentBookingId || !booking?.vendorId) return undefined;
+    let cancelled = false;
+    const loadPaymentBreakdown = async () => {
+      setBreakdownLoading(true);
+      try {
+        const response = await paymentService.getBreakdown(paymentBookingId, useWallet);
+        if (!cancelled && response.success) setPaymentBreakdown(response.data);
+      } catch {
+        if (!cancelled) setPaymentBreakdown(null);
+      } finally {
+        if (!cancelled) setBreakdownLoading(false);
+      }
+    };
+    loadPaymentBreakdown();
+    return () => {
+      cancelled = true;
+    };
+  }, [booking?._id, booking?.id, booking?.vendorId, useWallet]);
+  useEffect(() => {
+
     const loadBooking = async () => {
       try {
         setLoading(true);
@@ -190,6 +274,7 @@ const BookingConfirmation = () => {
             if (!data.visitingCharges && !data.visitationFee) data.visitingCharges = 0;
           }
           setBooking(data);
+          setUseWallet(Boolean(data.useWalletPayment));
 
           // Check if vendor is already assigned
           const currentStatus = data.status?.toLowerCase();
@@ -200,7 +285,7 @@ const BookingConfirmation = () => {
           toast.error(response.message || 'Booking not found');
           navigate('/user/my-bookings');
         }
-      } catch (error) {
+      } catch {
         toast.error('Failed to load booking details');
         navigate('/user/my-bookings');
       } finally {
@@ -313,6 +398,11 @@ const BookingConfirmation = () => {
     }
   };
 
+
+  const breakdownReady = Boolean(paymentBreakdown);
+  const totalPayable = Number(paymentBreakdown?.totalAmount ?? booking.finalAmount ?? 0);
+  const walletApplicableAmount = breakdownReady ? Number(paymentBreakdown.walletAmount || 0) : 0;
+  const onlinePayableAmount = breakdownReady ? Number(paymentBreakdown.onlineAmount || 0) : 0;
   return (
     <div className="min-h-screen pb-20 relative bg-white">
       {/* Refined Brand Mesh Gradient Background */}
@@ -445,18 +535,31 @@ const BookingConfirmation = () => {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-3">
+                <div className="space-y-2">
                   <div>
                     <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Amount Payable</p>
                     <p className="text-base font-bold text-gray-900">₹{(booking.finalAmount || 0).toLocaleString('en-IN')}</p>
                   </div>
+                  <label className={`flex items-center justify-between gap-3 mb-2 p-2.5 rounded-lg border ${walletApplicableAmount > 0 ? 'border-emerald-200 bg-emerald-50/60 cursor-pointer' : 'border-gray-100 bg-gray-50'}`}>
+                    <div className="flex items-center gap-2">
+                      <MdAccountBalanceWallet className="w-4 h-4 text-emerald-600" />
+                      <div>
+                        <p className="text-xs font-bold text-gray-900">Use Wallet Balance</p>
+                        <p className="text-[10px] text-gray-500">{walletLoading ? 'Checking wallet...' : `Available: INR ${walletBalance.toLocaleString('en-IN')}`}</p>
+                      </div>
+                    </div>
+                    <input type="checkbox" checked={useWallet} onChange={(event) => setUseWallet(event.target.checked)} disabled={paying || walletLoading || breakdownLoading || !breakdownReady || walletApplicableAmount <= 0} className="w-4 h-4 accent-emerald-600" />
+                  </label>
+                  {useWallet && walletApplicableAmount > 0 && (
+                    <p className="text-[10px] text-emerald-700 mb-2">Wallet applied: INR {walletApplicableAmount.toLocaleString('en-IN')} and Online: INR {onlinePayableAmount.toLocaleString('en-IN')}</p>
+                  )}
                   <button
                     onClick={handlePayNow}
-                    disabled={paying}
+                    disabled={paying || walletLoading || breakdownLoading || !breakdownReady}
                     className="px-4 py-2 rounded-lg font-bold text-white text-xs disabled:opacity-50 active:scale-95 transition-all shadow-xs"
                     style={{ backgroundColor: themeColors.button }}
                   >
-                    {paying ? 'Processing...' : 'Pay Now'}
+                    {breakdownLoading || !breakdownReady ? 'Calculating...' : paying ? 'Processing...' : useWallet && onlinePayableAmount <= 0 ? 'Pay from Wallet' : `Pay INR ${(useWallet ? onlinePayableAmount : totalPayable).toLocaleString('en-IN')}`}
                   </button>
                 </div>
               )}

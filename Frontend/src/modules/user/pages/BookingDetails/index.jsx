@@ -1275,6 +1275,7 @@ const BookingDetails = () => {
                                   {booking.paymentMethod === 'cash collected' ? 'Cash Collected' : 
                                    booking.paymentMethod === 'Qr online' ? 'QR Online' : 
                                    booking.paymentMethod === 'online' ? 'Online Paid' : 
+                                   booking.paymentMethod === 'wallet+online' ? 'Wallet + Online' :
                                    booking.paymentMethod === 'plan_benefit' ? 'Plan Benefit' : 
                                    booking.paymentMethod || 'Online'}
                                 </span>

@@ -232,6 +232,33 @@ const bookingSchema = new mongoose.Schema({
     type: String, // 'wallet', 'razorpay', 'online', 'cash', 'card', 'plan_benefit'
     default: null
   },
+  useWalletPayment: {
+    type: Boolean,
+    default: false
+  },
+  // Payment split details. walletAmount is the amount actually funded by the
+  // user's wallet; pendingWalletAmount is reserved for the current Razorpay
+  // checkout and is consumed only after the online payment is verified.
+  walletAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  onlineAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  pendingWalletAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  razorpayOrderAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   paymentId: {
     type: String,
     default: null

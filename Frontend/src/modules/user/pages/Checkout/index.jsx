@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { FiArrowLeft, FiShoppingCart, FiTrash2, FiMinus, FiPlus, FiPhone, FiHome, FiClock, FiEdit2, FiCheckCircle, FiInfo, FiCreditCard, FiShield, FiCheck } from 'react-icons/fi';
-import { MdStar } from 'react-icons/md';
+import { MdAccountBalanceWallet, MdStar } from 'react-icons/md';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
 import AddressSelectionModal from './components/AddressSelectionModal';
@@ -11,6 +11,7 @@ import VendorSearchModal from './components/VendorSearchModal';
 import CouponSection from './components/CouponSection';
 import { bookingService } from '../../../../services/bookingService';
 import { paymentService } from '../../../../services/paymentService';
+import { walletService } from '../../../../services/walletService';
 import { cartService } from '../../../../services/cartService';
 import { configService } from '../../../../services/configService';
 import api from '../../../../services/api';
@@ -97,6 +98,9 @@ const Checkout = () => {
   const [bookingRequest, setBookingRequest] = useState(null);
   const [searchingVendors, setSearchingVendors] = useState(false);
   const [showVendorModal, setShowVendorModal] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [useWallet, setUseWallet] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState('online'); // 'online' | 'pay_at_home'
 
   const [loading, setLoading] = useState(true);
@@ -146,6 +150,26 @@ const Checkout = () => {
   }, []);
 
   // Load user data and cart
+  useEffect(() => {
+    let cancelled = false;
+    const loadWalletBalance = async () => {
+      try {
+        const response = await walletService.getBalance();
+        if (!cancelled && response.success) {
+          setWalletBalance(Number(response.data?.balance || 0));
+        }
+      } catch {
+        // Wallet is optional; keep the normal online payment flow available.
+        if (!cancelled) setWalletBalance(0);
+      } finally {
+        if (!cancelled) setWalletLoading(false);
+      }
+    };
+    loadWalletBalance();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   useEffect(() => {
     const loadUserData = () => {
       const storedUserData = localStorage.getItem('userData');
@@ -547,6 +571,7 @@ const Checkout = () => {
         },
 
         paymentMethod: 'online',
+        useWalletPayment: Boolean(useWallet && amountToPay > 0),
         bookedItems: bookedItemsData
       });
 
@@ -754,6 +779,7 @@ const Checkout = () => {
         scheduledTime: finalTimeDisplay,
         timeSlot: timeSlotObj,
         paymentMethod: amountToPay === 0 ? 'plan_benefit' : 'online',
+        useWalletPayment: Boolean(useWallet && amountToPay > 0),
         amount: amountToPay,
         basePrice: totalOriginalPrice,
         discount: savings,
@@ -1038,6 +1064,8 @@ const Checkout = () => {
 
   const totalAmount = itemTotal === 0 ? 0 : (taxableAmount + taxesAndFee + finalVisitedFee + finalInstantFee);
   const amountToPay = totalAmount;
+  const walletApplicableAmount = Math.min(walletBalance, amountToPay);
+  const onlinePayableAmount = Math.max(0, amountToPay - (useWallet ? walletApplicableAmount : 0));
 
   // Helper for Free Plan Full Breakdown Display
   const displayTax = totalAmount === 0 ? Math.round((totalOriginalPrice * gstPercentage) / 100) : taxesAndFee;
@@ -1478,6 +1506,33 @@ const Checkout = () => {
               </div>
             </div>
           ) : (
+            <div className="space-y-2">
+            <label className={`flex items-center justify-between gap-2 p-2.5 mb-2 rounded-lg border ${walletApplicableAmount > 0 ? 'bg-amber-50/60 border-amber-200 cursor-pointer' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-white border border-amber-200 flex items-center justify-center shadow-xs shrink-0">
+                  <MdAccountBalanceWallet className="w-4 h-4 text-amber-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900">Use Wallet Balance</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+                    {walletLoading ? 'Checking wallet...' : walletApplicableAmount > 0 ? `Available: INR ${walletBalance.toLocaleString('en-IN')}` : 'No wallet balance available'}
+                  </p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={useWallet}
+                onChange={(event) => setUseWallet(event.target.checked)}
+                disabled={walletLoading || walletApplicableAmount <= 0 || searchingVendors}
+                className="w-4 h-4 accent-amber-600 shrink-0"
+              />
+            </label>
+            {useWallet && walletApplicableAmount > 0 && (
+              <div className="flex items-center justify-between px-2.5 mb-2 text-[10px] font-semibold text-slate-600">
+                <span>Wallet INR {walletApplicableAmount.toLocaleString('en-IN')}</span>
+                <span>Online INR {onlinePayableAmount.toLocaleString('en-IN')}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between p-2.5 bg-emerald-50/40 border border-emerald-400 rounded-lg">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-white border border-emerald-200 flex items-center justify-center shadow-xs">
@@ -1494,6 +1549,7 @@ const Checkout = () => {
               <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
                 <FiCheck className="w-2.5 h-2.5" />
               </div>
+            </div>
             </div>
           )}
         </div>

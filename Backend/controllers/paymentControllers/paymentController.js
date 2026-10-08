@@ -23,7 +23,7 @@ const createPaymentOrder = async (req, res) => {
     }
 
     const userId = req.user.id;
-    const { bookingId } = req.body;
+    const { bookingId, useWallet = false } = req.body;
 
     // Get booking
     const booking = await Booking.findOne({ _id: bookingId, userId });
@@ -51,15 +51,48 @@ const createPaymentOrder = async (req, res) => {
       });
     }
 
+    const user = useWallet ? await User.findById(userId).select('wallet') : null;
+    const walletBalance = Number(user?.wallet?.balance || 0);
+    const totalAmount = Number(booking.finalAmount || 0);
+    const walletAmount = useWallet ? Math.min(walletBalance, totalAmount) : 0;
+    const onlineAmount = Math.max(totalAmount - walletAmount, 0);
+
+    // When the wallet covers the complete bill, no Razorpay order is needed.
+    // The frontend will call the wallet payment endpoint directly.
+    if (onlineAmount <= 0) {
+      booking.pendingWalletAmount = 0;
+      booking.razorpayOrderId = null;
+      booking.razorpayOrderAmount = 0;
+      await booking.save();
+      return res.status(200).json({
+        success: true,
+        message: 'Wallet can cover the complete payment',
+        data: {
+          requiresWalletPayment: true,
+          totalAmount,
+          amount: 0,
+          walletAmount,
+          onlineAmount: 0,
+          bookingId: booking._id
+        }
+      });
+    }
+
     // Reuse an already-created, still-unpaid order instead of minting a new one on
-    // every "Pay Now" click (Razorpay orders stay valid for repeated checkout attempts).
-    if (booking.razorpayOrderId) {
+    // every "Pay Now" click. A new order is created when the wallet choice changes
+    // because the Razorpay amount changes too.
+    if (booking.razorpayOrderId
+      && Number(booking.razorpayOrderAmount || 0) === onlineAmount
+      && Number(booking.pendingWalletAmount || 0) === walletAmount) {
       return res.status(200).json({
         success: true,
         message: 'Payment order already exists',
         data: {
           orderId: booking.razorpayOrderId,
-          amount: booking.finalAmount,
+          totalAmount,
+          amount: onlineAmount,
+          walletAmount,
+          onlineAmount,
           currency: 'INR',
           key: process.env.RAZORPAY_KEY_ID,
           bookingId: booking._id
@@ -68,9 +101,9 @@ const createPaymentOrder = async (req, res) => {
     }
 
     // Create Razorpay order
-    console.log('Creating Razorpay order with amount:', booking.finalAmount);
+    console.log('Creating Razorpay order with amount:', onlineAmount);
     const orderResult = await createOrder(
-      booking.finalAmount,
+      onlineAmount,
       'INR',
       booking.bookingNumber,
       {
@@ -93,6 +126,10 @@ const createPaymentOrder = async (req, res) => {
 
     // Update booking with Razorpay order ID
     booking.razorpayOrderId = orderResult.orderId;
+    booking.razorpayOrderAmount = onlineAmount;
+    booking.pendingWalletAmount = walletAmount;
+    booking.walletAmount = 0;
+    booking.onlineAmount = 0;
     await booking.save();
 
     res.status(200).json({
@@ -100,7 +137,10 @@ const createPaymentOrder = async (req, res) => {
       message: 'Payment order created successfully',
       data: {
         orderId: orderResult.orderId,
+        totalAmount,
         amount: orderResult.amount / 100, // Convert back to rupees
+        walletAmount,
+        onlineAmount,
         currency: orderResult.currency,
         key: process.env.RAZORPAY_KEY_ID,
         bookingId: booking._id
@@ -116,6 +156,71 @@ const createPaymentOrder = async (req, res) => {
   }
 };
 
+const getPaymentBreakdown = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+    const userId = req.user.id;
+    const { bookingId, useWallet = false } = req.body;
+    const booking = await Booking.findOne({ _id: bookingId, userId }).select('finalAmount vendorId');
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    const user = useWallet ? await User.findById(userId).select('wallet') : null;
+    const totalAmount = Number(booking.finalAmount || 0);
+    const walletBalance = Number(user?.wallet?.balance || 0);
+    const walletAmount = useWallet ? Math.min(walletBalance, totalAmount) : 0;
+    const onlineAmount = Math.max(totalAmount - walletAmount, 0);
+    return res.status(200).json({
+      success: true,
+      data: {
+        totalAmount,
+        walletAmount,
+        onlineAmount,
+        walletBalance,
+        bookingId: booking._id
+      }
+    });
+  } catch (error) {
+    console.error('Get payment breakdown error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to calculate payment breakdown' });
+  }
+};
+const debitWalletContribution = async (booking, amount) => {
+  const walletAmount = Number(amount || 0);
+  if (walletAmount <= 0) return null;
+
+  const updatedUser = await User.findOneAndUpdate(
+    { _id: booking.userId, 'wallet.balance': { $gte: walletAmount } },
+    { $inc: { 'wallet.balance': -walletAmount } },
+    { new: true }
+  );
+
+  if (!updatedUser) {
+    throw new Error('Insufficient wallet balance. Please retry without wallet payment.');
+  }
+
+  const Transaction = require('../../models/Transaction');
+  await Transaction.create({
+    userId: booking.userId,
+    bookingId: booking._id,
+    amount: walletAmount,
+    type: 'debit',
+    paymentMethod: 'wallet',
+    status: 'completed',
+    description: `Wallet contribution for booking ${booking.bookingNumber}`,
+    balanceBefore: Number(updatedUser.wallet.balance || 0) + walletAmount,
+    balanceAfter: Number(updatedUser.wallet.balance || 0)
+  });
+
+  return updatedUser;
+};
 /**
  * Shared "payment succeeded" logic — called from both the client-invoked verify
  * endpoint and the server-to-server Razorpay webhook, so payment truth never
@@ -127,9 +232,35 @@ const finalizePaymentSuccess = async (booking, paymentId) => {
     return { alreadyProcessed: true };
   }
 
+  // Claim the payment atomically so a client verify and Razorpay webhook cannot
+  // both debit the wallet or create duplicate payment transactions.
+  const paymentClaim = await Booking.findOneAndUpdate(
+    { _id: booking._id, paymentStatus: { $ne: PAYMENT_STATUS.SUCCESS } },
+    { $set: { paymentStatus: PAYMENT_STATUS.SUCCESS } },
+    { new: false }
+  );
+  if (!paymentClaim) return { alreadyProcessed: true };
+
   // Update booking payment status
+  const walletAmount = Math.max(Number(booking.pendingWalletAmount || 0), 0);
+  const onlineAmount = walletAmount > 0
+    ? Math.max(Number(booking.razorpayOrderAmount || 0), 0)
+    : Number(booking.finalAmount || 0);
+
+  try {
+    await debitWalletContribution(booking, walletAmount);
+  } catch (error) {
+    await Booking.findByIdAndUpdate(booking._id, {
+      $set: { paymentStatus: PAYMENT_STATUS.PENDING }
+    });
+    throw error;
+  }
+
   booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
-  booking.paymentMethod = 'online';
+  booking.paymentMethod = walletAmount > 0 ? 'wallet+online' : 'online';
+  booking.walletAmount = walletAmount;
+  booking.onlineAmount = onlineAmount;
+  booking.pendingWalletAmount = 0;
   booking.razorpayPaymentId = paymentId;
   booking.paymentId = paymentId;
 
@@ -174,12 +305,16 @@ const finalizePaymentSuccess = async (booking, paymentId) => {
   await Transaction.create({
     userId: booking.userId,
     bookingId: booking._id,
-    amount: booking.finalAmount,
+    amount: onlineAmount,
     type: 'payment',
     paymentMethod: 'razorpay',
     status: 'completed',
     description: `Online payment for booking ${booking.bookingNumber}`,
-    referenceId: paymentId
+    referenceId: paymentId,
+    metadata: {
+      bookingTotal: booking.finalAmount,
+      walletAmount
+    }
   });
 
   // If booking does not have a vendor assigned yet, retry the zone broadcast.
@@ -438,25 +573,15 @@ const processWalletPayment = async (req, res) => {
       });
     }
 
-    // Deduct from user wallet
-    user.wallet.balance -= booking.finalAmount;
-    await user.save();
-
-    const Transaction = require('../../models/Transaction');
-    await Transaction.create({
-      userId,
-      bookingId: booking._id,
-      amount: booking.finalAmount,
-      type: 'debit',
-      paymentMethod: 'wallet',
-      status: 'completed',
-      description: `Wallet payment for booking ${booking.bookingNumber}`,
-      balanceAfter: user.wallet.balance
-    });
+    // Deduct atomically so a balance cannot be spent by two requests at once.
+    const updatedUser = await debitWalletContribution(booking, booking.finalAmount);
 
     // Update booking payment status
     booking.paymentStatus = PAYMENT_STATUS.SUCCESS;
     booking.paymentMethod = 'wallet';
+    booking.walletAmount = booking.finalAmount;
+    booking.onlineAmount = 0;
+    booking.pendingWalletAmount = 0;
     booking.paymentId = `WALLET_${Date.now()}`;
 
     // Update booking status
@@ -569,7 +694,7 @@ const processWalletPayment = async (req, res) => {
       data: {
         bookingId: booking._id,
         amount: booking.finalAmount,
-        remainingBalance: user.wallet.balance
+        remainingBalance: updatedUser.wallet.balance
       }
     });
   } catch (error) {
@@ -617,7 +742,55 @@ const processRefund = async (req, res) => {
     }
 
     // Process refund based on payment method
-    if (booking.paymentMethod === 'razorpay' && booking.razorpayPaymentId) {
+    if (booking.paymentMethod === 'wallet+online') {
+      const totalWalletPaid = Number(booking.walletAmount || 0);
+      const requestedRefund = amount === undefined || amount === null
+        ? booking.finalAmount
+        : Number(amount);
+      const refundTotal = Math.min(Math.max(requestedRefund, 0), booking.finalAmount);
+      const walletRefund = Math.min(totalWalletPaid, refundTotal);
+      const onlineRefund = Math.max(refundTotal - walletRefund, 0);
+
+      if (onlineRefund > 0 && booking.razorpayPaymentId) {
+        const refundResult = await refundPayment(
+          booking.razorpayPaymentId,
+          onlineRefund,
+          {
+            bookingId: booking._id.toString(),
+            reason: 'Booking cancellation'
+          }
+        );
+
+        if (!refundResult.success) {
+          return res.status(500).json({
+            success: false,
+            message: 'Failed to process online refund'
+          });
+        }
+      }
+
+      if (walletRefund > 0) {
+        const user = await User.findById(booking.userId);
+        if (user) {
+          user.wallet.balance += walletRefund;
+          await user.save();
+
+          const Transaction = require('../../models/Transaction');
+          await Transaction.create({
+            userId: booking.userId,
+            bookingId: booking._id,
+            amount: walletRefund,
+            type: 'refund',
+            paymentMethod: 'wallet',
+            status: 'completed',
+            description: `Wallet refund for booking ${booking.bookingNumber}`,
+            balanceAfter: user.wallet.balance
+          });
+        }
+      }
+
+      booking.paymentStatus = PAYMENT_STATUS.REFUNDED;
+    } else if (booking.paymentMethod === 'razorpay' && booking.razorpayPaymentId) {
       // Razorpay refund
       const refundResult = await refundPayment(
         booking.razorpayPaymentId,
@@ -842,6 +1015,7 @@ const verifyPlanPayment = async (req, res) => {
 
 module.exports = {
   createPaymentOrder,
+  getPaymentBreakdown,
   verifyPaymentWebhook,
   handleRazorpayWebhook,
   processWalletPayment,
