@@ -27,7 +27,7 @@ import CardShell from '../UserCategories/components/CardShell';
 import RevenueReport from './RevenueReport';
 import BookingReport from './BookingReport';
 import VendorReport from './VendorReport';
-import WorkerReport from './WorkerReport';
+import CustomerReport from './CustomerReport';
 
 const ReportsOverview = () => {
   const [loading, setLoading] = useState(true);
@@ -114,7 +114,7 @@ const ReportsOverview = () => {
       icon: FiUsers,
       color: 'text-indigo-600',
       bg: 'bg-indigo-50',
-      link: '/admin/reports/workers'
+      link: '/admin/reports/customers'
     }
   ];
 
@@ -303,7 +303,7 @@ const Reports = () => {
     { name: 'Revenue Report', path: '/admin/reports/revenue', icon: FiDollarSign },
     { name: 'Booking Report', path: '/admin/reports/bookings', icon: FiShoppingBag },
     { name: 'Vendor Report', path: '/admin/reports/vendors', icon: FiUsers },
-    { name: 'Customer Analytics', path: '/admin/reports/workers', icon: FiBriefcase },
+    { name: 'Customer Analytics', path: '/admin/reports/customers', icon: FiBriefcase },
   ];
 
   const isTabActive = (tab) => {
@@ -341,8 +341,8 @@ const Reports = () => {
         <Route path="revenue" element={<RevenueReport />} />
         <Route path="bookings" element={<BookingReport />} />
         <Route path="vendors" element={<VendorReport />} />
-        <Route path="workers" element={<WorkerReport />} />
-        <Route path="customers" element={<WorkerReport />} />
+        <Route path="customers" element={<CustomerReport />} />
+        <Route path="workers" element={<Navigate to="/admin/reports/customers" replace />} />
       </Routes>
     </div>
   );

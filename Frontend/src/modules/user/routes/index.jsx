@@ -60,7 +60,6 @@ import Signup from '../pages/signup';
 const Home = lazyLoad(() => import('../pages/Home'));
 const Rewards = lazyLoad(() => import('../pages/Rewards'));
 const Account = lazyLoad(() => import('../pages/Account'));
-const Native = lazyLoad(() => import('../pages/Native'));
 const Cart = lazyLoad(() => import('../pages/Cart'));
 const Checkout = lazyLoad(() => import('../pages/Checkout'));
 const MyBookings = lazyLoad(() => import('../pages/MyBookings'));
@@ -68,7 +67,6 @@ const BookingDetails = lazyLoad(() => import('../pages/BookingDetails'));
 const BookingTrack = lazyLoad(() => import('../pages/BookingTrack'));
 const BookingConfirmation = lazyLoad(() => import('../pages/BookingConfirmation'));
 const Settings = lazyLoad(() => import('../pages/Settings'));
-const ManagePaymentMethods = lazyLoad(() => import('../pages/ManagePaymentMethods'));
 const ManageAddresses = lazyLoad(() => import('../pages/ManageAddresses'));
 const Wallet = lazyLoad(() => import('../pages/Wallet'));
 const MyPlan = lazyLoad(() => import('../pages/MyPlan'));
@@ -154,7 +152,6 @@ const UserRoutes = () => {
 
               {/* Home is accessible for guests and logged-in users */}
               <Route path="/" element={<Home />} />
-              <Route path="/native" element={<ProtectedRoute userType="user"><Native /></ProtectedRoute>} />
 
               <Route path="/rewards" element={<ProtectedRoute userType="user"><Rewards /></ProtectedRoute>} />
               <Route path="/account" element={<ProtectedRoute userType="user"><Account /></ProtectedRoute>} />
@@ -165,13 +162,13 @@ const UserRoutes = () => {
               <Route path="/booking/:id/track" element={<ProtectedRoute userType="user"><BookingTrack /></ProtectedRoute>} />
               <Route path="/booking-confirmation/:id" element={<ProtectedRoute userType="user"><BookingConfirmation /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute userType="user"><Settings /></ProtectedRoute>} />
-              <Route path="/manage-payment-methods" element={<ProtectedRoute userType="user"><ManagePaymentMethods /></ProtectedRoute>} />
               <Route path="/manage-addresses" element={<ProtectedRoute userType="user"><ManageAddresses /></ProtectedRoute>} />
               <Route path="/wallet" element={<ProtectedRoute userType="user"><Wallet /></ProtectedRoute>} />
               <Route path="/my-plan" element={<ProtectedRoute userType="user"><MyPlan /></ProtectedRoute>} />
               <Route path="/my-plan/:id" element={<ProtectedRoute userType="user"><PlanDetails /></ProtectedRoute>} />
               <Route path="/my-rating" element={<ProtectedRoute userType="user"><MyRating /></ProtectedRoute>} />
               <Route path="/about-Qwiklly" element={<ProtectedRoute userType="user"><AboutQwiklly /></ProtectedRoute>} />
+              <Route path="/about-qwiklly" element={<ProtectedRoute userType="user"><AboutQwiklly /></ProtectedRoute>} />
               <Route path="/update-profile" element={<ProtectedRoute userType="user"><UpdateProfile /></ProtectedRoute>} />
               <Route path="/notifications" element={<ProtectedRoute userType="user"><Notifications /></ProtectedRoute>} />
               <Route path="/help-support" element={<ProtectedRoute userType="user"><HelpSupport /></ProtectedRoute>} />

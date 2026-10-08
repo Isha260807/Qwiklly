@@ -426,7 +426,7 @@ async function testPushNotification(userType = 'user') {
         const reg = await navigator.serviceWorker.ready;
         if (reg && reg.showNotification) {
           await reg.showNotification('🔔 Test Notification', {
-            body: 'This is a test notification from Quiklly! Push notifications are working properly.',
+            body: 'This is a test notification from Qwiklly! Push notifications are working properly.',
             icon: '/Homster-logo.png',
             badge: '/Homster-logo.png',
             tag: `test-push-${Date.now()}`

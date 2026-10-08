@@ -107,7 +107,7 @@ app.use('/api', rateLimiter);
 app.get('/health', (req, res) => {
   res.json({
     success: true,
-    message: 'Homster API is running',
+    message: 'Qwiklly API is running',
     timestamp: new Date().toISOString()
   });
 });

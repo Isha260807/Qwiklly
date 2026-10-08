@@ -133,6 +133,7 @@ const VendorRoutes = () => {
               <Route path="/my-services" element={<ProtectedRoute userType="vendor"><MyServices /></ProtectedRoute>} />
               <Route path="/my-ratings" element={<ProtectedRoute userType="vendor"><MyRatings /></ProtectedRoute>} />
               <Route path="/about-Qwiklly" element={<ProtectedRoute userType="vendor"><AboutQwiklly /></ProtectedRoute>} />
+              <Route path="/about-qwiklly" element={<ProtectedRoute userType="vendor"><AboutQwiklly /></ProtectedRoute>} />
             </Routes>
           </PageTransition>
         </Suspense>
