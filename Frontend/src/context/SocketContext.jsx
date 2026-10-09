@@ -5,6 +5,7 @@ import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { playNotificationSound, isSoundEnabled, playAlertRing } from '../utils/notificationSound';
 import { registerFCMToken } from '../services/pushNotificationService';
+import formatDistance from '../utils/formatDistance';
 
 const SwipeableNotification = ({ t, data, onClick }) => {
   const x = useMotionValue(0);
@@ -299,9 +300,10 @@ export const SocketProvider = ({ children }) => {
           customerPhone: data.customerPhone,
           location: {
             address: data.address?.addressLine1 || 'Location shared',
-            distance: data.distance ? `${data.distance.toFixed(1)} km` : 'Near you'
+            distance: formatDistance(data.distance)
           },
           price: data.price,
+          distance: data.distance,
           vendorEarnings: data.vendorEarnings,
           serviceCategory: data.serviceCategory,
           brandName: data.brandName,

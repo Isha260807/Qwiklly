@@ -291,6 +291,7 @@ export const publicCatalogService = {
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
     if (params.cityId) queryParams.append('cityId', params.cityId);
     if (params.zoneId) queryParams.append('zoneId', params.zoneId);
+    if (params.search) queryParams.append('search', params.search);
 
     const cacheKey = `public:services:${queryParams.toString()}`;
     const cached = apiCache.get(cacheKey);

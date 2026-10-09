@@ -3,6 +3,7 @@ import { FiX, FiMapPin, FiClock, FiBell, FiAlertCircle, FiMinimize2 } from 'reac
 import { motion, AnimatePresence } from 'framer-motion';
 import { vendorTheme as themeColors } from '../../../../theme';
 import { playAlertRing, stopAlertRing } from '../../../../utils/notificationSound';
+import formatDistance from '../../../../utils/formatDistance';
 
 const BookingAlertCard = ({ booking, onAccept, onReject, maxSearchTimeMins = 1 }) => {
   // Calculate initial time synchronously instead of relying solely on useEffect
@@ -166,7 +167,7 @@ const BookingAlertCard = ({ booking, onAccept, onReject, maxSearchTimeMins = 1 }
             <span className="text-[9px] font-black text-emerald-800/60 uppercase tracking-[0.1em] mb-0.5 block">Distance</span>
             <div className="text-lg font-black text-emerald-700 tracking-tight flex items-center gap-1 justify-center">
               <FiMapPin className="w-3.5 h-3.5" />
-              {booking.location?.distance || (booking.distance ? (String(booking.distance).includes('km') ? booking.distance : `${booking.distance} km`) : 'Near You')}
+              {formatDistance(booking.distance ?? booking.location?.distance)}
             </div>
           </div>
         </div>

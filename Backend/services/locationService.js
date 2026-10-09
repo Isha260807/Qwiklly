@@ -301,7 +301,7 @@ const findVendorsByCity = async (city, filters = {}) => {
 };
 
 /**
- * Straight-line distance (km, 1 decimal) from a vendor's last synced location to
+ * Straight-line distance (km) from a vendor's last synced location to
  * a booking address. Display-only: vendor matching stays zone-based and never
  * uses this. Returns null when either side has no usable coordinates.
  */
@@ -321,7 +321,7 @@ const getVendorBookingDistanceKm = (vendor, address) => {
   if (vLat === null || vLng === null || bLat === null || bLng === null) return null;
   if (vLat === 0 && vLng === 0) return null;
 
-  return Math.round(calculateDistance({ lat: vLat, lng: vLng }, { lat: bLat, lng: bLng }) * 10) / 10;
+  return Math.round(calculateDistance({ lat: vLat, lng: vLng }, { lat: bLat, lng: bLng }) * 1000) / 1000;
 };
 
 module.exports = {

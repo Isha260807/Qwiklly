@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSearch, FiArrowLeft, FiClock, FiTrendingUp, FiX, FiLayers, FiChevronRight } from 'react-icons/fi';
+import { FiSearch, FiArrowLeft, FiClock, FiX, FiLayers, FiChevronRight } from 'react-icons/fi';
 import { publicCatalogService } from '../../../../../services/catalogService';
 import { themeColors } from '../../../../../theme';
 
@@ -20,55 +20,19 @@ const SearchOverlay = ({ isOpen, onClose, categories = [], onCategoryClick }) =>
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
-  const [trendingServices, setTrendingServices] = useState([]);
   const inputRef = useRef(null);
 
-  // Load recent searches and trending services on mount
+  // Load recent searches on mount
   useEffect(() => {
     const saved = localStorage.getItem('recent_searches');
-    if (saved) {
+    if (!saved) return;
+
+    try {
       setRecentSearches(JSON.parse(saved).slice(0, 5));
+    } catch {
+      localStorage.removeItem('recent_searches');
     }
-
-    // Fetch trending services (Most Booked)
-    const fetchTrending = async () => {
-      try {
-        const res = await publicCatalogService.getHomeContent();
-        if (res.success && res.homeContent?.booked && res.homeContent.booked.length > 0) {
-          // Take top 5 most booked services, EXCLUDING 'Fan Installation', 'Top Load', etc.
-          const filtered = res.homeContent.booked.filter(s =>
-            !s.title.toLowerCase().includes('fan install') &&
-            !s.title.toLowerCase().includes('fan repair') &&
-            !s.title.toLowerCase().includes('top load') &&
-            !s.title.toLowerCase().includes('automatic')
-          );
-          setTrendingServices(filtered.slice(0, 5));
-        } else {
-          // Fallback to project-specific trending services if API returns empty
-          console.log('Using fallback trending services');
-          setTrendingServices([
-            { id: 'trend-1', title: 'AC Repair & Service', category: 'AC & Appliance', imageUrl: '/assets/icons/services/ac.png' },
-            { id: 'trend-2', title: 'Washing Machine Repair', category: 'AC & Appliance', imageUrl: '/assets/icons/services/washing-machine.png' },
-            { id: 'trend-3', title: 'Microwave Repair', category: 'AC & Appliance', imageUrl: '/assets/icons/services/microwave.png' },
-            { id: 'trend-4', title: 'Refrigerator Repair', category: 'AC & Appliance', imageUrl: '/assets/icons/services/refrigerator.png' },
-            { id: 'trend-5', title: 'RO Water Purifier Service', category: 'AC & Appliance', imageUrl: '/assets/icons/services/ro.png' }
-          ]);
-        }
-      } catch (error) {
-        console.error("Failed to load trending services", error);
-        // Fallback on error too
-        setTrendingServices([
-          { id: 'trend-1', title: 'AC Repair & Service', category: 'AC & Appliance' },
-          { id: 'trend-2', title: 'Washing Machine Repair', category: 'AC & Appliance' },
-          { id: 'trend-3', title: 'Microwave Repair', category: 'AC & Appliance' },
-          { id: 'trend-4', title: 'Refrigerator Repair', category: 'AC & Appliance' },
-          { id: 'trend-5', title: 'RO Water Purifier Service', category: 'AC & Appliance' }
-        ]);
-      }
-    };
-    fetchTrending();
   }, []);
-
   // Focus input when opened
   useEffect(() => {
     if (isOpen) {
@@ -119,46 +83,25 @@ const SearchOverlay = ({ isOpen, onClose, categories = [], onCategoryClick }) =>
   }, [query, categories]);
 
   const handleResultClick = (item) => {
-    // Add to recent searches
+    // Keep the selected term available in recent searches.
     const newRecent = [item.title, ...recentSearches.filter(s => s !== item.title)].slice(0, 5);
     setRecentSearches(newRecent);
     localStorage.setItem('recent_searches', JSON.stringify(newRecent));
 
     onClose();
 
-    // 1. Handle Category Click
+    // Category results keep their existing category flow.
     if (item.isCategory) {
       onCategoryClick(item);
       return;
     }
 
-    // 2. Handle Service/Brand Click
-    let catId = item.categoryId || item.targetCategoryId || item.categoryId;
-    let category = null;
-
-    if (catId) {
-      category = categories.find(c => (c.id === catId || c._id === catId));
-    }
-
-    if (!category && item.category) {
-      category = categories.find(c => c.title === item.category);
-    }
-
-    if (category) {
-      // If it's a service match, tell the modal to open THIS brand immediately
-      const initialBrand = item.brandId ? {
-        id: item.brandId,
-        title: item.brandName || item.category,
-        iconUrl: item.brandIcon || item.icon
-      } : (item.id && !item.isCategory ? item : null);
-
-      onCategoryClick({
-        ...category,
-        initialBrand: initialBrand
-      });
+    // Service results open the complete service detail page directly.
+    const serviceId = item.id || item._id;
+    if (serviceId) {
+      navigate(`/user/service/${serviceId}`, { state: { service: item } });
     }
   };
-
   const handleTermClick = (term) => {
     setQuery(term);
   };
@@ -294,31 +237,7 @@ const SearchOverlay = ({ isOpen, onClose, categories = [], onCategoryClick }) =>
                   </section>
                 )}
 
-                {/* Popular Services */}
-                {trendingServices.length > 0 && (
-                  <section>
-                    <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2 mb-3">
-                      <FiTrendingUp className="text-blue-500" /> Trending Services
-                    </h3>
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-50">
-                      {trendingServices.map((service) => (
-                        <button
-                          key={service.id}
-                          onClick={() => handleResultClick(service)}
-                          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 bg-white transition-colors text-left group"
-                        >
-                          <div className="flex items-center gap-3">
-                            {service.imageUrl && (
-                              <img src={toAssetUrl(service.imageUrl)} alt="" className="w-8 h-8 rounded-lg object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                            )}
-                            <span className="font-medium text-gray-700 group-hover:text-gray-900 transition-colors">{service.title}</span>
-                          </div>
-                          <FiChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-400" />
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                )}
+
               </div>
             )}
           </div>
