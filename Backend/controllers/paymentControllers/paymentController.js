@@ -44,6 +44,13 @@ const createPaymentOrder = async (req, res) => {
       });
     }
 
+    if ([BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED].includes(booking.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'This booking is no longer available for payment'
+      });
+    }
+
     // Payment is only collected after a vendor has accepted the booking
     if (!booking.vendorId) {
       return res.status(400).json({
@@ -562,6 +569,13 @@ const processWalletPayment = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Payment already completed for this booking'
+      });
+    }
+
+    if ([BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED].includes(booking.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'This booking is no longer available for payment'
       });
     }
 

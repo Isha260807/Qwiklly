@@ -158,29 +158,35 @@ class BookingScheduler {
   }
 
   /**
-   * Release a vendor's acceptance and put the booking back into search if the
-   * customer hasn't paid within the admin-configured window.
-   * @returns {boolean} true if any booking was released, false if idle
+   * Cancel bookings whose online payment was not completed within the
+   * admin-configured window after a vendor accepted them.
+   * @returns {boolean} true if any booking was cancelled, false if idle
    */
   async processPaymentTimeouts() {
     try {
       const globalSettings = await Settings.findOne({ type: 'global' }).select('paymentTimeoutMinutes').lean();
       const timeoutMs = (globalSettings?.paymentTimeoutMinutes || 15) * 60 * 1000;
       const cutoff = new Date(Date.now() - timeoutMs);
+      const acceptedPaymentTimeoutStatuses = [
+        BOOKING_STATUS.ACCEPTED,
+        BOOKING_STATUS.ASSIGNED,
+        BOOKING_STATUS.CONFIRMED
+      ];
 
       const timedOutBookings = await Booking.find({
-        status: BOOKING_STATUS.CONFIRMED,
+        status: { $in: acceptedPaymentTimeoutStatuses },
         vendorId: { $ne: null },
+        paymentMethod: 'online',
         paymentStatus: PAYMENT_STATUS.PENDING,
-        // Fixed NORMAL SLOT bookings keep acceptedAt null and must never enter
-        // the vendor re-dispatch path. Preserve the existing timeout behavior
-        // for instant and Duration/Hourly scheduled bookings.
+        // Fixed NORMAL SLOT bookings have their own createdAt-based timeout
+        // path below. This path handles instant and Duration/Hourly bookings
+        // after a vendor has accepted them.
         $or: [
           { bookingType: { $ne: 'scheduled' } },
           { bookingType: 'scheduled', 'hourlyTracking.isHourly': true }
         ],
         acceptedAt: { $lte: cutoff }
-      });
+      }).select('_id vendorId userId bookingNumber');
 
       if (timedOutBookings.length === 0) return false;
 
@@ -188,67 +194,71 @@ class BookingScheduler {
         try {
           const releasedVendorId = booking.vendorId;
 
-          booking.vendorId = null;
-          booking.acceptedAt = null;
-          booking.status = BOOKING_STATUS.SEARCHING;
-          booking.vendorAssignmentStatus = 'PENDING';
-          booking.dispatchState = 'PENDING';
-          booking.potentialVendors = [];
-          booking.notifiedVendors = [];
-          booking.currentWave = 1;
-          booking.waveStartedAt = null;
-          booking.expiresAt = null;
-          await booking.save();
+          // Conditional update prevents a late scheduler tick from cancelling
+          // a booking whose payment was completed in the meantime.
+          const cancelled = await Booking.findOneAndUpdate(
+            {
+              _id: booking._id,
+              status: { $in: acceptedPaymentTimeoutStatuses },
+              vendorId: releasedVendorId,
+              paymentMethod: 'online',
+              paymentStatus: PAYMENT_STATUS.PENDING,
+              acceptedAt: { $lte: cutoff }
+            },
+            {
+              $set: {
+                status: BOOKING_STATUS.CANCELLED,
+                vendorAssignmentStatus: 'FAILED',
+                cancelledAt: new Date(),
+                cancelledBy: 'system',
+                cancellationReason: 'Payment was not completed in time'
+              }
+            },
+            { new: true }
+          ).lean();
 
-          // The unique bookingId+vendorId index prevents a second request
-          // row for a re-dispatch. Remove the released attempt before the
-          // one-shot zone broadcast is retried.
+          if (!cancelled) return;
+
           const BookingRequest = require('../models/BookingRequest');
-          await BookingRequest.deleteMany({ bookingId: booking._id });
+          await BookingRequest.deleteMany({ bookingId: cancelled._id });
 
-          // Release the vendor so they're available for new bookings again
+          // The accepted vendor is free for a new booking after cancellation.
           await Vendor.findByIdAndUpdate(releasedVendorId, { availability: 'AVAILABLE' });
 
           await createNotification({
             vendorId: releasedVendorId,
-            type: 'booking_reassigned',
-            title: 'Booking Reassigned',
-            message: `Booking ${booking.bookingNumber} was reassigned — the customer didn't complete payment in time.`,
-            relatedId: booking._id,
+            type: 'booking_cancelled',
+            title: 'Booking Cancelled',
+            message: 'Booking ' + cancelled.bookingNumber + ' was cancelled because the customer did not complete payment in time.',
+            relatedId: cancelled._id,
             relatedType: 'booking'
           });
 
           await createNotification({
-            userId: booking.userId,
-            type: 'booking_updated',
-            title: 'Still Searching',
-            message: `We're still finding a professional for booking ${booking.bookingNumber}. Please pay promptly once one accepts.`,
-            relatedId: booking._id,
+            userId: cancelled.userId,
+            type: 'booking_cancelled',
+            title: 'Booking Cancelled',
+            message: 'Booking ' + cancelled.bookingNumber + ' was cancelled because payment was not completed in time.',
+            relatedId: cancelled._id,
             relatedType: 'booking'
           });
 
           if (this.io) {
-            this.io.to(`user_${booking.userId}`).emit('booking_updated', {
-              bookingId: booking._id,
-              status: BOOKING_STATUS.SEARCHING,
-              message: 'Vendor released — searching for a new professional'
+            this.io.to('user_' + cancelled.userId).emit('booking_updated', {
+              bookingId: cancelled._id,
+              status: BOOKING_STATUS.CANCELLED,
+              message: 'Booking cancelled - payment not completed in time'
             });
-            this.io.to(`vendor_${releasedVendorId}`).emit('booking_updated', {
-              bookingId: booking._id,
-              status: BOOKING_STATUS.SEARCHING,
-              message: 'Booking reassigned due to pending payment'
+            this.io.to('vendor_' + releasedVendorId).emit('booking_updated', {
+              bookingId: cancelled._id,
+              status: BOOKING_STATUS.CANCELLED,
+              message: 'Booking cancelled because payment was not completed in time'
             });
           }
 
-          console.log(`[BookingScheduler] ${booking.bookingNumber}: Payment timeout — vendor ${releasedVendorId} released, re-searching.`);
-
-          // Re-run dispatch immediately rather than waiting for the next wave tick
-          const { dispatchBookingToVendors } = require('../controllers/bookingControllers/userBookingController');
-          if (typeof dispatchBookingToVendors === 'function') {
-            await dispatchBookingToVendors(booking._id);
-          }
+          console.log('[BookingScheduler] ' + cancelled.bookingNumber + ': Payment timeout - booking cancelled and vendor ' + releasedVendorId + ' released.');
         } catch (err) {
-          console.error(`[BookingScheduler] Error releasing timed-out booking ${booking._id}:`, err);
+          console.error('[BookingScheduler] Error cancelling timed-out booking ' + booking._id + ':', err);
         }
       }));
 
@@ -304,7 +314,7 @@ class BookingScheduler {
 
           await createNotification({
             userId: cancelled.userId,
-            type: 'booking_updated',
+            type: 'booking_cancelled',
             title: 'Booking Cancelled',
             message: `Booking ${cancelled.bookingNumber} was cancelled because payment was not completed in time.`,
             relatedId: cancelled._id,
