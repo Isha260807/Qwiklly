@@ -25,6 +25,14 @@ const getGlobalSettings = async () => {
   return cachedSettings;
 };
 
+const normalizeServiceId = (serviceId) => {
+  if (!serviceId) return null;
+  if (typeof serviceId === 'object') {
+    return serviceId._id || serviceId.id || null;
+  }
+  return serviceId;
+};
+
 const clearGlobalSettingsCache = () => {
   cachedSettings = null;
   cachedSettingsExpiry = 0;
@@ -257,7 +265,7 @@ const calculateBookingPrice = async ({
   let category = null;
 
   if (serviceId) {
-    const resolvedId = typeof serviceId === 'object' && serviceId._id ? serviceId._id : serviceId;
+    const resolvedId = normalizeServiceId(serviceId);
     service = await Service.findById(resolvedId).lean();
     if (service) {
       const catId = service.categoryId || service.categoryIds?.[0];
@@ -273,7 +281,12 @@ const calculateBookingPrice = async ({
   let basePrice = 0;
   let hourlyValidationError = null;
   if (Array.isArray(bookedItems) && bookedItems.length > 0) {
-    const itemServiceIds = [...new Set(bookedItems.map(i => i.serviceId).filter(Boolean).map(String))];
+    const itemServiceIds = [...new Set(
+      bookedItems
+        .map(item => normalizeServiceId(item.serviceId))
+        .filter(Boolean)
+        .map(String)
+    )];
     let serviceMap = new Map();
     if (itemServiceIds.length > 0) {
       const referencedServices = await Service.find({ _id: { $in: itemServiceIds } })
@@ -283,7 +296,8 @@ const calculateBookingPrice = async ({
     }
 
     for (const item of bookedItems) {
-      const refSvc = item.serviceId ? serviceMap.get(String(item.serviceId)) : null;
+      const itemServiceId = normalizeServiceId(item.serviceId);
+      const refSvc = itemServiceId ? serviceMap.get(String(itemServiceId)) : null;
       const effectiveType = refSvc?.pricingType || item.pricingType || item.card?.pricingType || (item.hours ? 'HOURLY' : 'FIXED');
 
       if (effectiveType === 'DURATION' && refSvc) {
