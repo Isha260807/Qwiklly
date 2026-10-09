@@ -25,6 +25,11 @@ const getGlobalSettings = async () => {
   return cachedSettings;
 };
 
+const clearGlobalSettingsCache = () => {
+  cachedSettings = null;
+  cachedSettingsExpiry = 0;
+};
+
 /**
  * Validates whether a coupon can be applied to a specific user and order context
  * Returns { valid: boolean, error?: string, code?: string, discountAmount?: number }
@@ -440,5 +445,6 @@ const calculateBookingPrice = async ({
 
 module.exports = {
   validateCouponApplicability,
-  calculateBookingPrice
+  calculateBookingPrice,
+  clearGlobalSettingsCache
 };

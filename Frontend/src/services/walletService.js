@@ -29,6 +29,8 @@ export const walletService = {
     const queryParams = new URLSearchParams();
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
+    if (params.startDate) queryParams.append('startDate', params.startDate);
+    if (params.endDate) queryParams.append('endDate', params.endDate);
 
     const response = await api.get(`/user/wallet/transactions${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
     return response.data;

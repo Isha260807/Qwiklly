@@ -1,5 +1,5 @@
 const Settings = require('../../models/Settings');
-const Vendor = require('../../models/Vendor');
+const { clearGlobalSettingsCache } = require('../../services/pricingService');
 
 // Get Global Settings
 exports.getSettings = async (req, res, next) => {
@@ -36,7 +36,6 @@ exports.updateSettings = async (req, res, next) => {
       partsPayoutPercentage,
       tdsPercentage,
       platformFeePercentage,
-      vendorCashLimit, // Add this
       cancellationPenalty,
       referralEnabled,
       referrerRewardAmount,
@@ -72,7 +71,6 @@ exports.updateSettings = async (req, res, next) => {
         partsPayoutPercentage,
         tdsPercentage,
         platformFeePercentage,
-        vendorCashLimit,
         cancellationPenalty,
         referralEnabled,
         referrerRewardAmount,
@@ -104,7 +102,6 @@ exports.updateSettings = async (req, res, next) => {
       if (partsPayoutPercentage !== undefined) settings.partsPayoutPercentage = partsPayoutPercentage;
       if (tdsPercentage !== undefined) settings.tdsPercentage = tdsPercentage;
       if (platformFeePercentage !== undefined) settings.platformFeePercentage = platformFeePercentage;
-      if (vendorCashLimit !== undefined) settings.vendorCashLimit = vendorCashLimit;
       if (cancellationPenalty !== undefined) settings.cancellationPenalty = cancellationPenalty;
       if (referralEnabled !== undefined) settings.referralEnabled = referralEnabled;
       if (referrerRewardAmount !== undefined) settings.referrerRewardAmount = referrerRewardAmount;
@@ -152,14 +149,8 @@ exports.updateSettings = async (req, res, next) => {
       await settings.save();
     }
 
-    // Propagate vendorCashLimit to all existing vendors if it was changed
-    if (vendorCashLimit !== undefined) {
-      console.log(`Updating all vendors with new cash limit: ${vendorCashLimit}`);
-      await Vendor.updateMany(
-        {},
-        { $set: { 'wallet.cashLimit': vendorCashLimit } }
-      );
-    }
+    clearGlobalSettingsCache();
+
 
     res.status(200).json({
       success: true,

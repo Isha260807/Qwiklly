@@ -285,8 +285,18 @@ const Checkout = () => {
               });
             }
 
-            // Set Cart Items
+            // Use the same cart endpoint as the Cart page so checkout always
+            // reflects the items the user just added. Keep checkout-data as a
+            // fallback for older sessions or temporary cart API failures.
             let items = response.cartItems || [];
+            try {
+              const cartResponse = await cartService.getCart();
+              if (cartResponse.success && Array.isArray(cartResponse.data)) {
+                items = cartResponse.data;
+              }
+            } catch (cartError) {
+              console.warn('Failed to refresh cart for checkout; using checkout data:', cartError);
+            }
             if (category) {
               const normalizedCategory = category.toLowerCase().trim();
               items = items.filter(item => {

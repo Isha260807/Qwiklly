@@ -12,6 +12,56 @@ const CART_HARD_BLOCK_REASONS = new Set([
   'SERVICE_NOT_FOUND'
 ]);
 
+const normalizeCartValue = (value) => String(value || '').trim().toLowerCase();
+
+const getCartServiceId = (item) => {
+  const serviceId = item?.serviceId;
+  if (!serviceId) return null;
+  return serviceId._id ? String(serviceId._id) : String(serviceId);
+};
+
+const areSameCartService = (left, right) => {
+  const leftServiceId = getCartServiceId(left);
+  const rightServiceId = getCartServiceId(right);
+
+  if (leftServiceId && rightServiceId) {
+    return leftServiceId === rightServiceId;
+  }
+
+  return normalizeCartValue(left?.title) === normalizeCartValue(right?.title) &&
+    normalizeCartValue(left?.category) === normalizeCartValue(right?.category);
+};
+
+const mergeDuplicateFixedItems = (cart) => {
+  const uniqueItems = [];
+  let changed = false;
+
+  for (const item of cart.items || []) {
+    const isFixed = String(item.pricingType || 'FIXED').toUpperCase() === 'FIXED';
+    const duplicate = isFixed && uniqueItems.find(existing =>
+      String(existing.pricingType || 'FIXED').toUpperCase() === 'FIXED' &&
+      areSameCartService(existing, item)
+    );
+
+    if (!duplicate) {
+      uniqueItems.push(item);
+      continue;
+    }
+
+    const totalCount = Number(duplicate.serviceCount || 1) + Number(item.serviceCount || 1);
+    const unitPrice = Number(duplicate.unitPrice ?? (Number(duplicate.price || 0) / Number(duplicate.serviceCount || 1)));
+    duplicate.serviceCount = totalCount;
+    duplicate.unitPrice = unitPrice;
+    duplicate.price = unitPrice * totalCount;
+    changed = true;
+  }
+
+  if (changed) {
+    cart.items = uniqueItems;
+  }
+  return changed;
+};
+
 /**
  * Get user's cart
  */
@@ -26,6 +76,10 @@ const getUserCart = async (req, res) => {
     if (!cart) {
       // Create empty cart if doesn't exist
       cart = await Cart.create({ userId, items: [] });
+    }
+
+    if (mergeDuplicateFixedItems(cart)) {
+      await cart.save();
     }
 
     const cartItems = (cart.items || []).map(item => {
@@ -216,9 +270,14 @@ const addToCart = async (req, res) => {
       cart = await Cart.create({ userId, items: [] });
     }
 
-    // Check if item already exists in cart
-    const existingItemIndex = cart.items.findIndex(
-      item => item.title === itemTitle && (!serviceId || item.serviceId?.toString() === serviceId.toString())
+    // Clean up older duplicate fixed-service rows before applying this add.
+    if (mergeDuplicateFixedItems(cart)) {
+      await cart.save();
+    }
+
+    // Match the same service by id, with title/category as a safe legacy fallback.
+    const existingItemIndex = cart.items.findIndex(item =>
+      areSameCartService(item, { serviceId, title: itemTitle, category: itemCategory })
     );
 
     if (existingItemIndex !== -1 && isDuration) {

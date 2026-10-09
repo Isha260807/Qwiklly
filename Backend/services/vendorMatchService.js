@@ -131,6 +131,19 @@ const SLOT_BLOCKING_STATUSES = [
   BOOKING_STATUS.WORK_DONE
 ];
 
+// Slot values and admin date keys represent the app's India business time,
+// while MongoDB Date values are stored as UTC instants.
+const SLOT_TIME_ZONE = 'Asia/Kolkata';
+const slotDateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: SLOT_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23'
+});
+
 const parseSlotTime = (value) => {
   if (typeof value !== 'string') return null;
 
@@ -181,6 +194,33 @@ const getEffectiveBookingRange = (booking, fixedDurationMins = 45) => {
   const computedRange = { start, end: start + duration };
   if (!storedRange) return computedRange;
   return { start, end: Math.max(storedRange.end, computedRange.end) };
+};
+
+/**
+ * Instant bookings do not have a clock timeSlot (`Now`). Once the service
+ * actually starts, `startedAt` is the reliable start time and the configured
+ * fixed-service duration provides the expected end time. Before `startedAt`
+ * exists, an instant booking must not block a scheduled slot because its start
+ * time is still unknown.
+ */
+const getInstantBookingRange = (booking, fixedDurationMins = 45) => {
+  const startedAt = new Date(booking?.startedAt);
+  if (Number.isNaN(startedAt.getTime())) return null;
+
+  const parts = Object.fromEntries(
+    slotDateTimeFormatter.formatToParts(startedAt)
+      .filter(part => part.type !== 'literal')
+      .map(part => [part.type, part.value])
+  );
+  const start = (Number(parts.hour) * 60) + Number(parts.minute);
+  const duration = getBookedServiceDuration(booking, fixedDurationMins)
+    || Number(fixedDurationMins)
+    || 45;
+
+  return {
+    dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+    range: { start, end: start + duration }
+  };
 };
 
 const getUtcDayRange = (dateValue) => {
@@ -296,17 +336,28 @@ const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, du
 
   const existingBookings = await Booking.find({
     vendorId: { $in: qualified.map(item => item.vendor._id) },
-    scheduledDate: { $gte: dayRange.start, $lt: dayRange.end },
+    $or: [
+      // Only scheduled bookings reserve an admin-configured slot.
+      { bookingType: 'scheduled', scheduledDate: { $gte: dayRange.start, $lt: dayRange.end } },
+      // An instant booking only blocks a slot after the service has actually
+      // started. Its `Now` timeSlot is not a usable clock range.
+      { bookingType: 'instant', startedAt: { $gte: new Date(dayRange.start.getTime() - 24 * 60 * 60 * 1000), $lt: dayRange.end } }
+    ],
     status: { $in: SLOT_BLOCKING_STATUSES }
-  }).select('vendorId timeSlot bookedItems').lean();
+  }).select('vendorId bookingType scheduledDate startedAt timeSlot bookedItems').lean();
 
   const bookedByVendor = new Map();
   existingBookings.forEach(booking => {
     const key = booking.vendorId.toString();
     if (!bookedByVendor.has(key)) bookedByVendor.set(key, []);
-    // An existing active booking without a parseable slot is safest treated as
-    // blocking the vendor for that day rather than risking an overlap.
-    bookedByVendor.get(key).push(getEffectiveBookingRange(booking, fixedDurationMins) || { start: 0, end: 24 * 60 });
+    const range = booking.bookingType === 'instant'
+      ? getInstantBookingRange(booking, fixedDurationMins)?.range
+      : getEffectiveBookingRange(booking, fixedDurationMins);
+    // An instant booking without startedAt is intentionally ignored: its
+    // service start is not confirmed yet. A scheduled booking without a
+    // parseable slot remains a full-day safety block.
+    if (booking.bookingType === 'instant' && !range) return;
+    bookedByVendor.get(key).push(range || { start: 0, end: 24 * 60 });
   });
 
   const match = qualified.find(({ vendor, span }) => {
@@ -342,16 +393,35 @@ const getBookableSlotMap = async ({ vendors, dateKeys, intervalMins = 60, durati
 
   const bookings = await Booking.find({
     vendorId: { $in: candidateIds },
-    scheduledDate: { $gte: rangeStart, $lt: rangeEnd },
+    $or: [
+      // Instant bookings also have a scheduledDate (their creation time), but
+      // only their confirmed service start can reserve a future slot.
+      { bookingType: 'instant', startedAt: { $gte: new Date(rangeStart.getTime() - 24 * 60 * 60 * 1000), $lt: rangeEnd } },
+      { bookingType: 'scheduled', scheduledDate: { $gte: rangeStart, $lt: rangeEnd } }
+    ],
     status: { $in: SLOT_BLOCKING_STATUSES }
-  }).select('vendorId scheduledDate timeSlot bookedItems').lean();
+  }).select('vendorId bookingType scheduledDate startedAt timeSlot bookedItems').lean();
 
   const bookedRanges = new Map(); // `${vendorId}|${dateKey}` -> ranges[]
   bookings.forEach(booking => {
-    const key = `${booking.vendorId}|${booking.scheduledDate.toISOString().slice(0, 10)}`;
+    const instantRange = booking.bookingType === 'instant'
+      ? getInstantBookingRange(booking, fixedDurationMins)
+      : null;
+    // Instant jobs without a confirmed start time do not block scheduled
+    // availability. Their vendor remains available for a future slot.
+    if (booking.bookingType === 'instant' && !instantRange) return;
+
+    const dateKey = instantRange?.dateKey || booking.scheduledDate?.toISOString().slice(0, 10);
+    if (!dateKey) return;
+    const key = `${booking.vendorId}|${dateKey}`;
     if (!bookedRanges.has(key)) bookedRanges.set(key, []);
-    // Unparseable slot blocks the whole day for that vendor.
-    bookedRanges.get(key).push(getEffectiveBookingRange(booking, fixedDurationMins) || { start: 0, end: 24 * 60 });
+    // Unparseable scheduled slots block the whole day for safety. Instant
+    // bookings use the range calculated from startedAt above.
+    bookedRanges.get(key).push(
+      instantRange?.range
+        || getEffectiveBookingRange(booking, fixedDurationMins)
+        || { start: 0, end: 24 * 60 }
+    );
   });
 
   const byDate = {}; // dateKey -> Set<start minutes>

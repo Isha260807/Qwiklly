@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiChevronRight, FiLoader } from 'react-icons/fi';
+import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiLoader } from 'react-icons/fi';
 import { MdAccountBalanceWallet } from 'react-icons/md';
 import { toast } from 'react-hot-toast';
 import { walletService } from '../../../../services/walletService';
@@ -8,11 +8,17 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 import NotificationBell from '../../components/common/NotificationBell';
 import { themeColors } from '../../../../theme';
 
+const PAGE_SIZE = 8;
+
 const Wallet = () => {
   const navigate = useNavigate();
   const [walletBalance, setWalletBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [dateFilter, setDateFilter] = useState({ startDate: '', endDate: '' });
+  const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 0 });
+  const [transactionSummary, setTransactionSummary] = useState(null);
 
   useEffect(() => {
     const loadWalletData = async () => {
@@ -20,7 +26,12 @@ const Wallet = () => {
         setLoading(true);
         const [balanceResponse, transactionsResponse] = await Promise.all([
           walletService.getBalance(),
-          walletService.getTransactions()
+          walletService.getTransactions({
+            page,
+            limit: PAGE_SIZE,
+            startDate: dateFilter.startDate,
+            endDate: dateFilter.endDate
+          })
         ]);
 
         if (balanceResponse.success) {
@@ -29,16 +40,36 @@ const Wallet = () => {
 
         if (transactionsResponse.success) {
           setTransactions(transactionsResponse.data || []);
+          setPagination(transactionsResponse.pagination || { page, limit: PAGE_SIZE, total: 0, pages: 0 });
+          setTransactionSummary(transactionsResponse.summary || null);
         }
       } catch (error) {
-        toast.error('Failed to load wallet data');
+        toast.error(error.response?.data?.message || 'Failed to load wallet data');
       } finally {
         setLoading(false);
       }
     };
 
     loadWalletData();
-  }, []);
+  }, [page, dateFilter]);
+
+  const handleDateFilterChange = (field, value) => {
+    setDateFilter(prev => ({ ...prev, [field]: value }));
+    setPage(1);
+  };
+
+  const clearDateFilter = () => {
+    setDateFilter({ startDate: '', endDate: '' });
+    setPage(1);
+  };
+
+  const totalSpent = transactionSummary?.totalSpent ?? transactions
+    .filter(t => ['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected'].includes(t.type))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalEarned = transactionSummary?.totalEarned ?? transactions
+    .filter(t => ['credit', 'referral', 'refund', 'topup', 'cashback'].includes(t.type))
+    .reduce((sum, t) => sum + t.amount, 0);
 
   return (
     <div className="min-h-screen pb-20 relative bg-white">
@@ -103,22 +134,18 @@ const Wallet = () => {
             </div>
           </div>
 
-          {/* Main Balance Card */}
+          {/* Main Wallet Balance Card */}
           <div className="bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 rounded-xl p-3.5 mb-3 text-white shadow-md relative overflow-hidden border border-gray-800">
             <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.03] rounded-full -mr-10 -mt-10 pointer-events-none"></div>
             <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/[0.02] rounded-full -ml-8 -mb-8 pointer-events-none"></div>
 
             <div className="relative z-10">
-              <p className="text-gray-400 text-[10px] font-medium uppercase tracking-wider">Penalty Total</p>
+              <p className="text-gray-400 text-[10px] font-medium uppercase tracking-wider">Wallet Balance</p>
               <div className="flex items-baseline gap-1.5 mt-0.5">
-                <h2 className="text-2xl font-bold text-red-400 tracking-tight">
-                  -₹{transactions
-                    .filter(t => ['penalty', 'fine', 'cancellation_fee', 'debit'].includes(t.type))
-                    .reduce((sum, t) => sum + t.amount, 0)
-                    .toLocaleString('en-IN')}
+                <h2 className="text-2xl font-bold text-emerald-400 tracking-tight">
+                  ₹{walletBalance.toLocaleString('en-IN')}
                 </h2>
-                <span className="text-[11px] font-medium text-red-300/80">(Penalty)</span>
-                <span className="text-[11px] font-medium text-emerald-300">Wallet: INR {walletBalance.toLocaleString('en-IN')}</span>
+                <span className="text-[11px] font-medium text-emerald-300">Available</span>
               </div>
             </div>
           </div>
@@ -133,26 +160,58 @@ const Wallet = () => {
               </div>
               <p className="text-gray-500 text-[10px] font-medium">Total Spent</p>
               <p className="text-sm font-bold text-gray-900 mt-0.5">
-                ₹{transactions
-                  .filter(t => ['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected'].includes(t.type))
-                  .reduce((sum, t) => sum + t.amount, 0)
-                  .toLocaleString('en-IN')}
+                ₹{totalSpent.toLocaleString('en-IN')}
               </p>
             </div>
 
             <div className="bg-white p-2.5 rounded-xl border border-gray-100 shadow-xs">
-              <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center mb-1.5">
-                <svg className="w-3.5 h-3.5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <div className="w-7 h-7 rounded-lg bg-green-50 flex items-center justify-center mb-1.5">
+                <svg className="w-3.5 h-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 3 3 3 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M12 16c1.11 0 2.08-.402 2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <p className="text-gray-500 text-[10px] font-medium">Total Penalty</p>
-              <p className="text-sm font-bold text-orange-600 mt-0.5">
-                ₹{transactions
-                  .filter(t => ['penalty', 'fine', 'cancellation_fee', 'debit'].includes(t.type))
-                  .reduce((sum, t) => sum + t.amount, 0)
-                  .toLocaleString('en-IN')}
+              <p className="text-gray-500 text-[10px] font-medium">Wallet Earned</p>
+              <p className="text-sm font-bold text-green-600 mt-0.5">
+                ₹{totalEarned.toLocaleString('en-IN')}
               </p>
+            </div>
+          </div>
+
+          {/* Transaction Date Filter */}
+          <div className="bg-white p-2.5 rounded-xl border border-gray-100 shadow-xs mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-800">Filter by date</p>
+              {(dateFilter.startDate || dateFilter.endDate) && (
+                <button
+                  type="button"
+                  onClick={clearDateFilter}
+                  className="text-[10px] font-semibold text-pink-700"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-[10px] font-medium text-gray-500">
+                From
+                <input
+                  type="date"
+                  value={dateFilter.startDate}
+                  max={dateFilter.endDate || undefined}
+                  onChange={(event) => handleDateFilterChange('startDate', event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-700 outline-none focus:border-pink-400"
+                />
+              </label>
+              <label className="text-[10px] font-medium text-gray-500">
+                To
+                <input
+                  type="date"
+                  value={dateFilter.endDate}
+                  min={dateFilter.startDate || undefined}
+                  onChange={(event) => handleDateFilterChange('endDate', event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-700 outline-none focus:border-pink-400"
+                />
+              </label>
             </div>
           </div>
 
@@ -167,7 +226,7 @@ const Wallet = () => {
                 </div>
               ) : transactions.length === 0 ? (
                 <div className="text-center py-8 bg-gray-50/80 border border-dashed border-gray-200 rounded-xl">
-                  <p className="text-xs font-medium text-gray-400">No wallet activity yet</p>
+                  <p className="text-xs font-medium text-gray-400">No transactions found for the selected dates</p>
                 </div>
               ) : (
                 transactions.map((item, index) => {
@@ -231,6 +290,31 @@ const Wallet = () => {
                 })
               )}
             </div>
+            {!loading && pagination.pages > 1 && (
+              <div className="flex items-center justify-between mt-3">
+                <button
+                  type="button"
+                  onClick={() => setPage(currentPage => currentPage - 1)}
+                  disabled={pagination.page <= 1}
+                  className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <FiChevronLeft className="w-3 h-3" />
+                  Previous
+                </button>
+                <span className="text-[10px] font-medium text-gray-500">
+                  Page {pagination.page} of {pagination.pages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage(currentPage => currentPage + 1)}
+                  disabled={pagination.page >= pagination.pages}
+                  className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next
+                  <FiChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
         </main>
       </div>

@@ -11,6 +11,7 @@ const AdminSettings = () => {
   const [financialSettings, setFinancialSettings] = useState({
     visitedCharges: 0,
     instantBookingCharges: 0,
+    serviceGstPercentage: 0,
     cancellationPenalty: 0,
     maxSearchTime: 5,
     paymentTimeoutMinutes: 15,
@@ -111,6 +112,7 @@ const AdminSettings = () => {
           setFinancialSettings({
             visitedCharges: res.settings.visitedCharges || 0,
             instantBookingCharges: res.settings.instantBookingCharges !== undefined ? res.settings.instantBookingCharges : 0,
+            serviceGstPercentage: res.settings.serviceGstPercentage !== undefined ? res.settings.serviceGstPercentage : 0,
             cancellationPenalty: res.settings.cancellationPenalty !== undefined ? res.settings.cancellationPenalty : 0,
             maxSearchTime: res.settings.maxSearchTime || 5,
             paymentTimeoutMinutes: res.settings.paymentTimeoutMinutes || 15,
@@ -561,17 +563,6 @@ const AdminSettings = () => {
         </div>
       )}
 
-      {/* System Settings Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => setActiveView('system')}
-          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-100 transition-colors">
-            <FiSettings className="w-6 h-6 text-purple-600" />
-          </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">System & Support</h3>
-          <p className="text-sm text-gray-500">Manage auto-assignment and help contact info</p>
-        </div>
-      )}
 
       {/* Booking Slots & Timing Card - Super Admin Only */}
       {isSuperAdmin && (
@@ -766,9 +757,11 @@ const AdminSettings = () => {
                       <p className="text-[10px] text-gray-400 mt-1">Extra fee charged when customer selects Instant / ASAP booking</p>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Vendor Cash Limit (₹)</label>
-                      <input type="number" name="vendorCashLimit" value={financialSettings.vendorCashLimit} onChange={handleFinancialChange}
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Service GST (%)</label>
+                      <input type="number" name="serviceGstPercentage" value={financialSettings.serviceGstPercentage} onChange={handleFinancialChange}
+                        min="0" max="100" step="0.01"
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
+                      <p className="text-[10px] text-gray-400 mt-1">GST applied to the service amount in every user booking</p>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Cancellation Penalty (₹)</label>
@@ -962,44 +955,6 @@ const AdminSettings = () => {
           )
         }
 
-        {/* System Preferences View */}
-        {
-          activeView === 'system' && (
-            <motion.div key="system" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}
-              className="max-w-2xl">
-
-              {/* System Settings */}
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-fit">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 bg-gray-100 rounded-lg">
-                    <FiSettings className="w-5 h-5 text-gray-600" />
-                  </div>
-                  <h2 className="text-lg font-bold text-gray-800">System Preferences</h2>
-                </div>
-
-                <div className="space-y-4">
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-800">Online Payments</p>
-                      <p className="text-xs text-gray-500 mt-1">Enable digital payment methods for users</p>
-                    </div>
-                    <button onClick={() => {
-                        const newValue = !financialSettings.isOnlinePaymentEnabled;
-                        setFinancialSettings(prev => ({ ...prev, isOnlinePaymentEnabled: newValue }));
-                        updateSettings({ isOnlinePaymentEnabled: newValue });
-                      }}
-                      className={`relative w-12 h-7 rounded-full transition-all duration-300 ${financialSettings.isOnlinePaymentEnabled ? 'bg-green-600' : 'bg-gray-200'}`}>
-                      <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${financialSettings.isOnlinePaymentEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                  </div>
-
-                </div>
-              </div>
-
-            </motion.div>
-          )
-        }
 
         {/* Zone Management View */}
         {

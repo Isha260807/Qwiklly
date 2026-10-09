@@ -75,10 +75,10 @@ const Cart = () => {
   const handleBookAll = () => navigate('/user/checkout');
 
   return (
-    <div className="min-h-screen bg-[#FAF7F8] relative">
+    <div className="min-h-screen bg-[#FAF7F8] relative pt-[52px]">
       {/* Header */}
       <header
-        className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 flex items-center justify-between"
+        className="fixed top-0 left-0 right-0 z-50 text-white shadow-md select-none px-4 py-2.5 flex items-center justify-between"
         style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
       >
         <div className="flex items-center gap-3">

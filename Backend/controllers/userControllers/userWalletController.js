@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../../models/User');
 const { validationResult } = require('express-validator');
 const { createOrder } = require('../../services/razorpayService');
@@ -182,41 +183,84 @@ const verifyWalletTopup = async (req, res) => {
 const getWalletTransactions = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, startDate, endDate } = req.query;
+    const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+
+    const parseFilterDate = (value, endExclusive = false) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+      const date = new Date(value + 'T00:00:00+05:30');
+      if (Number.isNaN(date.getTime())) return null;
+      if (endExclusive) date.setUTCDate(date.getUTCDate() + 1);
+      return date;
+    };
+
+    const start = startDate ? parseFilterDate(startDate) : null;
+    const end = endDate ? parseFilterDate(endDate, true) : null;
+    if ((startDate && !start) || (endDate && !end) || (start && end && start >= end)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid date range.'
+      });
+    }
+
+    const query = { userId: new mongoose.Types.ObjectId(userId) };
+    if (start || end) {
+      query.createdAt = {};
+      if (start) query.createdAt.$gte = start;
+      if (end) query.createdAt.$lt = end;
+    }
 
     const Transaction = require('../../models/Transaction');
+    const skip = (parsedPage - 1) * parsedLimit;
+    const spentTypes = ['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected'];
+    const earnedTypes = ['credit', 'referral', 'refund', 'topup', 'cashback'];
 
-    // Pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const [transactions, total, summaryResult] = await Promise.all([
+      Transaction.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parsedLimit),
+      Transaction.countDocuments(query),
+      Transaction.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: null,
+            totalSpent: {
+              $sum: { $cond: [{ $in: ['$type', spentTypes] }, '$amount', 0] }
+            },
+            totalEarned: {
+              $sum: { $cond: [{ $in: ['$type', earnedTypes] }, '$amount', 0] }
+            }
+          }
+        }
+      ])
+    ]);
 
-    // Get transactions
-    const transactions = await Transaction.find({ userId })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    // Get total count
-    const total = await Transaction.countDocuments({ userId });
-
-    // Format transactions
     const formattedTransactions = transactions.map(txn => ({
       id: txn._id,
-      type: txn.type, // 'credit', 'debit', 'refund', 'penalty' etc.
+      type: txn.type,
       amount: txn.amount,
       description: txn.description,
       date: txn.createdAt,
       status: txn.status,
       balanceAfter: txn.balanceAfter
     }));
+    const summary = summaryResult[0] || { totalSpent: 0, totalEarned: 0 };
 
     res.status(200).json({
       success: true,
       data: formattedTransactions,
+      summary: {
+        totalSpent: Number(summary.totalSpent || 0),
+        totalEarned: Number(summary.totalEarned || 0)
+      },
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: parsedPage,
+        limit: parsedLimit,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / parsedLimit)
       }
     });
   } catch (error) {
