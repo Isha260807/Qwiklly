@@ -70,6 +70,12 @@ const ZoneManagement = () => {
   const [vendorSearchQuery, setVendorSearchQuery] = useState('');
   const [vendorFilterTab, setVendorFilterTab] = useState('all'); // 'all' | 'online' | 'offline'
 
+  // Zone deletion impact modal state
+  const [zonePendingDelete, setZonePendingDelete] = useState(null);
+  const [zoneDeleteImpact, setZoneDeleteImpact] = useState(null);
+  const [loadingZoneDeleteImpact, setLoadingZoneDeleteImpact] = useState(false);
+  const [deletingZone, setDeletingZone] = useState(false);
+
   // Map state
   const [map, setMap] = useState(null);
   const [autocomplete, setAutocomplete] = useState(null);
@@ -256,14 +262,35 @@ const ZoneManagement = () => {
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`Delete zone "${name}"? This cannot be undone.`)) return;
+  const handleDelete = async (zone) => {
+    setZonePendingDelete(zone);
+    setZoneDeleteImpact(null);
+    setLoadingZoneDeleteImpact(true);
     try {
-      await zoneService.remove(id);
+      const response = await zoneService.getImpact(zone._id);
+      if (!response.success) throw new Error(response.message || 'Failed to check zone impact');
+      setZoneDeleteImpact(response.impact);
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || 'Failed to check zone impact');
+      setZonePendingDelete(null);
+    } finally {
+      setLoadingZoneDeleteImpact(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!zonePendingDelete || !zoneDeleteImpact?.canDelete || deletingZone) return;
+    try {
+      setDeletingZone(true);
+      await zoneService.remove(zonePendingDelete._id);
       toast.success('Zone deleted successfully');
-      fetchZones();
+      setZonePendingDelete(null);
+      setZoneDeleteImpact(null);
+      await fetchZones();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Delete failed');
+    } finally {
+      setDeletingZone(false);
     }
   };
 
@@ -786,7 +813,7 @@ const ZoneManagement = () => {
                     </button>
 
                     <button
-                      onClick={() => handleDelete(zone._id, zone.name)}
+                      onClick={() => handleDelete(zone)}
                       className="text-gray-400 hover:text-red-600 transition-colors p-1 rounded cursor-pointer"
                       title="Delete Zone"
                     >
@@ -1089,6 +1116,106 @@ const ZoneManagement = () => {
                 className="px-4 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-100 transition-colors cursor-pointer shadow-2xs"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* Zone Delete Impact Modal                                  */}
+      {/* ========================================================= */}
+      {zonePendingDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/55 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-100 animate-scaleUp">
+            <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Delete Zone: {zonePendingDelete.name}</h3>
+                <p className="text-xs text-gray-500 mt-1">Review the impact before permanently deleting this zone.</p>
+              </div>
+              <button
+                onClick={() => setZonePendingDelete(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <HiX className="w-5 h-5" />
+              </button>
+            </div>
+
+            {loadingZoneDeleteImpact ? (
+              <div className="px-6 py-12 text-center text-sm text-gray-500">
+                Checking vendors, services and bookings...
+              </div>
+            ) : zoneDeleteImpact ? (
+              <>
+                {zoneDeleteImpact.liveBookingCount > 0 ? (
+                  <div className="mx-6 mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    <p className="font-bold">Deletion blocked: {zoneDeleteImpact.liveBookingCount} live booking(s) found.</p>
+                    <p className="mt-1">Complete or cancel these bookings first. You can deactivate the zone so new bookings do not use it.</p>
+                  </div>
+                ) : zoneDeleteImpact.vendorsNeedingReassignmentCount > 0 || zoneDeleteImpact.servicesNeedingReassignmentCount > 0 ? (
+                  <div className="mx-6 mt-5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+                    <p className="font-bold">Reassignment required before deletion.</p>
+                    <p className="mt-1">
+                      Assign the listed vendors and services to another zone first, then open this delete check again.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mx-6 mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <p className="font-bold">No live bookings found. Zone can be deleted safely.</p>
+                    <p className="mt-1">Completed/cancelled bookings remain as history.</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-6">
+                  {[
+                    ['Assigned vendors', zoneDeleteImpact.assignedVendorCount],
+                    ['Online vendors', zoneDeleteImpact.onlineVendorCount],
+                    ['Assigned services', zoneDeleteImpact.assignedServiceCount],
+                    ['Vendors to reassign', zoneDeleteImpact.vendorsNeedingReassignmentCount],
+                    ['Services to reassign', zoneDeleteImpact.servicesNeedingReassignmentCount],
+                    ['Banners', zoneDeleteImpact.assignedBannerCount],
+                    ['All bookings', zoneDeleteImpact.totalBookingCount]
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+                      <div className="text-xl font-bold text-gray-900">{value ?? 0}</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">{label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mx-6 mb-5 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-xs text-indigo-900 space-y-1.5">
+                  <p>• Vendors assigned only to this zone must be assigned to another zone before deletion; vendors are never deleted.</p>
+                  <p>• Services assigned only to this zone must also be assigned to another zone before deletion.</p>
+                  <p>• Services/vendors already assigned to multiple zones will remain in those other zones.</p>
+                </div>
+              </>
+            ) : null}
+
+            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setZonePendingDelete(null)}
+                className="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              {zonePendingDelete.isActive && zoneDeleteImpact?.liveBookingCount > 0 && (
+                <button
+                  onClick={async () => {
+                    await handleToggleStatus(zonePendingDelete);
+                    setZonePendingDelete(null);
+                    setZoneDeleteImpact(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors cursor-pointer"
+                >
+                  Deactivate Zone
+                </button>
+              )}
+              <button
+                onClick={handleConfirmDelete}
+                disabled={loadingZoneDeleteImpact || !zoneDeleteImpact?.canDelete || deletingZone}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors cursor-pointer"
+              >
+                {deletingZone ? 'Deleting...' : 'Permanently Delete'}
               </button>
             </div>
           </div>

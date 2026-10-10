@@ -5,6 +5,7 @@ const { isAdmin } = require('../../middleware/roleMiddleware');
 const {
   getAllZones,
   getZone,
+  getZoneImpact,
   createZone,
   updateZone,
   deleteZone,
@@ -17,6 +18,7 @@ router.use(authenticate);
 router.use(isAdmin);
 
 router.get('/zones', getAllZones);
+router.get('/zones/:id/impact', getZoneImpact);
 router.get('/zones/:id', getZone);
 router.post('/zones', createZone);
 router.put('/zones/:id', updateZone);

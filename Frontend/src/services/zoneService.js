@@ -30,6 +30,11 @@ export const zoneService = {
     return response.data;
   },
 
+  getImpact: async (id) => {
+    const response = await api.get(`/admin/zones/${id}/impact`);
+    return response.data;
+  },
+
   create: async (zoneData) => {
     const response = await api.post('/admin/zones', zoneData);
     return response.data;
