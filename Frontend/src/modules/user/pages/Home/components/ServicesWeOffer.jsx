@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { optimizeCloudinaryUrl } from '../../../../../utils/cloudinaryOptimize';
 
 const toAssetUrl = (url) => {
   if (!url) return '';
@@ -38,6 +39,15 @@ const ServicesWeOffer = ({ services = [], onServiceClick }) => {
           const hasDiscount = originalPrice && Number(originalPrice) > Number(displayPrice);
           const ratingDisplay = formatRatingDisplay(service.rating, service.ratingCount);
           const badge = service.badge?.trim();
+          const rawImage = service.image || service.icon || service.imageUrl || service.iconUrl;
+          const originalImageSrc = toAssetUrl(rawImage);
+          const imageSrc = optimizeCloudinaryUrl(originalImageSrc, {
+            width: 240,
+            quality: 'auto:eco',
+            crop: 'limit',
+            dpr: 'auto'
+          });
+          const isAboveFold = index < 3;
 
           return (
             <motion.div
@@ -48,12 +58,22 @@ const ServicesWeOffer = ({ services = [], onServiceClick }) => {
             >
               {/* Image & Badges Container */}
               <div className="relative w-full aspect-[1/0.92] sm:aspect-square bg-[#F5F6F8] flex items-center justify-center overflow-hidden border-b border-slate-100">
-                {service.image || service.icon || service.imageUrl || service.iconUrl ? (
+                {imageSrc ? (
                   <img
-                    src={toAssetUrl(service.image || service.icon || service.imageUrl || service.iconUrl)}
+                    src={imageSrc}
                     alt={service.title}
                     className="w-full h-full object-contain p-1.5 sm:p-2 group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
+                    width="240"
+                    height="240"
+                    loading={isAboveFold ? 'eager' : 'lazy'}
+                    fetchPriority={isAboveFold ? 'high' : 'low'}
+                    decoding="async"
+                    onError={(event) => {
+                      const image = event.currentTarget;
+                      if (image.dataset.originalFallback === 'true') return;
+                      image.dataset.originalFallback = 'true';
+                      image.src = originalImageSrc;
+                    }}
                   />
                 ) : (
                   <div className="w-10 h-10 rounded-lg bg-slate-200/70 flex items-center justify-center text-slate-400 font-bold text-base">

@@ -1195,7 +1195,7 @@ const BillingPage = () => {
                   <div className="space-y-2 mb-3">
                     <div className="flex justify-between items-center text-emerald-700 text-sm">
                       <span>Salary earning</span>
-                      <span className="font-bold">Added to Today Earn</span>
+                      <span className="font-bold">Added to Earning</span>
                     </div>
                     {(calculations.vendorPartsEarnings > 0) && (
                       <div className="flex justify-between items-center text-emerald-700 text-sm">

@@ -8,7 +8,7 @@ const StatsCards = memo(({ stats }) => {
 
   const cards = [
     {
-      title: "Today's Earnings",
+      title: 'Earning',
       value: `₹${stats.todayEarnings.toLocaleString()}`,
       icon: FaWallet,
       onClick: () => navigate('/vendor/wallet')

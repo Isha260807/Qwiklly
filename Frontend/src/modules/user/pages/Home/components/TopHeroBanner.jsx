@@ -51,6 +51,17 @@ const TopHeroBanner = memo(({
   }
 
   const currentBanner = displayBanners[currentIndex] || displayBanners[0];
+  const bannerImageUrl = toAssetUrl(currentBanner.imageUrl);
+  const optimizedBannerSrc = optimizeCloudinaryUrl(bannerImageUrl, {
+    width: 720,
+    quality: 'auto:good',
+    dpr: 1
+  });
+  const bannerSrcSet = bannerImageUrl.includes('cloudinary.com')
+    ? [480, 720, 960, 1280]
+      .map(width => `${optimizeCloudinaryUrl(bannerImageUrl, { width, quality: 'auto:good', dpr: 1 })} ${width}w`)
+      .join(', ')
+    : undefined;
 
   const handleNext = (e) => {
     e?.stopPropagation();
@@ -118,7 +129,9 @@ const TopHeroBanner = memo(({
           >
             {/* Banner Image */}
             <img
-              src={optimizeCloudinaryUrl(toAssetUrl(currentBanner.imageUrl), { quality: 'auto:best', dpr: '2.0' })}
+              src={optimizedBannerSrc}
+              srcSet={bannerSrcSet}
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1200px"
               alt={currentBanner.title || 'Special Offer'}
               className="w-full h-full object-cover object-center rounded-2xl md:rounded-3xl"
               style={{
@@ -127,9 +140,16 @@ const TopHeroBanner = memo(({
                 backfaceVisibility: 'hidden'
               }}
               loading="eager"
+              fetchPriority="high"
               decoding="async"
               onError={(e) => {
-                e.target.src = 'https://placehold.co/1200x500/720C3E/white?text=Special+Offers';
+                if (e.currentTarget.dataset.originalFallback !== 'true' && bannerImageUrl) {
+                  e.currentTarget.dataset.originalFallback = 'true';
+                  e.currentTarget.removeAttribute('srcset');
+                  e.currentTarget.src = bannerImageUrl;
+                  return;
+                }
+                e.currentTarget.src = 'https://placehold.co/1200x500/720C3E/white?text=Special+Offers';
               }}
             />
 

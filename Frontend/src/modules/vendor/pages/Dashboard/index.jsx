@@ -160,7 +160,7 @@ const Dashboard = memo(() => {
           address: b.address?.addressLine1 || 'Address not available',
           distance: distance
         },
-        // Booking cards show the customer bill; salary is tracked separately in Today Earn.
+        // Booking cards show the customer bill; salary is tracked separately in Earning.
         price: Number(b.finalAmount || 0).toFixed(2),
         vendorEarnings: b.vendorEarnings, // Ensure it's explicitly passed
         timeSlot: {

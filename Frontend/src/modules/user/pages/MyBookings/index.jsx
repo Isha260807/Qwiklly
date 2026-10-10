@@ -46,13 +46,8 @@ const MyBookings = () => {
 
     loadBookings();
 
-    // Listen for real-time updates
-    const handleUpdate = () => loadBookings();
-    window.addEventListener('userBookingsUpdated', handleUpdate);
-
     return () => {
       isMounted = false;
-      window.removeEventListener('userBookingsUpdated', handleUpdate);
     };
   }, [filter]);
 

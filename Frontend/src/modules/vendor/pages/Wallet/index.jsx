@@ -75,10 +75,10 @@ export default function Wallet() {
   const config = data?.salaryConfig || {};
   const cards = [['Total earning', summary.totalEarning], ['Paid amount', summary.paidEarning], ['Pending payment', summary.pendingEarning], ['Booking earning', summary.bookingEarning]];
   return <div className="min-h-screen pb-24 bg-[#FFF8FB]">
-    <Header title="Today Earn" />
+    <Header title="Earning" />
     <main className="max-w-lg mx-auto px-4 py-4 space-y-4">
       <section className="rounded-2xl p-5 text-white" style={{ background: 'linear-gradient(135deg,#720C3E,#A62D64)' }}>
-        <p className="text-xs uppercase tracking-wider text-white/75">Today Earn</p><p className="text-3xl font-black mt-1">{money(summary.todayEarn)}</p>
+        <p className="text-xs uppercase tracking-wider text-white/75">Earning</p><p className="text-3xl font-black mt-1">{money(summary.todayEarn)}</p>
         <p className="text-[11px] text-white/75 mt-1">Calculated from completed bookings</p>
         <div className="mt-4 pt-3 border-t border-white/20 flex justify-between text-xs"><span>Current rate</span><b>{config.rateAmount ? money(config.rateAmount) + ' / ' + (config.rateUnitMinutes || 60) + ' min' : 'Rate not configured'}</b></div>
       </section>

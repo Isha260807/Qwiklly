@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
 import { userAuthService } from '../../../../services/authService';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { motion } from 'framer-motion';
 import {
   FiArrowLeft,
@@ -24,68 +23,62 @@ import { MdAccountBalanceWallet } from 'react-icons/md';
 import NotificationBell from '../../components/common/NotificationBell';
 import Logo from '../../../../components/common/Logo';
 
+const defaultUserProfile = {
+  name: 'Verified Customer',
+  phone: '',
+  email: '',
+  isPhoneVerified: false,
+  isEmailVerified: false,
+  walletBalance: 0,
+  plans: null
+};
+
+const mapUserProfile = (userData = {}) => ({
+  ...defaultUserProfile,
+  name: userData.name || defaultUserProfile.name,
+  phone: userData.phone || '',
+  email: userData.email || '',
+  isPhoneVerified: userData.isPhoneVerified || false,
+  isEmailVerified: userData.isEmailVerified || false,
+  profilePhoto: userData.profilePhoto || '',
+  walletBalance: userData.wallet?.balance ?? 0,
+  plans: userData.plans
+});
+
+const getStoredUserProfile = () => {
+  try {
+    const storedUserData = localStorage.getItem('userData');
+    return storedUserData ? mapUserProfile(JSON.parse(storedUserData)) : defaultUserProfile;
+  } catch {
+    return defaultUserProfile;
+  }
+};
+
 const Account = () => {
   const navigate = useNavigate();
-  const [userProfile, setUserProfile] = useState({
-    name: 'Verified Customer',
-    phone: '',
-    email: '',
-    isPhoneVerified: false,
-    isEmailVerified: false,
-    walletBalance: 0,
-    plans: null
-  });
-  const [isLoading, setIsLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState(getStoredUserProfile);
 
-  // Fetch user profile from database
+  // Render the stored profile immediately, then refresh it silently in the background.
   useEffect(() => {
+    let cancelled = false;
+
     const fetchProfile = async () => {
       try {
-        const storedUserData = localStorage.getItem('userData');
-        if (storedUserData) {
-          const userData = JSON.parse(storedUserData);
-          setUserProfile({
-            name: userData.name || 'Verified Customer',
-            phone: userData.phone || '',
-            email: userData.email || '',
-            isPhoneVerified: userData.isPhoneVerified || false,
-            isEmailVerified: userData.isEmailVerified || false,
-            profilePhoto: userData.profilePhoto || '',
-            walletBalance: userData.wallet?.balance ?? 0
-          });
-        }
-
         const response = await userAuthService.getProfile();
-        if (response.success && response.user) {
-          setUserProfile({
-            name: response.user.name || 'Verified Customer',
-            phone: response.user.phone || '',
-            email: response.user.email || '',
-            isPhoneVerified: response.user.isPhoneVerified || false,
-            isEmailVerified: response.user.isEmailVerified || false,
-            profilePhoto: response.user.profilePhoto || '',
-            walletBalance: response.user.wallet?.balance ?? 0,
-            plans: response.user.plans
-          });
+        if (!cancelled && response.success && response.user) {
+          setUserProfile(mapUserProfile(response.user));
         }
       } catch (error) {
-        const storedUserData = localStorage.getItem('userData');
-        if (storedUserData) {
-          const userData = JSON.parse(storedUserData);
-          setUserProfile({
-            name: userData.name || 'Verified Customer',
-            phone: userData.phone || '',
-            email: userData.email || '',
-            isPhoneVerified: userData.isPhoneVerified || false,
-            isEmailVerified: userData.isEmailVerified || false
-          });
-        }
-      } finally {
-        setIsLoading(false);
+        // The locally stored profile is already rendered, so keep it visible
+        // when the background refresh is unavailable.
       }
     };
 
     fetchProfile();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const formatPhoneNumber = (phone) => {
@@ -145,14 +138,6 @@ const Account = () => {
       </div>
     </button>
   );
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <LoadingSpinner />
-      </div>
-    );
-  }
 
   return (
     <div className="relative bg-transparent min-h-screen">
@@ -228,33 +213,6 @@ const Account = () => {
             </div>
           </div>
 
-          {/* Active Plan Card */}
-          {userProfile.plans && userProfile.plans.isActive && (
-            <div
-              onClick={() => navigate('/user/my-plan')}
-              className="relative overflow-hidden rounded-2xl p-3.5 text-white cursor-pointer group shadow-sm"
-              style={{
-                backgroundColor: themeColors.primary || '#720C3E'
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <FiShield className="w-3.5 h-3.5 text-white/80" />
-                    <span className="text-[9px] font-black uppercase tracking-wider text-white/80">Membership Status</span>
-                  </div>
-                  <h3 className="text-base font-bold">{userProfile.plans.name}</h3>
-                  <p className="text-[10px] text-white/80 mt-0.5">
-                    Expires: {new Date(userProfile.plans.expiry).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <FiZap className="w-5 h-5 text-white" />
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Quick Actions Grid (Balance & Rewards) */}
           <div className="grid grid-cols-2 gap-2.5">
             <button
@@ -288,13 +246,8 @@ const Account = () => {
 
           {/* Menu Card 1: Shopping & Activity */}
           <div>
-            <h3 className="text-[11px] font-bold text-[#55404B] uppercase tracking-wider mb-1.5 px-1">Orders & Plans</h3>
+            <h3 className="text-[11px] font-bold text-[#55404B] uppercase tracking-wider mb-1.5 px-1">Orders & Activity</h3>
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden divide-y divide-gray-50">
-              <MenuItem
-                icon={FiFileText}
-                label="My Plans"
-                onClick={() => navigate('/user/my-plan')}
-              />
               <MenuItem
                 icon={FiClipboard}
                 label="My Bookings"
@@ -479,33 +432,6 @@ const Account = () => {
                 </div>
               </div>
 
-              {/* Active Plan Card (if active) */}
-              {userProfile.plans && userProfile.plans.isActive && (
-                <div
-                  onClick={() => navigate('/user/my-plan')}
-                  className="relative overflow-hidden rounded-3xl p-5 text-white cursor-pointer group shadow-md transition-transform hover:-translate-y-0.5"
-                  style={{
-                    background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)'
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <FiShield className="w-4 h-4 text-white/90" />
-                        <span className="text-[10px] font-black uppercase tracking-wider text-white/90">Active Membership</span>
-                      </div>
-                      <h3 className="text-lg font-black tracking-tight">{userProfile.plans.name}</h3>
-                      <p className="text-xs text-white/80 mt-1">
-                        Valid till {new Date(userProfile.plans.expiry).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </p>
-                    </div>
-                    <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-xs">
-                      <FiZap className="w-6 h-6 text-yellow-300" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Quick Actions Grid (Balance & Rewards) */}
               <div className="grid grid-cols-2 gap-3.5">
                 <button
@@ -559,15 +485,15 @@ const Account = () => {
               <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Orders & Subscriptions</h3>
-                    <p className="text-xs text-slate-400 font-medium">Track service appointments, plans, and history</p>
+                    <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Orders & Activity</h3>
+                    <p className="text-xs text-slate-400 font-medium">Track service appointments, bookings, and history</p>
                   </div>
                   <span className="px-2.5 py-1 bg-[#FFF7FA] text-[#720C3E] border border-[#E8D9DF] text-[10px] font-bold rounded-lg uppercase tracking-wider">
                     Activity
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                   <div
                     onClick={() => navigate('/user/my-bookings')}
                     className="p-4 bg-slate-50 hover:bg-[#FFF7FA] hover:border-[#E8D9DF] rounded-2xl border border-slate-100 transition-all cursor-pointer group flex flex-col justify-between min-h-[110px]"
@@ -581,22 +507,6 @@ const Account = () => {
                     <div>
                       <h4 className="text-xs font-bold text-slate-900 mt-2">My Bookings</h4>
                       <p className="text-[11px] text-slate-500 line-clamp-1">View active & past orders</p>
-                    </div>
-                  </div>
-
-                  <div
-                    onClick={() => navigate('/user/my-plan')}
-                    className="p-4 bg-slate-50 hover:bg-[#FFF7FA] hover:border-[#E8D9DF] rounded-2xl border border-slate-100 transition-all cursor-pointer group flex flex-col justify-between min-h-[110px]"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="w-9 h-9 rounded-xl bg-white text-[#720C3E] shadow-2xs flex items-center justify-center group-hover:scale-105 transition-transform">
-                        <FiFileText className="text-base" />
-                      </div>
-                      <FiChevronRight className="text-slate-300 group-hover:text-[#720C3E] transition-colors" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 mt-2">My Plans</h4>
-                      <p className="text-[11px] text-slate-500 line-clamp-1">Subscriptions & packages</p>
                     </div>
                   </div>
 

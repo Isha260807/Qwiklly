@@ -53,7 +53,7 @@ const ActiveJobs = memo(() => {
       // Map API response to Component State structure
       const mappedJobs = jobsData.map(job => ({
         id: job._id || job.id,
-        serviceType: job.serviceName || 'Service',
+        serviceType: job.serviceName?.trim() || job.serviceId?.title || job.serviceType || 'Service',
         user: {
           name: job.userId?.name || 'Customer'
         },
@@ -238,13 +238,19 @@ const ActiveJobs = memo(() => {
                   />
 
                   <div className="relative z-10 pl-2">
+                    {/* Service Name */}
+                    <div className="flex items-center gap-2 mb-2 min-w-0">
+                      <div className="p-1 rounded-md flex-shrink-0" style={{ background: `${statusColor}15` }}>
+                        <FiBriefcase className="w-3.5 h-3.5" style={{ color: statusColor }} />
+                      </div>
+                      <h3 className="font-bold text-gray-800 text-sm leading-tight break-words">
+                        {job.serviceType}
+                      </h3>
+                    </div>
+
                     {/* Header Row */}
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <div className="p-1 rounded-md flex-shrink-0" style={{ background: `${statusColor}15` }}>
-                          <FiBriefcase className="w-3.5 h-3.5" style={{ color: statusColor }} />
-                        </div>
-                        <h3 className="font-bold text-gray-800 text-sm truncate">{job.serviceType}</h3>
                         <span
                           className="text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0"
                           style={{

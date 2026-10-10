@@ -940,7 +940,7 @@ export default function BookingDetails() {
             <div className="bg-emerald-50 px-4 py-3 border-t border-emerald-100">
               <div className="flex justify-between items-center text-emerald-800">
                 <span className="font-bold text-[10px] uppercase tracking-wider">Salary earning</span>
-                <span className="font-bold text-xs">Added to Today Earn</span>
+                <span className="font-bold text-xs">Added to Earning</span>
               </div>
               <p className="text-emerald-700/80 text-[10px] mt-1">
                 This booking is calculated from worked duration and your configured salary rate.
