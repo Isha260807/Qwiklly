@@ -144,18 +144,27 @@ export const serviceService = {
   // Create new service
   create: async (data) => {
     const response = await api.post('/admin/services', data);
+    apiCache.invalidatePrefix('public:');
     return response.data;
   },
 
   // Update service
   update: async (id, data) => {
     const response = await api.put(`/admin/services/${id}`, data);
+    apiCache.invalidatePrefix('public:');
     return response.data;
   },
 
   // Delete service
-  delete: async (id) => {
-    const response = await api.delete(`/admin/services/${id}`);
+  delete: async (id, force = false) => {
+    const response = await api.delete(`/admin/services/${id}${force ? '?force=true' : ''}`);
+    apiCache.invalidatePrefix('public:');
+    return response.data;
+  },
+
+  // Get service impact (pre-deletion check)
+  getImpact: async (id) => {
+    const response = await api.get(`/admin/services/${id}/impact`);
     return response.data;
   },
 

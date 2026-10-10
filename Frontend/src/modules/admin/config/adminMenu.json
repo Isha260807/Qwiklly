@@ -63,18 +63,9 @@
     "children": [
       "Manage Services",
       "Page Builder",
-      "Home Content"
+      "Home Content",
+      "Banners"
     ]
-  },
-  {
-    "section": "OPERATIONS & CATALOG",
-    "title": "Banners",
-    "route": "/admin/banners",
-    "allowedRoles": [
-      "super_admin",
-      "admin"
-    ],
-    "children": []
   },
   {
     "section": "OPERATIONS & CATALOG",

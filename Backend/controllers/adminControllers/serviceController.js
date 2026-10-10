@@ -1,10 +1,41 @@
 const mongoose = require('mongoose');
 const Service = require('../../models/UserService');
 const Brand = require('../../models/Brand');
+const Banner = require('../../models/Banner');
+const HomeContent = require('../../models/HomeContent');
+const Cart = require('../../models/Cart');
+const Booking = require('../../models/Booking');
+const Coupon = require('../../models/Coupon');
+const Review = require('../../models/Review');
+const Plan = require('../../models/Plan');
+const VendorService = require('../../models/VendorService');
 const { validationResult } = require('express-validator');
-const { SERVICE_STATUS } = require('../../utils/constants');
+const { SERVICE_STATUS, BOOKING_STATUS } = require('../../utils/constants');
 
 const SUPPORTED_BILLING_UNITS = [15, 30, 60];
+
+// These bookings still depend on the service record for customer tracking,
+// vendor workflow, or billing. Keep legacy status aliases for older records.
+const LIVE_BOOKING_STATUSES = [
+  BOOKING_STATUS.SEARCHING,
+  BOOKING_STATUS.REQUESTED,
+  BOOKING_STATUS.AWAITING_PAYMENT,
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.CONFIRMED,
+  BOOKING_STATUS.ACCEPTED,
+  BOOKING_STATUS.ASSIGNED,
+  BOOKING_STATUS.JOURNEY_STARTED,
+  BOOKING_STATUS.VISITED,
+  BOOKING_STATUS.IN_PROGRESS,
+  'payment_pending',
+  'started',
+  'reached',
+  'on_the_way'
+];
+
+// Only live bookings block permanent service deletion. WORK_DONE is treated
+// as non-live and historical booking snapshots are preserved separately.
+const SERVICE_DELETE_BLOCKING_STATUSES = LIVE_BOOKING_STATUSES;
 
 const normalizeFrequentlyAddedTogether = (ids, selfId = null) => [...new Set(
   (Array.isArray(ids) ? ids : [])
@@ -452,6 +483,102 @@ const updateService = async (req, res) => {
 };
 
 /**
+ * Get Service Impact (Pre-deletion analysis)
+ * GET /api/admin/services/:id/impact
+ */
+const getServiceImpact = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const service = await Service.findById(id).select('title status').lean();
+    if (!service) {
+      return res.status(404).json({ success: false, message: 'Service not found' });
+    }
+
+    const [
+      liveBookingsCount,
+      deletionBlockingBookingsCount,
+      totalBookingsCount,
+      linkedBannersCount,
+      crossSellCount,
+      linkedCouponsCount,
+      activeCartsCount,
+      linkedReviewsCount,
+      linkedPlansCount,
+      linkedVendorServicesCount,
+      linkedHomeContentCount
+    ] = await Promise.all([
+      Booking.countDocuments({
+        serviceId: id,
+        status: { $in: LIVE_BOOKING_STATUSES }
+      }),
+      Booking.countDocuments({
+        serviceId: id,
+        status: { $in: SERVICE_DELETE_BLOCKING_STATUSES }
+      }),
+      Booking.countDocuments({ serviceId: id }),
+      Banner.countDocuments({ targetServiceId: id }),
+      Service.countDocuments({
+        $and: [
+          { _id: { $ne: id } },
+          {
+            $or: [
+              { frequentlyAddedTogether: id },
+              { 'frequentlyAddedTogetherByZone.serviceIds': id }
+            ]
+          }
+        ]
+      }),
+      Coupon.countDocuments({ applicableServices: id }),
+      Cart.countDocuments({ 'items.serviceId': id }),
+      Review.countDocuments({ serviceId: id }),
+      Plan.countDocuments({
+        $or: [
+          { freeServices: id },
+          { 'bonusServices.serviceId': id }
+        ]
+      }),
+      VendorService.countDocuments({ serviceId: id }),
+      HomeContent.countDocuments({
+        $or: [
+          { 'banners.targetServiceId': id },
+          { 'promos.targetServiceId': id },
+          { 'noteworthy.targetServiceId': id },
+          { 'booked.targetServiceId': id },
+          { 'categorySections.seeAllTargetServiceId': id },
+          { 'categorySections.cards.targetServiceId': id }
+        ]
+      })
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        serviceId: id,
+        title: service.title,
+        status: service.status,
+        hasActiveBookings: liveBookingsCount > 0,
+        activeBookingsCount: liveBookingsCount,
+        liveBookingsCount,
+        hasDeletionBlockingBookings: deletionBlockingBookingsCount > 0,
+        deletionBlockingBookingsCount,
+        totalBookingsCount,
+        linkedBannersCount,
+        crossSellCount,
+        linkedCouponsCount,
+        activeCartsCount,
+        linkedReviewsCount,
+        linkedPlansCount,
+        linkedVendorServicesCount,
+        linkedHomeContentCount
+      }
+    });
+  } catch (error) {
+    console.error('Service impact check error:', error);
+    res.status(500).json({ success: false, message: 'Failed to evaluate service impact' });
+  }
+};
+
+/**
  * Delete service
  * DELETE /api/admin/services/:id
  */
@@ -467,11 +594,126 @@ const deleteService = async (req, res) => {
       });
     }
 
+    // Check for active in-progress bookings
+    const activeBookingsCount = await Booking.countDocuments({
+      serviceId: id,
+      status: { $in: SERVICE_DELETE_BLOCKING_STATUSES }
+    });
+
+    // Never delete a service while a booking may still need its populated
+    // service record for tracking, billing, or vendor workflows. Deactivate it
+    // instead and let existing bookings finish safely.
+    if (activeBookingsCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete service with ${activeBookingsCount} active ongoing booking(s). Please deactivate the service instead.`,
+        activeBookingsCount
+      });
+    }
+
+    // Clean linked references before deleting the service. If a cleanup fails,
+    // the service remains available so the operation can be safely retried.
+    // Historical bookings are intentionally preserved for reporting/audit.
+
+    // 1. Cascade cleanup on Banners (reset redirection to 'none' & null)
+    await Banner.updateMany(
+      { targetServiceId: id },
+      { 
+        $set: { 
+          targetType: 'none', 
+          targetServiceId: null 
+        } 
+      }
+    );
+
+    // 2. Cascade cleanup on every HomeContent section that can target a service
+    await HomeContent.updateMany(
+      {
+        $or: [
+          { 'banners.targetServiceId': id },
+          { 'promos.targetServiceId': id },
+          { 'noteworthy.targetServiceId': id },
+          { 'booked.targetServiceId': id },
+          { 'categorySections.seeAllTargetServiceId': id },
+          { 'categorySections.cards.targetServiceId': id }
+        ]
+      },
+      {
+        $set: {
+          'banners.$[bElem].targetServiceId': null,
+          'promos.$[pElem].targetServiceId': null,
+          'noteworthy.$[nElem].targetServiceId': null,
+          'booked.$[bookedElem].targetServiceId': null,
+          'categorySections.$[sectionElem].seeAllTargetServiceId': null,
+          'categorySections.$[sectionElem].cards.$[cardElem].targetServiceId': null
+        }
+      },
+      {
+        arrayFilters: [
+          { 'bElem.targetServiceId': id },
+          { 'pElem.targetServiceId': id },
+          { 'nElem.targetServiceId': id },
+          { 'bookedElem.targetServiceId': id },
+          { 'sectionElem.seeAllTargetServiceId': id },
+          { 'cardElem.targetServiceId': id }
+        ]
+      }
+    );
+
+    // 3. Clean up frequentlyAddedTogether cross-sell references from other services
+    await Service.updateMany(
+      { frequentlyAddedTogether: id },
+      { $pull: { frequentlyAddedTogether: id } }
+    );
+
+    await Service.updateMany(
+      { 'frequentlyAddedTogetherByZone.serviceIds': id },
+      { $pull: { 'frequentlyAddedTogetherByZone.$.serviceIds': id } }
+    );
+
+    // 4. Clean up Coupons
+    await Coupon.updateMany(
+      { applicableServices: id },
+      { $pull: { applicableServices: id } }
+    );
+
+    // 5. Remove deleted service from all user carts
+    await Cart.updateMany(
+      { 'items.serviceId': id },
+      { $pull: { items: { serviceId: id } } }
+    );
+
+    // 6. Preserve review content but detach the deleted service reference.
+    await Review.updateMany(
+      { serviceId: id },
+      { $set: { serviceId: null } }
+    );
+
+    // 7. Remove deleted service from plan entitlements.
+    await Plan.updateMany(
+      {
+        $or: [
+          { freeServices: id },
+          { 'bonusServices.serviceId': id }
+        ]
+      },
+      {
+        $pull: {
+          freeServices: id,
+          bonusServices: { serviceId: id }
+        }
+      }
+    );
+
+    // 8. Remove vendor-specific availability mappings for this service.
+    await VendorService.deleteMany({ serviceId: id });
+
+    // 9. Delete the service only after all reference cleanup succeeds.
     await service.deleteOne();
 
     res.status(200).json({
       success: true,
-      message: 'Service deleted successfully'
+      message: 'Service deleted and all linked references safely cleaned up'
     });
   } catch (error) {
     console.error('Delete service error:', error);
@@ -487,5 +729,6 @@ module.exports = {
   getServiceById,
   createService,
   updateService,
-  deleteService
+  deleteService,
+  getServiceImpact
 };

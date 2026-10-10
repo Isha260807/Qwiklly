@@ -21,6 +21,11 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import couponService from '../../services/couponService';
+import { serviceService } from '../../../../services/catalogService';
+
+const getServiceId = (service) => (
+  typeof service === 'string' ? service : service?._id || service?.id
+);
 
 const Coupons = () => {
   const [coupons, setCoupons] = useState([]);
@@ -47,6 +52,9 @@ const Coupons = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [serviceOptions, setServiceOptions] = useState([]);
+  const [servicesLoading, setServicesLoading] = useState(false);
+  const [serviceSearch, setServiceSearch] = useState('');
 
   // Usage History Modal
   const [showUsageModal, setShowUsageModal] = useState(false);
@@ -70,7 +78,8 @@ const Coupons = () => {
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     firstOrderOnly: false,
     newUserOnly: false,
-    isActive: true
+    isActive: true,
+    applicableServices: []
   };
   const [formData, setFormData] = useState(initialForm);
 
@@ -104,14 +113,50 @@ const Coupons = () => {
     fetchCoupons();
   }, [search, statusFilter, typeFilter, pagination.page]);
 
+  useEffect(() => {
+    const fetchServiceOptions = async () => {
+      try {
+        setServicesLoading(true);
+        const res = await serviceService.getAll({ status: 'active' });
+        const services = res.services || res.data || [];
+        setServiceOptions(Array.isArray(services) ? services : []);
+      } catch (error) {
+        console.error('Error loading services for coupons:', error);
+        toast.error('Failed to load services for coupon targeting');
+      } finally {
+        setServicesLoading(false);
+      }
+    };
+
+    fetchServiceOptions();
+  }, []);
+
   const handleOpenCreate = () => {
     setEditingCoupon(null);
     setFormData(initialForm);
+    setServiceSearch('');
     setShowModal(true);
   };
 
   const handleOpenEdit = (coupon) => {
     setEditingCoupon(coupon);
+    const selectedServices = Array.isArray(coupon.applicableServices)
+      ? coupon.applicableServices
+      : [];
+
+    // Keep an already-linked inactive service visible while editing so saving
+    // the coupon does not silently remove that existing relationship.
+    const populatedSelectedServices = selectedServices.filter((service) => typeof service === 'object' && getServiceId(service));
+    if (populatedSelectedServices.length > 0) {
+      setServiceOptions((previous) => {
+        const existingIds = new Set(previous.map(getServiceId));
+        return [
+          ...previous,
+          ...populatedSelectedServices.filter((service) => !existingIds.has(getServiceId(service)))
+        ];
+      });
+    }
+
     setFormData({
       code: coupon.code,
       title: coupon.title,
@@ -126,8 +171,10 @@ const Coupons = () => {
       expiresAt: coupon.expiresAt ? new Date(coupon.expiresAt).toISOString().split('T')[0] : '',
       firstOrderOnly: Boolean(coupon.firstOrderOnly),
       newUserOnly: Boolean(coupon.newUserOnly),
-      isActive: coupon.isActive
+      isActive: coupon.isActive,
+      applicableServices: selectedServices.map(getServiceId).filter(Boolean)
     });
+    setServiceSearch('');
     setShowModal(true);
   };
 
@@ -156,7 +203,8 @@ const Coupons = () => {
         maxDiscount: formData.maxDiscount ? Number(formData.maxDiscount) : null,
         minOrderAmount: formData.minOrderAmount ? Number(formData.minOrderAmount) : 0,
         usageLimit: formData.usageLimit ? Number(formData.usageLimit) : null,
-        perUserLimit: formData.perUserLimit ? Number(formData.perUserLimit) : 1
+        perUserLimit: formData.perUserLimit ? Number(formData.perUserLimit) : 1,
+        applicableServices: formData.applicableServices || []
       };
 
       if (editingCoupon) {
@@ -215,6 +263,31 @@ const Coupons = () => {
     } finally {
       setLoadingUsage(false);
     }
+  };
+
+  const filteredServiceOptions = serviceOptions.filter((service) => {
+    const query = serviceSearch.trim().toLowerCase();
+    if (!query) return true;
+
+    return [
+      service.title,
+      service.name,
+      service.brandId?.title,
+      service.categoryId?.title
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
+
+  const handleServiceToggle = (serviceId) => {
+    setFormData((previous) => {
+      const selectedServices = previous.applicableServices || [];
+      const nextServices = selectedServices.includes(serviceId)
+        ? selectedServices.filter((id) => id !== serviceId)
+        : [...selectedServices, serviceId];
+
+      return { ...previous, applicableServices: nextServices };
+    });
   };
 
   return (
@@ -557,6 +630,70 @@ const Coupons = () => {
                     placeholder="Brief description for customer preview..."
                     className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-indigo-500 focus:bg-white"
                   />
+                </div>
+
+                {/* Service Targeting */}
+                <div className='pt-2 border-t border-gray-100'>
+                  <div className='flex items-start justify-between gap-3 mb-1.5'>
+                    <div>
+                      <label className='block text-xs font-bold text-gray-600 uppercase'>Applicable Services</label>
+                      <p className='text-[11px] text-gray-400 mt-0.5'>
+                        Leave empty to apply this coupon to all services.
+                      </p>
+                    </div>
+                    <span className='text-[11px] font-bold text-indigo-600 whitespace-nowrap'>
+                      {formData.applicableServices?.length || 0} selected
+                    </span>
+                  </div>
+
+                  <input
+                    type='search'
+                    value={serviceSearch}
+                    onChange={(e) => setServiceSearch(e.target.value)}
+                    placeholder='Search services...'
+                    className='w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-indigo-500 focus:bg-white'
+                  />
+
+                  <div className='mt-2 max-h-44 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50/50 p-2'>
+                    {servicesLoading ? (
+                      <p className='py-4 text-center text-xs text-gray-400'>Loading services...</p>
+                    ) : filteredServiceOptions.length === 0 ? (
+                      <p className='py-4 text-center text-xs text-gray-400'>No services found.</p>
+                    ) : (
+                      <div className='grid grid-cols-1 sm:grid-cols-2 gap-1.5'>
+                        {filteredServiceOptions.map((service) => {
+                          const serviceId = getServiceId(service);
+                          if (!serviceId) return null;
+
+                          const serviceTitle = service.title || service.name || 'Untitled service';
+                          const serviceContext = service.brandId?.title || service.categoryId?.title;
+
+                          return (
+                            <label
+                              key={serviceId}
+                              className='flex items-start gap-2 p-2 rounded-lg bg-white border border-gray-100 hover:border-indigo-200 cursor-pointer'
+                            >
+                              <input
+                                type='checkbox'
+                                checked={(formData.applicableServices || []).includes(serviceId)}
+                                onChange={() => handleServiceToggle(serviceId)}
+                                className='mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500'
+                              />
+                              <span className='min-w-0'>
+                                <span className='block text-xs font-semibold text-gray-700 truncate'>{serviceTitle}</span>
+                                {serviceContext && (
+                                  <span className='block text-[10px] text-gray-400 truncate'>{serviceContext}</span>
+                                )}
+                                {service.status && service.status !== 'active' && (
+                                  <span className='block text-[10px] text-amber-600'>Inactive</span>
+                                )}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Discount Settings */}

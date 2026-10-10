@@ -72,6 +72,7 @@ const getChildRoute = (parentRoute, childName) => {
       "Manage Services": "/admin/user-categories/sections",
       "Page Builder": "/admin/user-categories/page-builder",
       "Home Content": "/admin/user-categories/home-content",
+      "Banners": "/admin/banners",
     },
     "/admin/payments": {
       "Payment Overview": "/admin/payments/overview",
@@ -221,8 +222,10 @@ const AdminSidebar = ({ isOpen, onClose }) => {
         return location.pathname === "/admin/dashboard";
       }
       const isChildRoute =
-        location.pathname.startsWith(item.route) &&
-        location.pathname !== item.route;
+        (location.pathname.startsWith(item.route) &&
+          location.pathname !== item.route) ||
+        (item.route === "/admin/user-categories" &&
+          (location.pathname === "/admin/banners" || location.pathname.startsWith("/admin/banners/")));
       return isChildRoute;
     });
     if (activeItem && activeItem.children && activeItem.children.length > 0) {
@@ -246,6 +249,9 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     if (route === "/admin/user-categories") {
       if (location.pathname.startsWith("/admin/user-categories/vendor-")) {
         return false;
+      }
+      if (location.pathname === "/admin/banners" || location.pathname.startsWith("/admin/banners/")) {
+        return true;
       }
     }
 

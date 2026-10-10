@@ -29,6 +29,7 @@ const UserCategories = () => {
           <Route path="services" element={<ServicesPage />} />
           <Route path="page-builder" element={<ServicePageBuilder />} />
           <Route path="home-content" element={<HomeContentPage />} />
+          <Route path="banners" element={<Navigate to="/admin/banners" replace />} />
           <Route path="page-builder/:serviceId" element={<ServicePageBuilder />} />
           <Route path="categories" element={<Navigate to="services" replace />} />
           <Route path="brands" element={<Navigate to="services" replace />} />
@@ -42,5 +43,3 @@ const UserCategories = () => {
 };
 
 export default UserCategories;
-
-

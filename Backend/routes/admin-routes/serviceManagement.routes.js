@@ -8,7 +8,8 @@ const {
   getServiceById,
   createService,
   updateService,
-  deleteService
+  deleteService,
+  getServiceImpact
 } = require('../../controllers/adminControllers/serviceController');
 
 const serviceValidation = [
@@ -25,6 +26,7 @@ const serviceValidation = [
 ];
 
 router.get('/services', authenticate, isAdmin, getAllServices);
+router.get('/services/:id/impact', authenticate, isAdmin, getServiceImpact);
 router.get('/services/:id', authenticate, isAdmin, getServiceById);
 router.post('/services', authenticate, isAdmin, serviceValidation, createService);
 router.put('/services/:id', authenticate, isAdmin, updateService);

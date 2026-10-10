@@ -11,7 +11,16 @@ import {
   FiDollarSign,
   FiUploadCloud,
   FiLayout,
-  FiExternalLink
+  FiExternalLink,
+  FiAlertTriangle,
+  FiInfo,
+  FiCheckCircle,
+  FiLayers,
+  FiShoppingCart,
+  FiTag,
+  FiImage,
+  FiShield,
+  FiClock
 } from "react-icons/fi";
 import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
@@ -63,6 +72,9 @@ const ServicesPage = () => {
   // Delete Confirmation Modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [serviceToDelete, setServiceToDelete] = useState(null);
+  const [loadingImpact, setLoadingImpact] = useState(false);
+  const [serviceImpact, setServiceImpact] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchZones = async () => {
     try {
@@ -322,23 +334,68 @@ const ServicesPage = () => {
     }
   };
 
-  // Delete Service
-  const handleConfirmDelete = async () => {
+  // Open Delete Modal with Impact Analysis
+  const handleOpenDelete = async (service) => {
+    setServiceToDelete(service);
+    setServiceImpact(null);
+    setDeleteModalOpen(true);
+    setLoadingImpact(true);
+    try {
+      const res = await serviceService.getImpact(service._id || service.id);
+      if (res.success) {
+        setServiceImpact(res.data);
+      }
+    } catch (error) {
+      console.error("Failed to load service impact:", error);
+    } finally {
+      setLoadingImpact(false);
+    }
+  };
+
+  // Safe Deactivate from Delete Modal
+  const handleDeactivateFromDeleteModal = async () => {
     if (!serviceToDelete) return;
     const id = serviceToDelete._id || serviceToDelete.id;
-
+    setDeleting(true);
     try {
-      const res = await serviceService.delete(id);
+      const res = await serviceService.update(id, { status: "inactive" });
       if (res.success) {
-        toast.success("Service deleted successfully");
+        toast.success("Service safely deactivated (hidden from customers)");
         setDeleteModalOpen(false);
         setServiceToDelete(null);
+        window.dispatchEvent(new Event('adminUserAppCatalogUpdated'));
+        fetchServices();
+      } else {
+        toast.error(res.message || "Failed to deactivate service");
+      }
+    } catch (error) {
+      toast.error("Failed to deactivate service");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Permanent Delete Service (with cascade cleanup)
+  const handleConfirmDelete = async (force = false) => {
+    if (!serviceToDelete) return;
+    const id = serviceToDelete._id || serviceToDelete.id;
+    setDeleting(true);
+
+    try {
+      const res = await serviceService.delete(id, force);
+      if (res.success) {
+        toast.success("Service deleted and all linked references safely cleaned up");
+        setDeleteModalOpen(false);
+        setServiceToDelete(null);
+        window.dispatchEvent(new Event('adminUserAppCatalogUpdated'));
         fetchServices();
       } else {
         toast.error(res.message || "Failed to delete service");
       }
     } catch (error) {
-      toast.error("Failed to delete service");
+      toast.error(error?.response?.data?.message || "Failed to delete service");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -551,10 +608,7 @@ const ServicesPage = () => {
                         <FiEdit2 className="text-xs" /> Edit Info
                       </button>
                       <button
-                        onClick={() => {
-                          setServiceToDelete(service);
-                          setDeleteModalOpen(true);
-                        }}
+                        onClick={() => handleOpenDelete(service)}
                         className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
                         title="Delete Service"
                       >
@@ -916,36 +970,157 @@ const ServicesPage = () => {
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
+      {/* Enhanced Delete & Impact Confirmation Modal */}
       <Modal
         isOpen={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        title="Delete Service"
-        maxWidth="max-w-md"
+        onClose={() => !deleting && setDeleteModalOpen(false)}
+        title="Delete Service Safety Check"
+        maxWidth="max-w-lg"
       >
         <div className="space-y-4">
-          <p className="text-xs text-slate-600">
-            Are you sure you want to delete{" "}
-            <span className="font-bold text-slate-800">
-              "{serviceToDelete?.title}"
-            </span>
-            ? This action cannot be undone.
-          </p>
-          <div className="flex items-center justify-end gap-3 pt-2">
+          {/* Target Service Info */}
+          <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+              {serviceToDelete?.iconUrl ? (
+                <img
+                  src={toAssetUrl(serviceToDelete.iconUrl)}
+                  alt={serviceToDelete.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <FiPackage className="text-xl text-slate-400" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-black text-slate-900 truncate">
+                  {serviceToDelete?.title}
+                </h4>
+                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${
+                  serviceToDelete?.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {serviceToDelete?.status}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Base Price: ₹{serviceToDelete?.basePrice || 0}
+              </p>
+            </div>
+          </div>
+
+          {/* Loading Impact State */}
+          {loadingImpact ? (
+            <div className="p-6 text-center space-y-2 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="w-6 h-6 border-2 border-[#720C3E] border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-xs font-bold text-slate-600">Analyzing service dependencies & live bookings...</p>
+            </div>
+          ) : serviceImpact ? (
+            <div className="space-y-3">
+              {/* Active Bookings Guard Alert */}
+              {serviceImpact.hasActiveBookings ? (
+                <div className="p-4 bg-rose-50 border-l-4 border-rose-600 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-2 text-rose-800 font-black text-xs">
+                    <FiAlertTriangle className="text-base text-rose-600 shrink-0" />
+                    <span>Active In-Progress Bookings Found ({serviceImpact.activeBookingsCount})</span>
+                  </div>
+                  <p className="text-xs text-rose-700 leading-relaxed">
+                    This service currently has <strong>{serviceImpact.activeBookingsCount} ongoing/pending booking(s)</strong> assigned to vendors. Permanently deleting it now will break customer live tracking and billing.
+                  </p>
+                  <p className="text-[11px] text-rose-800 font-semibold pt-1">
+                    👉 <strong>Recommendation:</strong> Click <strong>"Deactivate Service"</strong> below to hide it from new customers while letting active bookings complete safely.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-2xl">
+                  <p className="text-xs text-amber-800 font-medium">
+                    Permanent deletion will remove this service from the platform and trigger automatic cleanup across linked components.
+                  </p>
+                </div>
+              )}
+
+              {/* Linked References Grid */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                   Service Impact & Live Booking Check
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiImage className="text-base text-[#720C3E] mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.linkedBannersCount}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Banners</span>
+                  </div>
+
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiLayers className="text-base text-indigo-600 mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.crossSellCount}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Add-on Lists</span>
+                  </div>
+
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiTag className="text-base text-emerald-600 mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.linkedCouponsCount}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Coupons</span>
+                  </div>
+
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiShoppingCart className="text-base text-amber-600 mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.activeCartsCount}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">User Carts</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-2.5">
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiStar className="text-base text-violet-600 mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.linkedReviewsCount || 0}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Reviews</span>
+                  </div>
+
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiClock className="text-base text-rose-600 mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.liveBookingsCount ?? serviceImpact.activeBookingsCount ?? 0}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Live Bookings</span>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-3 border-t border-slate-200">
             <button
               type="button"
+              disabled={deleting}
               onClick={() => setDeleteModalOpen(false)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
             >
               Cancel
             </button>
+
+            {/* Deactivate Option (Safe) */}
             <button
               type="button"
-              onClick={handleConfirmDelete}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold"
+              disabled={deleting}
+              onClick={handleDeactivateFromDeleteModal}
+              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
             >
-              Delete Permanently
+              <FiShield />
+              {deleting ? "Processing..." : "Deactivate Service (Safe)"}
             </button>
+
+            {/* Permanent Delete Option */}
+            {!serviceImpact?.hasActiveBookings && (
+              <button
+                type="button"
+                disabled={deleting || loadingImpact}
+                onClick={() => handleConfirmDelete(false)}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <FiTrash2 />
+                {deleting ? "Deleting..." : "Permanently Delete"}
+              </button>
+            )}
           </div>
         </div>
       </Modal>
