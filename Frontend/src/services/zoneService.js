@@ -1,4 +1,8 @@
 import api from './api';
+import { apiCache } from '../utils/apiCache';
+
+const zoneResolveInFlight = new Map();
+const serviceabilityInFlight = new Map();
 
 /**
  * Zone Service
@@ -8,14 +12,47 @@ export const zoneService = {
   // Public: resolve which zone a coordinate falls in (UI/catalog use only -
   // booking creation always re-resolves this server-side)
   resolve: async (lat, lng) => {
-    const response = await api.get(`/public/zones/resolve?lat=${lat}&lng=${lng}`);
-    return response.data;
+    const cacheKey = 'public:zone-resolve:' + Number(lat).toFixed(5) + ':' + Number(lng).toFixed(5);
+    const cached = apiCache.get(cacheKey);
+    if (cached) return cached;
+
+    const existingRequest = zoneResolveInFlight.get(cacheKey);
+    if (existingRequest) return existingRequest;
+
+    const request = api.get('/public/zones/resolve?lat=' + lat + '&lng=' + lng)
+      .then(response => {
+        apiCache.set(cacheKey, response.data, 120);
+        return response.data;
+      })
+      .finally(() => {
+        zoneResolveInFlight.delete(cacheKey);
+      });
+
+    zoneResolveInFlight.set(cacheKey, request);
+    return request;
   },
 
   // Public: advisory zone+service+radius+vendor availability check
   checkServiceability: async (serviceId, lat, lng) => {
-    const response = await api.get(`/public/zones/serviceability?serviceId=${serviceId}&lat=${lat}&lng=${lng}`);
-    return response.data;
+    // Deduplicate concurrent checks (e.g. React StrictMode's dev remount).
+    // No response cache is used because serviceability can change live.
+    const requestKey = String(serviceId) + ':' + String(lat) + ':' + String(lng);
+    const existingRequest = serviceabilityInFlight.get(requestKey);
+    if (existingRequest) return existingRequest;
+
+    const request = api.get(
+      '/public/zones/serviceability?serviceId=' +
+      encodeURIComponent(serviceId) +
+      '&lat=' + encodeURIComponent(lat) +
+      '&lng=' + encodeURIComponent(lng)
+    )
+      .then(response => response.data)
+      .finally(() => {
+        serviceabilityInFlight.delete(requestKey);
+      });
+
+    serviceabilityInFlight.set(requestKey, request);
+    return request;
   },
 
   // Admin CRUD

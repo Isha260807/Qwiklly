@@ -1,6 +1,8 @@
 import api, { apiCache } from './api';
 import { uploadToCloudinary } from '../utils/cloudinaryUpload';
 
+const publicCatalogInFlight = new Map();
+
 /**
  * Catalog Service
  * Handles all API calls for Categories, Brands (formerly Services), Services (Sub-services), and Home Content
@@ -302,15 +304,27 @@ export const publicCatalogService = {
     if (params.zoneId) queryParams.append('zoneId', params.zoneId);
     if (params.search) queryParams.append('search', params.search);
 
-    const cacheKey = `public:services:${queryParams.toString()}`;
+    const query = queryParams.toString();
+    const cacheKey = 'public:services:' + query;
     const cached = apiCache.get(cacheKey);
     if (cached) return cached;
 
-    const response = await api.get(`/public/services${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
-    if (response.data.success) {
-      apiCache.set(cacheKey, response.data, 120);
-    }
-    return response.data;
+    const existingRequest = publicCatalogInFlight.get(cacheKey);
+    if (existingRequest) return existingRequest;
+
+    const request = api.get('/public/services' + (query ? '?' + query : ''))
+      .then(response => {
+        if (response.data.success) {
+          apiCache.set(cacheKey, response.data, 120);
+        }
+        return response.data;
+      })
+      .finally(() => {
+        publicCatalogInFlight.delete(cacheKey);
+      });
+
+    publicCatalogInFlight.set(cacheKey, request);
+    return request;
   },
 
   // Get brand by slug (cached for 1 minute)
@@ -343,19 +357,31 @@ export const publicCatalogService = {
 
   // Get consolidated home data (cached for 2 minutes)
   getHomeData: async (cityId, zoneId) => {
-    const cacheKey = `public:homeData:${cityId || 'default'}:${zoneId || 'none'}`;
+    const cacheKey = 'public:homeData:' + (cityId || 'default') + ':' + (zoneId || 'none');
     const cached = apiCache.get(cacheKey);
     if (cached) return cached;
+
+    const existingRequest = publicCatalogInFlight.get(cacheKey);
+    if (existingRequest) return existingRequest;
 
     const params = new URLSearchParams();
     if (cityId) params.set('cityId', cityId);
     if (zoneId) params.set('zoneId', zoneId);
-    const query = params.toString() ? `?${params.toString()}` : '';
-    const response = await api.get(`/public/home-data${query}`);
-    if (response.data.success) {
-      apiCache.set(cacheKey, response.data, 120); // 2 minutes
-    }
-    return response.data;
+    const query = params.toString();
+
+    const request = api.get('/public/home-data' + (query ? '?' + query : ''))
+      .then(response => {
+        if (response.data.success) {
+          apiCache.set(cacheKey, response.data, 120);
+        }
+        return response.data;
+      })
+      .finally(() => {
+        publicCatalogInFlight.delete(cacheKey);
+      });
+
+    publicCatalogInFlight.set(cacheKey, request);
+    return request;
   },
 
   // Invalidate all public caches (useful after admin updates)

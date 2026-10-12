@@ -11,7 +11,6 @@ import { zoneService } from '../../../../services/zoneService';
 import { useCart } from '../../../../context/CartContext';
 import { useCity } from '../../../../context/CityContext';
 import { toast } from 'react-hot-toast';
-import { registerFCMToken } from '../../../../services/pushNotificationService';
 import { motion } from 'framer-motion';
 import { FiMapPin, FiBell } from 'react-icons/fi';
 
@@ -37,6 +36,7 @@ import { useJsApiLoader } from '@react-google-maps/api';
 
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+let autoLocationAttemptedInApp = false;
 
 
 
@@ -184,6 +184,7 @@ const Home = () => {
   // Browsing is never blocked by this - it only drives the informational
   // "coming soon in this location" banner.
   const [zoneStatus, setZoneStatus] = useState(null);
+  const [zoneResolved, setZoneResolved] = useState(false);
 
   const { cartCount, addToCart } = useCart();
   const { currentCity, cities, selectCity, loading: cityLoading } = useCity();
@@ -270,11 +271,12 @@ const Home = () => {
 
     const shouldAutoFetch = isExplicitAutoFetch || !hasSavedAddress || !isPermissionGranted;
 
-    if (autoLocationAttemptedRef.current || !shouldAutoFetch) return;
+    if (autoLocationAttemptedRef.current || autoLocationAttemptedInApp || !shouldAutoFetch) return;
     autoLocationAttemptedRef.current = true;
+    autoLocationAttemptedInApp = true;
 
     fetchUserLocation();
-  }, [location.state, cities, selectCity]);
+  }, [location.state?.autoFetchLocation, cities, selectCity]);
 
   const handleCitySelectedFromModal = (city) => {
     if (city) {
@@ -349,15 +351,23 @@ const Home = () => {
   // is informational only - it never hides or blocks the catalog, it just
   // lets the user know before they try to book.
   useEffect(() => {
-    if (!userCoords) return;
+    if (!userCoords) {
+      setZoneStatus(null);
+      setZoneResolved(true);
+      return undefined;
+    }
+
     let cancelled = false;
+    setZoneResolved(false);
 
     zoneService.resolve(userCoords.lat, userCoords.lng)
       .then(res => {
-        if (!cancelled && res?.success) setZoneStatus(res.zoneStatus);
+        if (cancelled) return;
+        if (res?.success) setZoneStatus(res.zoneStatus);
+        setZoneResolved(true);
       })
       .catch(() => {
-        // silent - banner just stays hidden if the check fails
+        if (!cancelled) setZoneResolved(true);
       });
 
     return () => { cancelled = true; };
@@ -373,6 +383,9 @@ const Home = () => {
     if (fullAddr) {
       setAddress(fullAddr);
       localStorage.setItem('currentAddress', fullAddr);
+      // A manually selected address is already a valid location choice;
+      // don't force GPS detection again when the user returns to Home.
+      localStorage.setItem('location_granted', 'true');
 
       if (typeof locationObj?.lat === 'number' && typeof locationObj?.lng === 'number') {
         setUserCoords({ lat: locationObj.lat, lng: locationObj.lng });
@@ -421,99 +434,6 @@ const Home = () => {
     setIsAddressModalOpen(false);
   };
 
-  // Auto-detect location on mount with forced English language
-  useEffect(() => {
-    const autoDetectLocation = async () => {
-      const curStored = localStorage.getItem('currentAddress');
-      const isHindi = curStored && /[\u0900-\u097F]/.test(curStored);
-
-      if (navigator.geolocation) {
-        if (address === 'Select Location' || isHindi) {
-          navigator.geolocation.getCurrentPosition(
-            async (position) => {
-              try {
-                const { latitude, longitude } = position.coords;
-                setUserCoords({ lat: latitude, lng: longitude });
-                localStorage.setItem('userLat', String(latitude));
-                localStorage.setItem('userLng', String(longitude));
-                const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-                const response = await fetch(
-                  `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}&language=en`
-                );
-                const data = await response.json();
-
-                if (data.status === 'OK' && data.results.length > 0) {
-                  const result = data.results[0];
-                  const getComponent = (type) =>
-                    result.address_components?.find(c => c.types.includes(type))?.long_name || '';
-
-                  const area = getComponent('sublocality_level_1') || getComponent('neighborhood') || getComponent('locality');
-                  const city = getComponent('locality') || getComponent('administrative_area_level_2');
-                  const state = getComponent('administrative_area_level_1');
-
-                  let formattedAddress = [area, city, state].filter(Boolean).join(', ');
-                  if (!formattedAddress || /[\u0900-\u097F]/.test(formattedAddress)) {
-                    formattedAddress = result.formatted_address || `${city || 'Indore'}, Madhya Pradesh`;
-                  }
-
-                  setAddress(formattedAddress);
-                  localStorage.setItem('currentAddress', formattedAddress);
-
-                  if (city) {
-                    setDetectedCityName(city);
-                    localStorage.setItem('currentCity', city);
-
-                    // Immediate update of selected city if supported
-                    if (cities && cities.length > 0) {
-                      const matchedCity = cities.find(c =>
-                        c.name.toLowerCase() === city.toLowerCase() ||
-                        c.name.toLowerCase().includes(city.toLowerCase()) ||
-                        city.toLowerCase().includes(c.name.toLowerCase())
-                      );
-                      if (matchedCity) {
-                        selectCity(matchedCity);
-                      } else {
-                        selectCity(null);
-                      }
-                    }
-                  }
-                }
-              } catch (error) {
-                // Fallback to nominatim with en language
-                try {
-                  const nomRes = await fetch(
-                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}&zoom=18&addressdetails=1&accept-language=en`,
-                    { headers: { 'Accept-Language': 'en-US,en;q=0.9' } }
-                  );
-                  const nomData = await nomRes.json();
-                  const nomAddr = nomData.display_name?.split(',').slice(0, 3).join(', ');
-                  if (nomAddr) {
-                    setAddress(nomAddr);
-                    localStorage.setItem('currentAddress', nomAddr);
-                  }
-                } catch (e) {
-                  // silent
-                }
-              }
-            },
-            (error) => {
-              console.log("GPS Error:", error);
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 5000,
-              maximumAge: 0
-            }
-          );
-        }
-      }
-    };
-
-    autoDetectLocation();
-
-    // Register FCM token for user to receive push notifications
-    registerFCMToken('user', true).catch(err => {/* Silent fail */ });
-  }, []);
 
   const [categories, setCategories] = useState([]);
   const [services, setServices] = useState([]);
@@ -536,6 +456,9 @@ const Home = () => {
 
   // Fetch categories, services and home content on mount (and when city changes)
   useEffect(() => {
+    // Wait for the stable city and one-time zone lookup before requesting catalog data.
+    if (cityLoading || (userCoords && !zoneResolved)) return;
+
     const fetchData = async () => {
       try {
         setLoading(true);
@@ -590,7 +513,7 @@ const Home = () => {
     };
 
     fetchData();
-  }, [currentCity, zoneStatus?.zoneId, zoneStatus?.inZone]);
+  }, [currentCity, cityLoading, userCoords, zoneResolved, zoneStatus?.zoneId, zoneStatus?.inZone]);
   // Open category modal from navigation state (e.g. from Cart 'Add Services')
   useEffect(() => {
     if (!loading && categories.length > 0 && (location.state?.openCategoryId || location.state?.openCategoryName)) {
