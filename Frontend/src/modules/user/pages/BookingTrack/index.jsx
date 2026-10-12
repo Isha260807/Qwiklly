@@ -433,29 +433,44 @@ const BookingTrack = () => {
       directionsCalculatedRef.current = true; // Prevent recalculation
 
       const directionsService = new window.google.maps.DirectionsService();
-      directionsService.route(
-        {
-          origin: currentLocation,
-          destination: coords,
-          travelMode: window.google.maps.TravelMode.DRIVING,
-        },
-        (result, status) => {
-          if (status === window.google.maps.DirectionsStatus.OK) {
-            setDirections(result);
-            const leg = result.routes[0].legs[0];
-            setDistance(leg.distance.text);
-            setDuration(leg.duration.text);
 
-            // Store full path and set initial state
-            fullRoutePathRef.current = result.routes[0].overview_path;
-            setRoutePath(result.routes[0].overview_path);
+      const tryRoute = (mode) => {
+        directionsService.route(
+          {
+            origin: currentLocation,
+            destination: coords,
+            travelMode: mode,
+          },
+          (result, status) => {
+            if (status === window.google.maps.DirectionsStatus.OK) {
+              setDirections(result);
+              const leg = result.routes[0]?.legs[0];
+              if (leg) {
+                setDistance(leg.distance.text);
+                setDuration(leg.duration.text);
+              }
 
-            // Center on rider
-            map.setCenter(currentLocation);
-            map.setZoom(15);
+              // Store full path and set initial state
+              fullRoutePathRef.current = result.routes[0].overview_path;
+              setRoutePath(result.routes[0].overview_path);
+
+              map.setCenter(currentLocation);
+              map.setZoom(16);
+            } else if (mode === window.google.maps.TravelMode.DRIVING) {
+              tryRoute(window.google.maps.TravelMode.WALKING);
+            } else {
+              console.warn('Google DirectionsService failed in BookingTrack:', status);
+              const straightPath = [currentLocation, coords];
+              fullRoutePathRef.current = straightPath;
+              setRoutePath(straightPath);
+              map.setCenter(currentLocation);
+              map.setZoom(16);
+            }
           }
-        }
-      );
+        );
+      };
+
+      tryRoute(window.google.maps.TravelMode.DRIVING);
     }
   }, [isLoaded, coords, map, currentLocation]);
 
@@ -530,7 +545,7 @@ const BookingTrack = () => {
     mapTypeControl: false,
     streetViewControl: false,
     fullscreenControl: false,
-    mapId: '8e0a97af9386fefc',
+    styles: mapStyles,
   }), []);
 
   // Memoize Map Markers to prevent flickering/blinking
@@ -669,24 +684,24 @@ const BookingTrack = () => {
           {currentLocation ? (
             <>
               {directions && (
-                <>
-                  <DirectionsRenderer
-                    directions={directions}
-                    options={{
-                      suppressMarkers: true,
-                      suppressPolylines: true
-                    }}
-                  />
-                  <PolylineF
-                    path={routePath}
-                    options={{
-                      strokeColor: "#0F766E",
-                      strokeWeight: 8,
-                      strokeOpacity: 1,
-                      zIndex: 50
-                    }}
-                  />
-                </>
+                <DirectionsRenderer
+                  directions={directions}
+                  options={{
+                    suppressMarkers: true,
+                    suppressPolylines: true
+                  }}
+                />
+              )}
+              {routePath && routePath.length > 0 && (
+                <PolylineF
+                  path={routePath}
+                  options={{
+                    strokeColor: "#0F766E",
+                    strokeWeight: 6,
+                    strokeOpacity: 0.9,
+                    zIndex: 50
+                  }}
+                />
               )}
               {riderMarker}
             </>

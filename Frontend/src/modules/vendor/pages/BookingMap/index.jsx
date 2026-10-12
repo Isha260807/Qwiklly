@@ -380,38 +380,88 @@ const BookingMap = () => {
 
   const fullRoutePathRef = useRef([]);
 
-  // Calculate Route ONCE on initial load only
-  useEffect(() => {
-    if (isLoaded && currentLocation && coords && map && !directionsCalculatedRef.current) {
-      directionsCalculatedRef.current = true; // Prevent recalculation
+  // Calculate Route with DRIVING -> WALKING fallback and graceful direct path
+  const calculateRoute = () => {
+    if (!isLoaded || !currentLocation || !coords || !map || !window.google?.maps) return;
 
-      const directionsService = new window.google.maps.DirectionsService();
+    const directionsService = new window.google.maps.DirectionsService();
+
+    const tryRoute = (mode) => {
       directionsService.route(
         {
           origin: currentLocation,
           destination: coords,
-          travelMode: window.google.maps.TravelMode.DRIVING,
+          travelMode: mode,
         },
         (result, status) => {
           if (status === window.google.maps.DirectionsStatus.OK) {
             setDirections(result);
             setRouteError(null);
-            const leg = result.routes[0].legs[0];
-            setDistance(leg.distance.text);
-            setDuration(leg.duration.text);
+            const leg = result.routes[0]?.legs[0];
+            if (leg) {
+              setDistance(leg.distance.text);
+              setDuration(leg.duration.text);
+            }
 
             // Store full path and set initial state
             fullRoutePathRef.current = result.routes[0].overview_path;
             setRoutePath(result.routes[0].overview_path);
 
-            // Center on current location
             map.setCenter(currentLocation);
-            map.setZoom(15);
+            map.setZoom(16);
+          } else if (mode === window.google.maps.TravelMode.DRIVING) {
+            // If driving route not found (e.g. pedestrian / alley / close coordinates), try walking route
+            tryRoute(window.google.maps.TravelMode.WALKING);
           } else {
-            setRouteError('Could not calculate a driving route to this location.');
+            console.warn('Google DirectionsService failed with status:', status);
+            // Fallback: direct line representation
+            const straightPath = [currentLocation, coords];
+            fullRoutePathRef.current = straightPath;
+            setRoutePath(straightPath);
+
+            const p1 = new window.google.maps.LatLng(currentLocation);
+            const p2 = new window.google.maps.LatLng(coords);
+            const distM = window.google.maps.geometry?.spherical?.computeDistanceBetween(p1, p2) || 0;
+
+            if (distM < 1000) {
+              setDistance(`${Math.round(distM)} m`);
+              setDuration('< 1 min');
+            } else {
+              const km = distM / 1000;
+              setDistance(`${km.toFixed(1)} km`);
+              setDuration(`${Math.max(1, Math.round((km / 30) * 60))} min`);
+            }
+
+            const bounds = new window.google.maps.LatLngBounds();
+            bounds.extend(currentLocation);
+            bounds.extend(coords);
+            map.fitBounds(bounds, 60);
+
+            // If points are very close (< 50m), user is already at the location - no error needed
+            if (distM > 50) {
+              setRouteError('Road navigation route unavailable. Showing direct path.');
+            } else {
+              setRouteError(null);
+            }
           }
         }
       );
+    };
+
+    tryRoute(window.google.maps.TravelMode.DRIVING);
+  };
+
+  const handleRetryRoute = () => {
+    directionsCalculatedRef.current = false;
+    setRouteError(null);
+    calculateRoute();
+  };
+
+  // Calculate Route ONCE on initial load only
+  useEffect(() => {
+    if (isLoaded && currentLocation && coords && map && !directionsCalculatedRef.current) {
+      directionsCalculatedRef.current = true; // Prevent recalculation
+      calculateRoute();
     }
   }, [isLoaded, coords, map, currentLocation]);
 
@@ -553,7 +603,8 @@ const BookingMap = () => {
     rotateControl: true,
     tiltControl: true,
     isFractionalZoomEnabled: true,
-    mapId: mapId || '8e0a97af9386fefc',
+    styles: mapStyles,
+    ...(mapId ? { mapId } : {}),
   }), [mapId]);
 
   if (loading && !booking) return <div className="h-screen bg-gray-100 flex items-center justify-center"><div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div></div>;
@@ -600,17 +651,24 @@ const BookingMap = () => {
             exit={{ opacity: 0, scale: 0.9 }}
             className="absolute inset-x-4 top-[20%] z-40 bg-white p-5 rounded-2xl shadow-xl flex flex-col items-center text-center max-w-sm mx-auto border border-gray-100"
           >
+            <button
+              onClick={() => setRouteError(null)}
+              className="absolute top-3 right-3 p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+              title="Close"
+            >
+              <FiX className="w-4 h-4" />
+            </button>
             <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center mb-3">
               <FiAlertTriangle className="w-6 h-6 text-orange-500" />
             </div>
-            <h3 className="text-base font-bold text-gray-800 mb-1">Route Not Found</h3>
+            <h3 className="text-base font-bold text-gray-800 mb-1">Route Notice</h3>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              We couldn't calculate a driving path to this location. The destination might be unreachable by road.
+              {routeError}
             </p>
             <div className="flex gap-2 w-full">
               <button
-                onClick={() => window.location.reload()}
-                className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                onClick={handleRetryRoute}
+                className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <FiRefreshCw className="w-3.5 h-3.5" /> Retry
               </button>
@@ -619,7 +677,7 @@ const BookingMap = () => {
                   const dest = coords ? `${coords.lat},${coords.lng}` : encodeURIComponent(booking?.address?.addressLine1 || '');
                   window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, '_blank');
                 }}
-                className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 Open Maps
               </button>
@@ -678,29 +736,41 @@ const BookingMap = () => {
             onLoad={map => {
               setMap(map);
               map.setTilt(0);
+              if (currentLocation && coords) {
+                const bounds = new window.google.maps.LatLngBounds();
+                bounds.extend(currentLocation);
+                bounds.extend(coords);
+                map.fitBounds(bounds, 60);
+              } else if (currentLocation) {
+                map.setCenter(currentLocation);
+                map.setZoom(16);
+              } else if (coords) {
+                map.setCenter(coords);
+                map.setZoom(16);
+              }
             }}
             onDragStart={() => setIsAutoCenter(false)}
             options={mapOptions}
           >
             {directions && (
-              <>
-                <DirectionsRenderer
-                  directions={directions}
-                  options={{
-                    suppressMarkers: true,
-                    suppressPolylines: true
-                  }}
-                />
-                <PolylineF
-                  path={routePath}
-                  options={{
-                    strokeColor: "#0F766E", // Dark Teal
-                    strokeWeight: 8,
-                    strokeOpacity: 1,
-                    zIndex: 50
-                  }}
-                />
-              </>
+              <DirectionsRenderer
+                directions={directions}
+                options={{
+                  suppressMarkers: true,
+                  suppressPolylines: true
+                }}
+              />
+            )}
+            {routePath && routePath.length > 0 && (
+              <PolylineF
+                path={routePath}
+                options={{
+                  strokeColor: "#0F766E", // Dark Teal
+                  strokeWeight: 6,
+                  strokeOpacity: 0.9,
+                  zIndex: 50
+                }}
+              />
             )}
 
             {destinationMarker}
