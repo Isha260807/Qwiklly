@@ -10,6 +10,7 @@ import VisitVerificationModal from '../../components/common/VisitVerificationMod
 import vendorService from '../../../../services/vendorService';
 import { toast } from 'react-hot-toast';
 import { useAppNotifications } from '../../../../hooks/useAppNotifications';
+import { toCoordinate, buildRouteProgress, serializeRouteProgress, matchRouteProgress, getRemainingPath, formatDistanceMeters, formatRemainingDuration } from '../../../../utils/routeProgress';
 
 // Simple toggle for the simulation button (Controlled via .env)
 const SHOW_SIMULATION_BUTTON = import.meta.env.VITE_ENABLE_MAP_SIMULATION === 'true';
@@ -50,8 +51,9 @@ const BookingMap = () => {
   // Initial coords from passed state if available
   const initialCoords = useMemo(() => {
     const bAddr = initialBooking?.address || {};
-    if (bAddr.lat && bAddr.lng) {
-      return { lat: parseFloat(bAddr.lat), lng: parseFloat(bAddr.lng) };
+    const point = toCoordinate(bAddr.lat, bAddr.lng);
+    if (point) {
+      return point;
     }
     return null;
   }, [initialBooking]);
@@ -63,6 +65,7 @@ const BookingMap = () => {
   const [distance, setDistance] = useState('');
   const [duration, setDuration] = useState('');
   const [routePath, setRoutePath] = useState([]);
+  const [routeRefreshTick, setRouteRefreshTick] = useState(0);
   const [isAutoCenter, setIsAutoCenter] = useState(true);
   const [isNavigationMode, setIsNavigationMode] = useState(false);
   const [heading, setHeading] = useState(0);
@@ -72,6 +75,7 @@ const BookingMap = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [routeError, setRouteError] = useState(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const isTrackingActive = ['journey_started', 'visited', 'in_progress'].includes(String(booking?.status || '').toLowerCase());
 
   // Network Status Listener
   useEffect(() => {
@@ -110,8 +114,9 @@ const BookingMap = () => {
         // 1. Destination: Fixed Booking Address from DB
         const bAddr = data.address || {};
 
-        if (bAddr.lat && bAddr.lng) {
-          setCoords({ lat: parseFloat(bAddr.lat), lng: parseFloat(bAddr.lng) });
+        const storedPoint = toCoordinate(bAddr.lat, bAddr.lng);
+        if (storedPoint) {
+          setCoords(storedPoint);
         } else if (window.google?.maps?.Geocoder) {
           const addressStr = typeof bAddr === 'string' ? bAddr : `${bAddr.addressLine1 || ''}, ${bAddr.city || ''}, ${bAddr.state || ''} ${bAddr.pincode || ''}`;
           if (addressStr.replaceAll(',', '').trim() && !addressStr.toLowerCase().includes('current location')) {
@@ -149,40 +154,46 @@ const BookingMap = () => {
     }
   }, [isLoaded, booking, coords]);
 
-  // Watch Location
+  // Watch the vendor GPS only while this booking is actively being tracked.
   useEffect(() => {
-    // START CHANGE: If simulating, do NOT watch real GPS position
-    if (isSimulating) return;
-    // END CHANGE
-
-    if (navigator.geolocation) {
-      const watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          // START CHANGE: Double check simulating state inside callback
-          if (isSimulating) return;
-          // END CHANGE
-          const { latitude, longitude, heading: gpsHeading } = position.coords;
-          setCurrentLocation({ lat: latitude, lng: longitude });
-
-          // Use GPS heading if available (more accurate for movement)
-          if (gpsHeading !== null && !isNaN(gpsHeading)) {
-            setHeading(gpsHeading);
-          }
-        },
-        (error) => {
-          // GPS Tracking Error
-          if (error.code === 1) { // PERMISSION_DENIED
-            // toast.error("Location permission denied. Map cannot track you.");
-          }
-        },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-      );
-      return () => navigator.geolocation.clearWatch(watchId);
-    } else {
-      toast.error("Geolocation not supported on this device");
+    if (isSimulating || !isTrackingActive) {
+      if (!isTrackingActive && !isSimulating) setCurrentLocation(null);
+      return;
     }
-  }, [isSimulating]); // Add isSimulating to dependency array
 
+    if (!navigator.geolocation) {
+      toast.error('Geolocation not supported on this device');
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (isSimulating) return;
+        const point = toCoordinate(position.coords.latitude, position.coords.longitude);
+        if (!point) return;
+        const accuracy = Number(position.coords.accuracy);
+        const timestamp = Number(position.timestamp) || Date.now();
+        if (timestamp < Date.now() - 60000) return;
+
+        setCurrentLocation({
+          ...point,
+          accuracy: Number.isFinite(accuracy) && accuracy >= 0 ? accuracy : null,
+          timestamp
+        });
+
+        if (position.coords.heading !== null && Number.isFinite(Number(position.coords.heading))) {
+          setHeading(Number(position.coords.heading));
+        }
+      },
+      (error) => {
+        if (error.code === 1) toast.error('Location permission is required to track this booking.', { id: 'vendor-location-permission' });
+        else if (error.code === 2) toast.error('Vendor GPS is currently unavailable.', { id: 'vendor-location-unavailable' });
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [isSimulating, isTrackingActive]);
   const socket = useAppNotifications('vendor'); // Get socket instance 
 
   // ... 
@@ -239,13 +250,13 @@ const BookingMap = () => {
 
   // Sync Location to Backend (Periodic)
   useEffect(() => {
-    if (socket && id) {
+    if (socket && id && isTrackingActive) {
       socket.emit('join_tracking', id);
     }
-  }, [socket, id]);
+  }, [socket, id, isTrackingActive]);
 
   useEffect(() => {
-    if (currentLocation && socket && id) {
+    if (currentLocation && socket && id && isTrackingActive) {
       const syncInterval = setInterval(() => {
         // START CHANGE: If simulating, do NOT emit periodic updates here (simulation loop does it)
         if (isSimulating) return;
@@ -256,14 +267,16 @@ const BookingMap = () => {
             bookingId: id,
             lat: currentLocation.lat,
             lng: currentLocation.lng,
-            heading: heading
+            heading: heading,
+            accuracy: currentLocation.accuracy,
+            timestamp: currentLocation.timestamp || Date.now()
           });
         }
       }, 5000);
 
       return () => clearInterval(syncInterval);
     }
-  }, [currentLocation, socket, id, heading, isSimulating]); // Add isSimulating to dependency array
+  }, [currentLocation, socket, id, heading, isSimulating, isTrackingActive]); // Add isSimulating to dependency array
 
   // DEBUG: Location Simulator Functions
   const startSimulation = () => {
@@ -376,149 +389,241 @@ const BookingMap = () => {
   // ... existing code ...
 
   const prevLocationRef = useRef(null);
-  const directionsCalculatedRef = useRef(false);
-
   const fullRoutePathRef = useRef([]);
+  const routeProgressRef = useRef(null);
+  const routeProgressDistanceRef = useRef(0);
+  const lastSuccessfulRouteOriginRef = useRef(null);
+  const lastSuccessfulRouteDestinationRef = useRef(null);
+  const pendingRouteRef = useRef(null);
+  const routeRequestInFlightRef = useRef(false);
+  const routeRequestSequenceRef = useRef(0);
+  const routeLastRequestedAtRef = useRef(0);
+  const routeOffRouteRef = useRef(false);
+  const offRouteCountRef = useRef(0);
+  const hasFittedRouteRef = useRef(false);
+  const mountedRef = useRef(true);
+  const latestLocationRef = useRef(null);
+  const latestDestinationRef = useRef(null);
 
-  // Calculate Route with DRIVING -> WALKING fallback and graceful direct path
-  const calculateRoute = () => {
-    if (!isLoaded || !currentLocation || !coords || !map || !window.google?.maps) return;
+  latestLocationRef.current = currentLocation;
+  latestDestinationRef.current = coords;
 
-    const directionsService = new window.google.maps.DirectionsService();
-
-    const tryRoute = (mode) => {
-      directionsService.route(
-        {
-          origin: currentLocation,
-          destination: coords,
-          travelMode: mode,
-        },
-        (result, status) => {
-          if (status === window.google.maps.DirectionsStatus.OK) {
-            setDirections(result);
-            setRouteError(null);
-            const leg = result.routes[0]?.legs[0];
-            if (leg) {
-              setDistance(leg.distance.text);
-              setDuration(leg.duration.text);
-            }
-
-            // Store full path and set initial state
-            fullRoutePathRef.current = result.routes[0].overview_path;
-            setRoutePath(result.routes[0].overview_path);
-
-            map.setCenter(currentLocation);
-            map.setZoom(16);
-          } else if (mode === window.google.maps.TravelMode.DRIVING) {
-            // If driving route not found (e.g. pedestrian / alley / close coordinates), try walking route
-            tryRoute(window.google.maps.TravelMode.WALKING);
-          } else {
-            console.warn('Google DirectionsService failed with status:', status);
-            // Fallback: direct line representation
-            const straightPath = [currentLocation, coords];
-            fullRoutePathRef.current = straightPath;
-            setRoutePath(straightPath);
-
-            const p1 = new window.google.maps.LatLng(currentLocation);
-            const p2 = new window.google.maps.LatLng(coords);
-            const distM = window.google.maps.geometry?.spherical?.computeDistanceBetween(p1, p2) || 0;
-
-            if (distM < 1000) {
-              setDistance(`${Math.round(distM)} m`);
-              setDuration('< 1 min');
-            } else {
-              const km = distM / 1000;
-              setDistance(`${km.toFixed(1)} km`);
-              setDuration(`${Math.max(1, Math.round((km / 30) * 60))} min`);
-            }
-
-            const bounds = new window.google.maps.LatLngBounds();
-            bounds.extend(currentLocation);
-            bounds.extend(coords);
-            map.fitBounds(bounds, 60);
-
-            // If points are very close (< 50m), user is already at the location - no error needed
-            if (distM > 50) {
-              setRouteError('Road navigation route unavailable. Showing direct path.');
-            } else {
-              setRouteError(null);
-            }
-          }
-        }
-      );
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      routeRequestSequenceRef.current += 1;
+      pendingRouteRef.current = null;
     };
-
-    tryRoute(window.google.maps.TravelMode.DRIVING);
-  };
+  }, []);
 
   const handleRetryRoute = () => {
-    directionsCalculatedRef.current = false;
+    lastSuccessfulRouteOriginRef.current = null;
+    lastSuccessfulRouteDestinationRef.current = null;
+    routeOffRouteRef.current = true;
     setRouteError(null);
-    calculateRoute();
+    setRouteRefreshTick(value => value + 1);
   };
 
-  // Calculate Route ONCE on initial load only
+  // Directions is requested only for the initial route, destination changes, or a real off-route event.
+  // GPS movement itself updates the remaining geometry locally and does not create a billable request.
   useEffect(() => {
-    if (isLoaded && currentLocation && coords && map && !directionsCalculatedRef.current) {
-      directionsCalculatedRef.current = true; // Prevent recalculation
-      calculateRoute();
-    }
-  }, [isLoaded, coords, map, currentLocation]);
+    const googleMaps = window.google?.maps;
+    const origin = toCoordinate(currentLocation?.lat, currentLocation?.lng);
+    const destination = toCoordinate(coords?.lat, coords?.lng);
+    if (!isTrackingActive || !isLoaded || !map || !googleMaps || !origin || !destination || !googleMaps.geometry?.spherical) return;
 
-  // Update distance, ETA, and Clear Traveled Path as vendor moves
-  useEffect(() => {
-    if (isLoaded && currentLocation && coords && window.google && directionsCalculatedRef.current) {
-      // 1. Calculate straight-line distance
-      const riderPoint = new window.google.maps.LatLng(currentLocation);
-      const destPoint = new window.google.maps.LatLng(coords);
-      const distanceMeters = window.google.maps.geometry.spherical.computeDistanceBetween(riderPoint, destPoint);
+    const lastOrigin = lastSuccessfulRouteOriginRef.current;
+    const lastDestination = lastSuccessfulRouteDestinationRef.current;
+    const destinationChanged = !lastDestination || googleMaps.geometry.spherical.computeDistanceBetween(
+      new googleMaps.LatLng(destination), new googleMaps.LatLng(lastDestination)
+    ) > 1;
+    const shouldRefresh = !lastOrigin || destinationChanged || routeOffRouteRef.current;
+    if (!shouldRefresh) return;
 
-      // Convert to km
-      const distanceKm = distanceMeters / 1000;
+    const isInitialRequest = !lastOrigin;
+    if (!isInitialRequest && !destinationChanged && Date.now() - routeLastRequestedAtRef.current < 60000) return;
 
-      // Format distance
-      if (distanceKm < 1) {
-        setDistance(`${Math.round(distanceMeters)} m`);
-      } else {
-        setDistance(`${distanceKm.toFixed(1)} km`);
-      }
+    pendingRouteRef.current = {
+      origin,
+      destination,
+      shouldFit: !hasFittedRouteRef.current || destinationChanged
+    };
+    if (routeRequestInFlightRef.current) return;
 
-      // Estimate time (assuming average speed of 30 km/h in city)
-      const avgSpeedKmh = 30;
-      const timeHours = distanceKm / avgSpeedKmh;
-      const timeMinutes = Math.round(timeHours * 60);
+    const requestNextRoute = () => {
+      const nextRoute = pendingRouteRef.current;
+      if (!nextRoute || routeRequestInFlightRef.current || !mountedRef.current) return;
 
-      if (timeMinutes < 1) {
-        setDuration('< 1 min');
-      } else if (timeMinutes < 60) {
-        setDuration(`${timeMinutes} min`);
-      } else {
-        const hours = Math.floor(timeMinutes / 60);
-        const mins = timeMinutes % 60;
-        setDuration(`${hours} hr ${mins} min`);
-      }
+      pendingRouteRef.current = null;
+      routeRequestInFlightRef.current = true;
+      routeLastRequestedAtRef.current = Date.now();
+      const requestSequence = ++routeRequestSequenceRef.current;
+      const directionsService = new googleMaps.DirectionsService();
 
-      // 2. Clear Traveled Path Visualization
-      if (fullRoutePathRef.current && fullRoutePathRef.current.length > 0) {
-        let closestIndex = -1;
-        let minDist = Infinity;
+      const tryRoute = (mode) => {
+        directionsService.route({
+          origin: nextRoute.origin,
+          destination: nextRoute.destination,
+          travelMode: mode
+        }, (result, status) => {
+          if (!mountedRef.current || requestSequence !== routeRequestSequenceRef.current) return;
 
-        fullRoutePathRef.current.forEach((p, idx) => {
-          const d = window.google.maps.geometry.spherical.computeDistanceBetween(riderPoint, p);
-          if (d < minDist) {
-            minDist = d;
-            closestIndex = idx;
+          const latestDestination = toCoordinate(latestDestinationRef.current?.lat, latestDestinationRef.current?.lng);
+          const responseIsCurrent = latestDestination && googleMaps.geometry.spherical.computeDistanceBetween(
+            new googleMaps.LatLng(nextRoute.destination), new googleMaps.LatLng(latestDestination)
+          ) <= 1;
+
+          if (status === googleMaps.DirectionsStatus.OK && result?.routes?.[0]?.legs?.[0] && responseIsCurrent) {
+            routeRequestInFlightRef.current = false;
+            const route = result.routes[0];
+            const leg = route.legs[0];
+            const nextProgress = buildRouteProgress({
+              route,
+              distanceText: leg.distance?.text || '',
+              distanceValue: leg.distance?.value || 0,
+              durationText: leg.duration?.text || '',
+              durationValue: leg.duration?.value || 0,
+              origin: nextRoute.origin,
+              destination: nextRoute.destination
+            });
+
+            if (nextProgress) {
+              routeProgressRef.current = nextProgress;
+              routeProgressDistanceRef.current = 0;
+              fullRoutePathRef.current = nextProgress.path;
+              setRoutePath(nextProgress.path);
+              setDirections(result);
+              setRouteError(null);
+              setDistance(leg.distance?.text || '');
+              setDuration(leg.duration?.text || '');
+              lastSuccessfulRouteOriginRef.current = nextRoute.origin;
+              lastSuccessfulRouteDestinationRef.current = nextRoute.destination;
+              routeOffRouteRef.current = false;
+              offRouteCountRef.current = 0;
+              pendingRouteRef.current = null;
+
+              if (socket && id && isTrackingActive) {
+                socket.emit('update_location', {
+                  bookingId: id,
+                  lat: nextRoute.origin.lat,
+                  lng: nextRoute.origin.lng,
+                  heading: heading,
+                  accuracy: currentLocation?.accuracy,
+                  timestamp: Date.now(),
+                  routeSnapshot: serializeRouteProgress(nextProgress)
+                });
+              }
+
+              if (nextRoute.shouldFit) {
+                const bounds = new googleMaps.LatLngBounds();
+                nextProgress.path.forEach(point => bounds.extend(point));
+                map.fitBounds(bounds, { top: 80, right: 40, bottom: 250, left: 40 });
+                hasFittedRouteRef.current = true;
+              }
+            }
+            requestNextRoute();
+          } else if (mode === googleMaps.TravelMode.DRIVING) {
+            // Driving route not found, try walking fallback
+            tryRoute(googleMaps.TravelMode.WALKING);
+          } else {
+            routeRequestInFlightRef.current = false;
+            // Both DRIVING and WALKING failed: Fallback to direct path
+            const straightPath = [nextRoute.origin, nextRoute.destination];
+            const p1 = new googleMaps.LatLng(nextRoute.origin);
+            const p2 = new googleMaps.LatLng(nextRoute.destination);
+            const distM = googleMaps.geometry?.spherical?.computeDistanceBetween(p1, p2) || 0;
+
+            const fallbackProgress = buildRouteProgress({
+              path: straightPath,
+              distanceText: distM < 1000 ? `${Math.round(distM)} m` : `${(distM / 1000).toFixed(1)} km`,
+              distanceValue: distM,
+              durationText: distM < 1000 ? '< 1 min' : `${Math.max(1, Math.round((distM / 1000 / 30) * 60))} min`,
+              durationValue: Math.round((distM / 1000 / 30) * 3600),
+              origin: nextRoute.origin,
+              destination: nextRoute.destination
+            });
+
+            if (fallbackProgress) {
+              routeProgressRef.current = fallbackProgress;
+              routeProgressDistanceRef.current = 0;
+              fullRoutePathRef.current = straightPath;
+              setRoutePath(straightPath);
+              setDirections(null);
+              setDistance(fallbackProgress.totalDistanceText);
+              setDuration(fallbackProgress.totalDurationText);
+              lastSuccessfulRouteOriginRef.current = nextRoute.origin;
+              lastSuccessfulRouteDestinationRef.current = nextRoute.destination;
+              routeOffRouteRef.current = false;
+              offRouteCountRef.current = 0;
+              pendingRouteRef.current = null;
+
+              if (socket && id && isTrackingActive) {
+                socket.emit('update_location', {
+                  bookingId: id,
+                  lat: nextRoute.origin.lat,
+                  lng: nextRoute.origin.lng,
+                  heading: heading,
+                  accuracy: currentLocation?.accuracy,
+                  timestamp: Date.now(),
+                  routeSnapshot: serializeRouteProgress(fallbackProgress)
+                });
+              }
+
+              if (nextRoute.shouldFit) {
+                const bounds = new googleMaps.LatLngBounds();
+                bounds.extend(nextRoute.origin);
+                bounds.extend(nextRoute.destination);
+                map.fitBounds(bounds, { top: 80, right: 40, bottom: 250, left: 40 });
+                hasFittedRouteRef.current = true;
+              }
+
+              if (distM > 50) {
+                setRouteError('Road navigation route unavailable. Showing direct path.');
+              } else {
+                setRouteError(null);
+              }
+            } else if (!lastSuccessfulRouteOriginRef.current && !pendingRouteRef.current) {
+              setRouteError('Could not calculate a driving route to this location.');
+            }
+
+            requestNextRoute();
           }
         });
+      };
 
-        if (closestIndex !== -1) {
-          const remaining = fullRoutePathRef.current.slice(closestIndex + 1);
-          setRoutePath([currentLocation, ...remaining]);
-        }
+      tryRoute(googleMaps.TravelMode.DRIVING);
+    };
+
+    requestNextRoute();
+  }, [isLoaded, coords, map, currentLocation, isTrackingActive, socket, id, routeRefreshTick, heading]);
+
+  // Match GPS to the stored road geometry and remove only the completed route behind the vendor.
+  useEffect(() => {
+    const progress = routeProgressRef.current;
+    const current = toCoordinate(currentLocation?.lat, currentLocation?.lng);
+    if (!progress || !current || !isLoaded) return;
+
+    const accuracy = Number(currentLocation?.accuracy) || 50;
+    const match = matchRouteProgress(progress, current, routeProgressDistanceRef.current, accuracy);
+    if (!match) return;
+
+    routeProgressDistanceRef.current = Math.max(routeProgressDistanceRef.current, match.progressMeters);
+    setRoutePath(getRemainingPath(progress, match));
+    setDistance(formatDistanceMeters(Math.max(0, progress.totalDistanceMeters - routeProgressDistanceRef.current)));
+    setDuration(formatRemainingDuration(progress, Math.max(0, progress.totalDistanceMeters - routeProgressDistanceRef.current)));
+
+    const offRouteThreshold = Math.max(75, accuracy + 25);
+    if (match.distanceToRouteMeters > offRouteThreshold) {
+      offRouteCountRef.current += 1;
+      if (offRouteCountRef.current >= 2 && !routeOffRouteRef.current) {
+        routeOffRouteRef.current = true;
+        setRouteRefreshTick(value => value + 1);
       }
+    } else {
+      offRouteCountRef.current = 0;
     }
-  }, [currentLocation, coords, isLoaded]);
-
+  }, [currentLocation, isLoaded]);
   // Calculate Heading based on movement (Direction Sense)
   useEffect(() => {
     if (isLoaded && currentLocation && window.google) {
@@ -546,7 +651,7 @@ const BookingMap = () => {
   useEffect(() => {
     if (map && currentLocation && heading && isAutoCenter) {
       map.setHeading(heading);
-      map.setTilt(45); // 45 degree tilt for 3D feel
+      map.setTilt(0); // Keep custom markers aligned with the road route
     }
   }, [map, heading, isAutoCenter, currentLocation]);
 
@@ -595,6 +700,15 @@ const BookingMap = () => {
     </OverlayView>
   ), [animatedLocation, heading]);
 
+  useEffect(() => {
+    if (!map || !isFullScreen || !window.google?.maps?.event) return;
+    const center = map.getCenter();
+    const frame = requestAnimationFrame(() => {
+      window.google.maps.event.trigger(map, 'resize');
+      if (center) map.setCenter(center);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [map, isFullScreen]);
   const mapOptions = useMemo(() => ({
     disableDefaultUI: true,
     zoomControl: false,
@@ -752,25 +866,29 @@ const BookingMap = () => {
             onDragStart={() => setIsAutoCenter(false)}
             options={mapOptions}
           >
-            {directions && (
-              <DirectionsRenderer
-                directions={directions}
-                options={{
-                  suppressMarkers: true,
-                  suppressPolylines: true
-                }}
-              />
-            )}
-            {routePath && routePath.length > 0 && (
-              <PolylineF
-                path={routePath}
-                options={{
-                  strokeColor: "#0F766E", // Dark Teal
-                  strokeWeight: 6,
-                  strokeOpacity: 0.9,
-                  zIndex: 50
-                }}
-              />
+            {(directions || (routePath && routePath.length > 1)) && (
+              <>
+                {directions && (
+                  <DirectionsRenderer
+                    directions={directions}
+                    options={{
+                      suppressMarkers: true,
+                      suppressPolylines: true
+                    }}
+                  />
+                )}
+                {routePath && routePath.length > 1 && (
+                  <PolylineF
+                    path={routePath}
+                    options={{
+                      strokeColor: "#0F766E", // Dark Teal
+                      strokeWeight: 8,
+                      strokeOpacity: 1,
+                      zIndex: 50
+                    }}
+                  />
+                )}
+              </>
             )}
 
             {destinationMarker}

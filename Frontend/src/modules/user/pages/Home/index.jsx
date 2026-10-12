@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useLayoutEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import flutterBridge from '../../../../utils/flutterBridge';
 import { themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
@@ -30,6 +31,12 @@ import CategoryModal from './components/CategoryModal';
 import SearchOverlay from './components/SearchOverlay';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
+import EnableLocationModal from '../../components/common/EnableLocationModal';
+import CitySelectorModal from '../../components/common/CitySelectorModal';
+import { useJsApiLoader } from '@react-google-maps/api';
+
+const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 
 
@@ -56,6 +63,95 @@ const markAreaAvailability = (items, zoneStatus) => (items || []).map(service =>
 
   return { ...service, isAvailableInArea };
 });
+
+const reverseGeocodeCoords = async (lat, lng, availableCities = []) => {
+  // Check if we can find a matching city by coordinate distance directly as instant fallback
+  let nearestCity = null;
+  if (Array.isArray(availableCities) && availableCities.length > 0) {
+    let minDist = Infinity;
+    availableCities.forEach(c => {
+      const cLat = c.location?.coordinates?.[1] || c.lat;
+      const cLng = c.location?.coordinates?.[0] || c.lng;
+      if (typeof cLat === 'number' && typeof cLng === 'number') {
+        const d = Math.hypot(cLat - lat, cLng - lng);
+        if (d < minDist && d < 0.8) { // within ~80km
+          minDist = d;
+          nearestCity = c.name;
+        }
+      }
+    });
+  }
+
+  try {
+    // 1. Google Maps Geocoder if loaded
+    if (window.google?.maps?.Geocoder) {
+      const geocoder = new window.google.maps.Geocoder();
+      const result = await new Promise((resolve) => {
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === 'OK' && results?.[0]) {
+            resolve(results[0]);
+          } else {
+            resolve(null);
+          }
+        });
+      });
+
+      if (result) {
+        const components = result.address_components || [];
+        const getComponent = (type) => components.find(c => c.types.includes(type))?.long_name || '';
+        const city = getComponent('locality') || getComponent('administrative_area_level_2') || nearestCity || '';
+        const subLocality = getComponent('sublocality') || getComponent('sublocality_level_1') || getComponent('neighborhood') || '';
+        const readable = [subLocality, city].filter(Boolean).join(', ') || result.formatted_address?.split(',').slice(0, 3).join(', ');
+
+        return {
+          address: readable || result.formatted_address,
+          city: city
+        };
+      }
+    }
+
+    // 2. OpenStreetMap Nominatim fallback with timeout
+    const fetchPromise = fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`,
+      { headers: { 'Accept-Language': 'en-US,en;q=0.9' } }
+    ).then(async (res) => {
+      if (!res.ok) return null;
+      const data = await res.json();
+      const addressObj = data.address || {};
+      const detectedCity =
+        addressObj.city ||
+        addressObj.town ||
+        addressObj.village ||
+        addressObj.suburb ||
+        addressObj.state_district ||
+        nearestCity ||
+        '';
+
+      const readableAddress =
+        data.display_name?.split(',').slice(0, 3).join(', ') ||
+        (detectedCity ? `${detectedCity}, India` : `Location (${lat.toFixed(3)}, ${lng.toFixed(3)})`);
+
+      return {
+        address: readableAddress,
+        city: detectedCity
+      };
+    });
+
+    const timeoutPromise = new Promise((resolve) =>
+      setTimeout(() => resolve(null), 2500)
+    );
+
+    const geo = await Promise.race([fetchPromise, timeoutPromise]);
+    if (geo) return geo;
+  } catch (err) {
+    console.warn('Reverse geocoding error:', err);
+  }
+
+  return {
+    address: nearestCity ? `${nearestCity}, India` : `Location (${lat.toFixed(3)}, ${lng.toFixed(3)})`,
+    city: nearestCity || ''
+  };
+};
 
 const Home = () => {
   const navigate = useNavigate();
@@ -91,6 +187,19 @@ const Home = () => {
 
   const { cartCount, addToCart } = useCart();
   const { currentCity, cities, selectCity, loading: cityLoading } = useCity();
+  const [isLocating, setIsLocating] = useState(false);
+  const [isEnableLocationModalOpen, setIsEnableLocationModalOpen] = useState(false);
+  const [isCityModalOpen, setIsCityModalOpen] = useState(false);
+  const [locationErrorType, setLocationErrorType] = useState(null);
+  const autoLocationAttemptedRef = useRef(false);
+
+  // Initialize Google Maps API for geocoding
+  useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY || '',
+    libraries: GOOGLE_MAPS_LIBRARIES,
+    language: 'en'
+  });
 
   // Clean up legacy storage keys on mount
   useEffect(() => {
@@ -101,6 +210,86 @@ const Home = () => {
       localStorage.removeItem('currentCity');
     }
   }, []);
+
+  const fetchUserLocation = async (isManualRetry = false) => {
+    setIsLocating(true);
+    try {
+      const pos = await flutterBridge.getCurrentLocation();
+      const lat = pos?.coords?.latitude || pos?.latitude;
+      const lng = pos?.coords?.longitude || pos?.longitude;
+
+      if (!lat || !lng) {
+        throw new Error('Coordinates missing');
+      }
+
+      const geo = await reverseGeocodeCoords(lat, lng, cities);
+      const newAddress = geo?.address || `Location (${lat.toFixed(3)}, ${lng.toFixed(3)})`;
+      const newCity = geo?.city || '';
+
+      setAddress(newAddress);
+      setUserCoords({ lat, lng });
+      localStorage.setItem('currentAddress', newAddress);
+      localStorage.setItem('userLat', String(lat));
+      localStorage.setItem('userLng', String(lng));
+      localStorage.setItem('location_granted', 'true');
+
+      if (newCity) {
+        setDetectedCityName(newCity);
+        localStorage.setItem('currentCity', newCity);
+
+        if (cities && cities.length > 0) {
+          const matched = cities.find(c =>
+            c.name.toLowerCase() === newCity.toLowerCase() ||
+            c.name.toLowerCase().includes(newCity.toLowerCase()) ||
+            newCity.toLowerCase().includes(c.name.toLowerCase())
+          );
+          if (matched) {
+            selectCity(matched);
+          }
+        }
+      }
+
+      setIsEnableLocationModalOpen(false);
+      window.dispatchEvent(new CustomEvent('locationUpdate', { detail: { lat, lng, address: newAddress } }));
+      toast.success(`Location detected: ${newCity || newAddress}`, { id: 'auto-location-toast' });
+    } catch (err) {
+      console.warn('Auto location detection failed/unavailable:', err);
+      const isPermissionDenied = err?.code === 1;
+      setLocationErrorType(isPermissionDenied ? 'denied' : 'unavailable');
+      setIsEnableLocationModalOpen(true);
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  // Automatically fetch GPS location if skipped from login or if not yet set
+  useEffect(() => {
+    const isExplicitAutoFetch = Boolean(location.state?.autoFetchLocation);
+    const hasSavedAddress = localStorage.getItem('currentAddress') && localStorage.getItem('currentAddress') !== 'Select Location';
+    const isPermissionGranted = localStorage.getItem('location_granted') === 'true';
+
+    const shouldAutoFetch = isExplicitAutoFetch || !hasSavedAddress || !isPermissionGranted;
+
+    if (autoLocationAttemptedRef.current || !shouldAutoFetch) return;
+    autoLocationAttemptedRef.current = true;
+
+    fetchUserLocation();
+  }, [location.state, cities, selectCity]);
+
+  const handleCitySelectedFromModal = (city) => {
+    if (city) {
+      selectCity(city);
+      const formatted = `${city.name}${city.state ? `, ${city.state}` : ''}`;
+      setAddress(formatted);
+      setDetectedCityName(city.name);
+      localStorage.setItem('currentAddress', formatted);
+      localStorage.setItem('currentCity', city.name);
+      localStorage.setItem('location_granted', 'true');
+      toast.success(`Location set to ${city.name}`);
+      setIsCityModalOpen(false);
+      setIsEnableLocationModalOpen(false);
+    }
+  };
 
   // Sync detectedCityName with Address on mount/update if not already set
   useEffect(() => {
@@ -594,7 +783,7 @@ const Home = () => {
           className="sticky top-0 z-50 transition-all duration-300 shadow-sm"
         >
           <Header
-            location={address}
+            location={isLocating ? 'Detecting location...' : address}
             onLocationClick={handleLocationClick}
             onSearchClick={() => setIsSearchOpen(true)}
           />
@@ -942,6 +1131,26 @@ const Home = () => {
           setSelectedDirectService(null);
         }}
         service={selectedDirectService}
+      />
+
+      {/* Enable Location Permission/Device Location Modal */}
+      <EnableLocationModal
+        isOpen={isEnableLocationModalOpen}
+        onClose={() => setIsEnableLocationModalOpen(false)}
+        onRetry={() => fetchUserLocation(true)}
+        onSelectManually={() => {
+          setIsEnableLocationModalOpen(false);
+          setIsCityModalOpen(true);
+        }}
+        isLoading={isLocating}
+        errorType={locationErrorType}
+      />
+
+      {/* City Selector Modal for manual selection fallback */}
+      <CitySelectorModal
+        isOpen={isCityModalOpen}
+        onClose={() => setIsCityModalOpen(false)}
+        onCitySelected={handleCitySelectedFromModal}
       />
     </div>
   );

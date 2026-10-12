@@ -81,54 +81,72 @@ class FlutterBridge {
         LOCATION (NATIVE + FALLBACK)
   ================================== */
   async getCurrentLocation() {
-    try {
-      const result = await this.callHandler("getLocation");
-
-      if (result && result.success) {
-        return {
-          latitude: result.latitude,
-          longitude: result.longitude,
-          source: 'flutter_native'
-        };
-      }
-
-      // If native bridge result is failure, throw to trigger fallback
-      throw new Error("Native location failed");
-    } catch (error) {
-      if (this.isFlutter) {
-        console.warn("[FlutterBridge] Flutter Location Error, falling back to browser GPS:", error);
-      }
-
-      // Browser fallback (Web Geolocation API)
-      return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error("Geolocation not supported by browser"));
-          return;
+    // If inside Flutter app WebView, attempt native bridge first
+    if (this.isFlutter) {
+      try {
+        const result = await this.callHandler("getLocation");
+        if (result && result.success && result.latitude && result.longitude) {
+          return {
+            latitude: result.latitude,
+            longitude: result.longitude,
+            source: 'flutter_native'
+          };
         }
-
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            resolve({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              accuracy: position.coords.accuracy,
-              source: 'browser_gps'
-            });
-          },
-          (err) => {
-            if (this.isFlutter) {
-              console.error("[FlutterBridge] Browser fallback also failed:", err.message);
-            }
-            reject(err);
-          },
-          {
-            enableHighAccuracy: false, // Turned false to reduce timeout chances on weaker network/GPS
-            timeout: 15000, // Increased timeout to 15 seconds
-            maximumAge: 10000 // Allow up to 10 seconds old cached locations to further prevent timeouts
-          }
-        );
-      });
+      } catch (nativeErr) {
+        console.warn("[FlutterBridge] Native Flutter location error:", nativeErr);
+      }
     }
+
+    // Web Browser Geolocation fallback
+    return new Promise((resolve, reject) => {
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        reject(new Error("Geolocation not supported by browser"));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            source: 'browser_gps'
+          });
+        },
+        (err) => {
+          // If error is permission denied, reject immediately (no need to retry low accuracy)
+          if (err && err.code === 1) {
+            reject(err);
+            return;
+          }
+
+          // If high accuracy failed/timed out, try low accuracy once
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              resolve({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy: pos.coords.accuracy,
+                source: 'browser_gps'
+              });
+            },
+            (finalErr) => {
+              reject(finalErr || err);
+            },
+            {
+              enableHighAccuracy: false,
+              timeout: 4000,
+              maximumAge: 60000
+            }
+          );
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 30000
+        }
+      );
+    });
   }
 
   /**

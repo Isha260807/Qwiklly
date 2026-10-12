@@ -11,6 +11,7 @@ import { toast } from 'react-hot-toast';
 import { useAppNotifications } from '../../../../hooks/useAppNotifications';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import PaymentVerificationModal from '../../components/booking/PaymentVerificationModal';
+import { toCoordinate, distanceBetweenMeters, buildRouteProgress, hydrateRouteSnapshot, matchRouteProgress, getRemainingPath, formatDistanceMeters, formatRemainingDuration } from '../../../../utils/routeProgress';
 
 
 const toAssetUrl = (url) => {
@@ -57,12 +58,23 @@ const BookingTrack = () => {
   const [distance, setDistance] = useState('');
   const [duration, setDuration] = useState('');
   const [routePath, setRoutePath] = useState([]);
+  const [routeSnapshot, setRouteSnapshot] = useState(null);
+  const routeProgressRef = useRef(null);
+  const routeProgressDistanceRef = useRef(0);
+  const routeDestinationRef = useRef(null);
+  const routeRequestInFlightRef = useRef(false);
+  const routeRequestSequenceRef = useRef(0);
+  const routeLoadedRef = useRef(false);
+  const hasFittedRouteRef = useRef(false);
+  const latestLocationTimestampRef = useRef(0);
+  const latestRouteTimestampRef = useRef(0);
   const [isAutoCenter, setIsAutoCenter] = useState(true);
   const [isNavigationMode, setIsNavigationMode] = useState(false);
 
   const [paying, setPaying] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const isTrackingActive = ['journey_started', 'visited', 'in_progress'].includes(String(booking?.status || '').toLowerCase());
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
@@ -185,8 +197,9 @@ const BookingTrack = () => {
           const bAddr = response.data.address || {};
 
           // 1. Destination
-          if (bAddr.lat && bAddr.lng) {
-            setCoords({ lat: parseFloat(bAddr.lat), lng: parseFloat(bAddr.lng) });
+          const storedDestination = toCoordinate(bAddr.lat, bAddr.lng);
+          if (storedDestination) {
+            setCoords(storedDestination);
           } else {
             const addressStr = typeof bAddr === 'string' ? bAddr : `${bAddr.addressLine1 || ''}, ${bAddr.city || ''}, ${bAddr.state || ''} ${bAddr.pincode || ''}`;
             if (addressStr && addressStr.replaceAll(',', '').trim() && !addressStr.toLowerCase().includes('current location')) {
@@ -201,11 +214,13 @@ const BookingTrack = () => {
           // 2. Source (Provider Location) - ONLY on first load if no socket location received yet
           if (isFirstLoad && !locationFromSocketRef.current) {
             const provider = response.data.workerId || response.data.assignedTo || response.data.vendorId || {};
-            if (provider.location && provider.location.lat && provider.location.lng) {
-              setCurrentLocation({ lat: parseFloat(provider.location.lat), lng: parseFloat(provider.location.lng) });
-            } else if (response.data.vendorId && provider.address && provider.address.lat && provider.address.lng) {
+            const providerLocation = toCoordinate(provider.location?.lat, provider.location?.lng);
+            if (providerLocation) {
+              setCurrentLocation(providerLocation);
+            } else if (response.data.vendorId && provider.address) {
               // Fallback to vendor address
-              setCurrentLocation({ lat: parseFloat(provider.address.lat), lng: parseFloat(provider.address.lng) });
+              const providerAddress = toCoordinate(provider.address.lat, provider.address.lng);
+              if (providerAddress) setCurrentLocation(providerAddress);
             } else {
               // Reset if no location found to avoid wrong location display
               setCurrentLocation(null);
@@ -243,17 +258,28 @@ const BookingTrack = () => {
       socket.emit('join_tracking', id);
 
       const handleLocationUpdate = (data) => {
-        if (data.lat && data.lng) {
-          // Mark that we've received location from socket - don't let booking refresh override
-          locationFromSocketRef.current = true;
-          setCurrentLocation({ lat: parseFloat(data.lat), lng: parseFloat(data.lng) });
-          // Use heading from socket if available (more accurate)
-          if (data.heading !== undefined && data.heading !== null) {
-            setHeading(parseFloat(data.heading));
-          }
+        const routeTimestamp = Number(data?.routeSnapshot?.timestamp);
+        if (data?.routeSnapshot && (!Number.isFinite(routeTimestamp) || routeTimestamp >= latestRouteTimestampRef.current)) {
+          if (Number.isFinite(routeTimestamp)) latestRouteTimestampRef.current = routeTimestamp;
+          setRouteSnapshot(data.routeSnapshot);
+        }
+
+        const incomingTimestamp = Number(data?.gpsTimestamp || data?.timestamp);
+        if (Number.isFinite(incomingTimestamp) && incomingTimestamp + 1000 < latestLocationTimestampRef.current) return;
+        if (Number.isFinite(incomingTimestamp)) latestLocationTimestampRef.current = incomingTimestamp;
+
+        const point = toCoordinate(data?.lat, data?.lng);
+        if (!point) return;
+        locationFromSocketRef.current = true;
+        setCurrentLocation({
+          ...point,
+          accuracy: Number.isFinite(Number(data.accuracy)) ? Number(data.accuracy) : null,
+          timestamp: incomingTimestamp || Date.now()
+        });
+        if (data.heading !== undefined && data.heading !== null) {
+          setHeading(parseFloat(data.heading));
         }
       };
-
       const handleBookingUpdate = (data) => {
         if (data.bookingId === id || data.relatedId === id || data.data?.bookingId === id) {
           setBooking(prev => {
@@ -288,20 +314,22 @@ const BookingTrack = () => {
     if (!db || !id) return;
 
     const trackingRef = ref(db, `trackings/${id}`);
-    
+
     const unsubscribe = onValue(trackingRef, (snapshot) => {
       const data = snapshot.val();
-      if (data && data.lat && data.lng) {
-        // Firebase is now the primary source for real-time smoothness
-        locationFromSocketRef.current = true;
-        setCurrentLocation({ 
-          lat: parseFloat(data.lat), 
-          lng: parseFloat(data.lng) 
-        });
-        
-        if (data.heading !== undefined && data.heading !== null) {
-          setHeading(parseFloat(data.heading));
-        }
+      const firebaseTimestamp = Number(data?.updatedAt);
+      if (Number.isFinite(firebaseTimestamp) && firebaseTimestamp + 1000 < latestLocationTimestampRef.current) return;
+      const point = toCoordinate(data?.lat, data?.lng);
+      if (!point) return;
+      if (Number.isFinite(firebaseTimestamp)) latestLocationTimestampRef.current = firebaseTimestamp;
+      locationFromSocketRef.current = true;
+      setCurrentLocation({
+        ...point,
+        accuracy: Number.isFinite(Number(data.accuracy)) ? Number(data.accuracy) : null,
+        timestamp: firebaseTimestamp || Date.now()
+      });
+      if (data.heading !== undefined && data.heading !== null) {
+        setHeading(parseFloat(data.heading));
       }
     });
 
@@ -378,7 +406,6 @@ const BookingTrack = () => {
 
   const [heading, setHeading] = useState(0);
   const prevLocationRef = useRef(null);
-  const lastRouteOriginRef = useRef(null);
 
   // Calculate Heading based on movement (Direction Sense)
   useEffect(() => {
@@ -421,119 +448,125 @@ const BookingTrack = () => {
   // with the real rider's GPS coordinates.
   */
 
-  // Calculate Route ONCE on initial load only
-  const initialBoundsSetRef = useRef(false);
-  const directionsCalculatedRef = useRef(false);
+  // The vendor publishes one driving route snapshot. The customer hydrates it locally,
+  // so GPS updates only advance along the already-rendered road geometry.
+  useEffect(() => {
+    const destination = toCoordinate(coords?.lat, coords?.lng);
+    const snapshotProgress = hydrateRouteSnapshot(routeSnapshot);
+    if (!isTrackingActive || !isLoaded || !map || !destination || !snapshotProgress) return;
 
-  const fullRoutePathRef = useRef([]);
+    const snapshotDestination = snapshotProgress.destination;
+    if (snapshotDestination && distanceBetweenMeters(snapshotDestination, destination) > 100) return;
+
+    routeRequestSequenceRef.current += 1;
+    routeRequestInFlightRef.current = false;
+    routeProgressRef.current = snapshotProgress;
+    routeProgressDistanceRef.current = 0;
+    routeDestinationRef.current = destination;
+    routeLoadedRef.current = true;
+    setDirections(null);
+    setRoutePath(snapshotProgress.path);
+    setDistance(snapshotProgress.totalDistanceText || formatDistanceMeters(snapshotProgress.totalDistanceMeters));
+    setDuration(snapshotProgress.totalDurationText || '');
+
+    if (!hasFittedRouteRef.current) {
+      const bounds = new window.google.maps.LatLngBounds();
+      snapshotProgress.path.forEach(point => bounds.extend(point));
+      map.fitBounds(bounds, { top: 80, right: 40, bottom: 260, left: 40 });
+      hasFittedRouteRef.current = true;
+    }
+  }, [routeSnapshot, coords, map, isLoaded, isTrackingActive]);
+
+  // Fallback for a customer who opens tracking before the vendor publishes a snapshot.
+  // It is intentionally a single request per destination; it never reroutes on every GPS update.
+  useEffect(() => {
+    const googleMaps = window.google?.maps;
+    const origin = toCoordinate(currentLocation?.lat, currentLocation?.lng);
+    const destination = toCoordinate(coords?.lat, coords?.lng);
+    const snapshotProgress = hydrateRouteSnapshot(routeSnapshot);
+    const snapshotMatches = snapshotProgress?.destination
+      ? distanceBetweenMeters(snapshotProgress.destination, destination) <= 100
+      : Boolean(snapshotProgress);
+
+    if (!isTrackingActive || !isLoaded || !map || !googleMaps || !origin || !destination || snapshotMatches) return;
+
+    if (routeProgressRef.current && routeDestinationRef.current && distanceBetweenMeters(routeDestinationRef.current, destination) <= 1) return;
+    if (routeRequestInFlightRef.current) return;
+
+    routeProgressRef.current = null;
+    routeDestinationRef.current = destination;
+    routeLoadedRef.current = false;
+    routeRequestInFlightRef.current = true;
+    const requestSequence = ++routeRequestSequenceRef.current;
+    const directionsService = new googleMaps.DirectionsService();
+
+    directionsService.route({
+      origin,
+      destination,
+      travelMode: googleMaps.TravelMode.DRIVING
+    }, (result, status) => {
+      routeRequestInFlightRef.current = false;
+      if (requestSequence !== routeRequestSequenceRef.current) return;
+      if (status !== googleMaps.DirectionsStatus.OK || !result?.routes?.[0]?.legs?.[0]) return;
+
+      const route = result.routes[0];
+      const leg = route.legs[0];
+      const nextProgress = buildRouteProgress({
+        route,
+        distanceText: leg.distance?.text || '',
+        distanceValue: leg.distance?.value || 0,
+        durationText: leg.duration?.text || '',
+        durationValue: leg.duration?.value || 0,
+        origin,
+        destination
+      });
+      if (!nextProgress) return;
+
+      routeProgressRef.current = nextProgress;
+      routeProgressDistanceRef.current = 0;
+      routeDestinationRef.current = destination;
+      routeLoadedRef.current = true;
+      setDirections(result);
+      setRoutePath(nextProgress.path);
+      setDistance(nextProgress.totalDistanceText || formatDistanceMeters(nextProgress.totalDistanceMeters));
+      setDuration(nextProgress.totalDurationText || '');
+
+      if (!hasFittedRouteRef.current) {
+        const bounds = new googleMaps.LatLngBounds();
+        nextProgress.path.forEach(point => bounds.extend(point));
+        map.fitBounds(bounds, { top: 80, right: 40, bottom: 260, left: 40 });
+        hasFittedRouteRef.current = true;
+      }
+    });
+  }, [currentLocation, coords, routeSnapshot, map, isLoaded, isTrackingActive]);
+
+  // Advance the displayed route locally. This uses the rendered road geometry,
+  // never straight-line distance or a synthetic speed estimate.
+  useEffect(() => {
+    const progress = routeProgressRef.current;
+    const locationPoint = toCoordinate(currentLocation?.lat, currentLocation?.lng);
+    if (!progress || !locationPoint) return;
+
+    const accuracy = Number(currentLocation?.accuracy) || 50;
+    const match = matchRouteProgress(progress, locationPoint, routeProgressDistanceRef.current, accuracy);
+    if (!match) return;
+
+    routeProgressDistanceRef.current = Math.max(routeProgressDistanceRef.current, match.progressMeters);
+    const remainingMeters = Math.max(0, progress.totalDistanceMeters - routeProgressDistanceRef.current);
+    setRoutePath(getRemainingPath(progress, match));
+    setDistance(formatDistanceMeters(remainingMeters));
+    setDuration(formatRemainingDuration(progress, remainingMeters));
+  }, [currentLocation]);
 
   useEffect(() => {
-    // Only calculate directions ONCE when we have all required data
-    if (isLoaded && currentLocation && coords && map && !directionsCalculatedRef.current) {
-      directionsCalculatedRef.current = true; // Prevent recalculation
-
-      const directionsService = new window.google.maps.DirectionsService();
-
-      const tryRoute = (mode) => {
-        directionsService.route(
-          {
-            origin: currentLocation,
-            destination: coords,
-            travelMode: mode,
-          },
-          (result, status) => {
-            if (status === window.google.maps.DirectionsStatus.OK) {
-              setDirections(result);
-              const leg = result.routes[0]?.legs[0];
-              if (leg) {
-                setDistance(leg.distance.text);
-                setDuration(leg.duration.text);
-              }
-
-              // Store full path and set initial state
-              fullRoutePathRef.current = result.routes[0].overview_path;
-              setRoutePath(result.routes[0].overview_path);
-
-              map.setCenter(currentLocation);
-              map.setZoom(16);
-            } else if (mode === window.google.maps.TravelMode.DRIVING) {
-              tryRoute(window.google.maps.TravelMode.WALKING);
-            } else {
-              console.warn('Google DirectionsService failed in BookingTrack:', status);
-              const straightPath = [currentLocation, coords];
-              fullRoutePathRef.current = straightPath;
-              setRoutePath(straightPath);
-              map.setCenter(currentLocation);
-              map.setZoom(16);
-            }
-          }
-        );
-      };
-
-      tryRoute(window.google.maps.TravelMode.DRIVING);
-    }
-  }, [isLoaded, coords, map, currentLocation]);
-
-  // Update distance, ETA, and Clear Traveled Path as rider moves
-  useEffect(() => {
-    if (isLoaded && currentLocation && coords && window.google && directionsCalculatedRef.current) {
-      // 1. Calculate straight-line distance & ETA
-      const riderPoint = new window.google.maps.LatLng(currentLocation);
-      const destPoint = new window.google.maps.LatLng(coords);
-      const distanceMeters = window.google.maps.geometry.spherical.computeDistanceBetween(riderPoint, destPoint);
-
-      // Convert to km
-      const distanceKm = distanceMeters / 1000;
-
-      // Format distance
-      if (distanceKm < 1) {
-        setDistance(`${Math.round(distanceMeters)} m`);
-      } else {
-        setDistance(`${distanceKm.toFixed(1)} km`);
-      }
-
-      // Estimate time (assuming average speed of 30 km/h in city)
-      const avgSpeedKmh = 30;
-      const timeHours = distanceKm / avgSpeedKmh;
-      const timeMinutes = Math.round(timeHours * 60);
-
-      if (timeMinutes < 1) {
-        setDuration('< 1 min');
-      } else if (timeMinutes < 60) {
-        setDuration(`${timeMinutes} min`);
-      } else {
-        const hours = Math.floor(timeMinutes / 60);
-        const mins = timeMinutes % 60;
-        setDuration(`${hours} hr ${mins} min`);
-      }
-
-      // 2. Clear Traveled Path Visualization
-      if (fullRoutePathRef.current && fullRoutePathRef.current.length > 0) {
-        // Find the closest point on the original path to the current rider location
-        let closestIndex = -1;
-        let minDist = Infinity;
-
-        // Optimization: Only check a reasonable window if path is huge, but full check is safer for loops
-        fullRoutePathRef.current.forEach((p, idx) => {
-          const d = window.google.maps.geometry.spherical.computeDistanceBetween(riderPoint, p);
-          if (d < minDist) {
-            minDist = d;
-            closestIndex = idx;
-          }
-        });
-
-        // If we found a close point, update the path to start from CURRENT location, 
-        // then continue from the NEXT point in the original path.
-        if (closestIndex !== -1) {
-          // We splice the array to remove points "behind"
-          // We start drawing from the current rider position explicitly to avoid a gap
-          const remaining = fullRoutePathRef.current.slice(closestIndex + 1);
-          setRoutePath([currentLocation, ...remaining]);
-        }
-      }
-    }
-  }, [currentLocation, coords, isLoaded]);
-
+    if (!map || !isFullScreen || !window.google?.maps?.event) return;
+    const center = map.getCenter();
+    const frame = requestAnimationFrame(() => {
+      window.google.maps.event.trigger(map, 'resize');
+      if (center) map.setCenter(center);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [map, isFullScreen]);
   const mapOptions = useMemo(() => ({
     disableDefaultUI: true,
     zoomControl: false,
@@ -655,7 +688,10 @@ const BookingTrack = () => {
           mapContainerStyle={{ width: '100%', height: '100%' }}
           defaultCenter={defaultCenter}
           defaultZoom={14}
-          onLoad={map => setMap(map)}
+          onLoad={map => {
+            setMap(map);
+            map.setTilt(0);
+          }}
           onDragStart={() => setIsAutoCenter(false)}
           onZoomChanged={() => {
             // Only disable if it's a programmatic zoom check is complicated, 
@@ -692,32 +728,44 @@ const BookingTrack = () => {
                   }}
                 />
               )}
-              {routePath && routePath.length > 0 && (
+              {routePath.length > 1 && (
                 <PolylineF
                   path={routePath}
                   options={{
                     strokeColor: "#0F766E",
-                    strokeWeight: 6,
-                    strokeOpacity: 0.9,
+                    strokeWeight: 8,
+                    strokeOpacity: 1,
+                    zIndex: 50
+                  }}
+                />
+              )}              {riderMarker}
+            </>
+          ) : (
+            // Fallback when rider location is not yet available
+            <>
+              {routePath.length > 1 && (
+                <PolylineF
+                  path={routePath}
+                  options={{
+                    strokeColor: "#0F766E",
+                    strokeWeight: 8,
+                    strokeOpacity: 1,
                     zIndex: 50
                   }}
                 />
               )}
-              {riderMarker}
-            </>
-          ) : (
-            // Fallback when rider location is not yet available
-            <OverlayView
-              position={coords || defaultCenter}
-              mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-            >
-              <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 w-64 flex flex-col items-center">
-                <div className="bg-white/90 backdrop-blur-md px-4 py-3 rounded-2xl shadow-xl border border-teal-100 flex items-center gap-3 animate-bounce-slow">
-                  <div className="w-3 h-3 bg-teal-500 rounded-full animate-ping"></div>
-                  <span className="text-xs font-bold text-gray-700">Waiting for rider location...</span>
+              <OverlayView
+                position={coords || defaultCenter}
+                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+              >
+                <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 w-64 flex flex-col items-center">
+                  <div className="bg-white/90 backdrop-blur-md px-4 py-3 rounded-2xl shadow-xl border border-teal-100 flex items-center gap-3 animate-bounce-slow">
+                    <div className="w-3 h-3 bg-teal-500 rounded-full animate-ping"></div>
+                    <span className="text-xs font-bold text-gray-700">Waiting for rider location...</span>
+                  </div>
                 </div>
-              </div>
-            </OverlayView>
+              </OverlayView>
+            </>
           )}
 
           {destinationMarker}
@@ -765,19 +813,19 @@ const BookingTrack = () => {
               {booking?.status?.toLowerCase() === 'work_done'
                 ? 'Work Completed'
                 : booking?.status?.toLowerCase() === 'in_progress'
-                ? 'Work In Progress'
-                : booking?.status?.toLowerCase() === 'visited'
-                ? 'Partner At Location'
-                : duration ? `Arriving in ${duration}` : 'Tracking active'}
+                  ? 'Work In Progress'
+                  : booking?.status?.toLowerCase() === 'visited'
+                    ? 'Partner At Location'
+                    : duration ? `Arriving in ${duration}` : 'Tracking active'}
             </p>
             <h2 className="text-lg sm:text-xl font-black text-gray-900 tracking-tight leading-tight">
               {booking?.status?.toLowerCase() === 'work_done'
                 ? 'Service Completed'
                 : booking?.status?.toLowerCase() === 'in_progress'
-                ? 'Service Ongoing'
-                : booking?.status?.toLowerCase() === 'visited'
-                ? 'Professional Arrived'
-                : 'On the way'}
+                  ? 'Service Ongoing'
+                  : booking?.status?.toLowerCase() === 'visited'
+                    ? 'Professional Arrived'
+                    : 'On the way'}
             </h2>
           </div>
           {distance && ['journey_started', 'assigned', 'confirmed'].includes(booking?.status?.toLowerCase()) && (
@@ -863,11 +911,10 @@ const BookingTrack = () => {
         {!isPrepaidOnline && (booking?.customerConfirmationOTP || booking?.paymentStatus === 'success') && booking?.status?.toLowerCase() === 'work_done' && !booking?.cashCollected && (
           <div
             onClick={() => setShowPaymentModal(true)}
-            className={`mb-2.5 relative overflow-hidden rounded-xl p-3 shadow-md cursor-pointer active:scale-[0.98] transition-all ${
-              booking?.paymentStatus === 'success'
+            className={`mb-2.5 relative overflow-hidden rounded-xl p-3 shadow-md cursor-pointer active:scale-[0.98] transition-all ${booking?.paymentStatus === 'success'
                 ? 'bg-gradient-to-br from-green-500 to-emerald-700'
                 : 'bg-gradient-to-br from-orange-500 to-red-600'
-            }`}
+              }`}
           >
             <div className="relative z-10 flex flex-col items-center">
               <div className="flex items-center gap-2.5 w-full mb-3">

@@ -260,7 +260,7 @@ const Login = () => {
           {/* Top Row / Skip Login */}
           <div className="flex justify-end items-center mb-1">
             <button
-              onClick={() => navigate('/user/location')}
+              onClick={() => navigate('/user', { state: { autoFetchLocation: true } })}
               className="bg-white/20 hover:bg-white/35 active:scale-95 text-white font-semibold text-[11px] sm:text-xs px-3.5 py-1.5 rounded-full transition-all duration-200 backdrop-blur-md cursor-pointer border border-white/30 shadow-xs"
             >
               Skip login
@@ -295,7 +295,7 @@ const Login = () => {
               <FiZap className="w-3.5 h-3.5 text-amber-300" /> Fast & Verified
             </span>
             <button
-              onClick={() => navigate('/user/location')}
+              onClick={() => navigate('/user', { state: { autoFetchLocation: true } })}
               className="bg-white/20 hover:bg-white/35 active:scale-95 text-white font-semibold text-xs px-3.5 py-1.5 rounded-full transition-all duration-200 backdrop-blur-md cursor-pointer border border-white/30 shadow-xs"
             >
               Skip login

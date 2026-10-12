@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import PageTransition from '../components/common/PageTransition';
 import BottomNav from '../components/layout/BottomNav';
 import Footer from '../components/layout/Footer';
@@ -148,7 +148,7 @@ const UserRoutes = () => {
               {/* Public routes */}
               <Route path="/login" element={<PublicRoute userType="user"><Login /></PublicRoute>} />
               <Route path="/signup" element={<PublicRoute userType="user"><Signup /></PublicRoute>} />
-              <Route path="/location" element={<SelectLocation />} />
+              <Route path="/location" element={<Navigate to="/user" replace state={{ autoFetchLocation: true }} />} />
 
               {/* Home is accessible for guests and logged-in users */}
               <Route path="/" element={<Home />} />
