@@ -18,6 +18,26 @@
     rel="stylesheet" 
   />
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <style>
+    html.qwiklly-splash-pending,
+    html.qwiklly-splash-pending body,
+    html.qwiklly-splash-pending #root {
+      background: #720C3E !important;
+    }
+  </style>
+  <script>
+    (() => {
+      try {
+        const isUserEntry = window.location.pathname === '/user' || window.location.pathname === '/user/' || window.location.pathname === '/user/login';
+        const splashPlayed = window.sessionStorage.getItem('qwiklly:user-splash-played-v2') === 'true';
+        if (isUserEntry && !splashPlayed) {
+          document.documentElement.classList.add('qwiklly-splash-pending');
+        }
+      } catch {
+        // React fallback still renders the splash when sessionStorage is unavailable.
+      }
+    })();
+  </script>
 </head>
 
 <body

@@ -91,19 +91,13 @@ const Login = () => {
     return () => clearInterval(interval);
   }, [resendTimer]);
 
-  // Auto-focus logic & authenticated redirect
+  // Redirect authenticated users away from the login screen.
+  // Inputs intentionally do not auto-focus so the mobile keyboard opens only after user selection.
   useEffect(() => {
     if (localStorage.getItem('accessToken')) {
       navigate('/user', { replace: true });
-      return;
     }
-
-    if (step === 'phone' && phoneInputRef.current) {
-      setTimeout(() => phoneInputRef.current?.focus(), 150);
-    } else if (step === 'otp' && otpInputRefs.current[0]) {
-      setTimeout(() => otpInputRefs.current[0]?.focus(), 150);
-    }
-  }, [step, navigate]);
+  }, [navigate]);
 
   // Handle phone submit / Send OTP
   const handlePhoneSubmit = async (e) => {

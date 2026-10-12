@@ -83,6 +83,7 @@ const ServiceDetails = lazyLoad(() => import('../pages/ServiceDetails'));
 // Loading fallback component
 import LogoLoader from '../../../components/common/LogoLoader';
 import { themeColors } from '../../../theme';
+import { QwikllySplashGate } from '../../../components/common/QwikllySplash';
 
 const LoadingFallback = () => (
   <LogoLoader />
@@ -93,7 +94,7 @@ import LiveBookingCard from '../components/booking/LiveBookingCard';
 
 const UserRoutes = () => {
   const location = useLocation();
-
+  const shouldShowUserSplash = location.pathname === '/user' || location.pathname === '/user/' || location.pathname === '/user/login';
   // Enable global notifications for user
   // Global notifications are now handled by SocketProvider at App level
   // useAppNotifications('user');
@@ -115,6 +116,7 @@ const UserRoutes = () => {
 
   return (
     <ErrorBoundary>
+      {shouldShowUserSplash && <QwikllySplashGate />}
       {/* Global Brand Mesh Gradient Background across all User Pages */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div
