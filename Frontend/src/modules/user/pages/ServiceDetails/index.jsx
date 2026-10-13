@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   FiArrowLeft,
@@ -496,6 +497,22 @@ const ServiceDetails = () => {
     return (getReviewItemDuration(reviewItem) / itemBillingUnit) * itemPricePerUnit;
   };
 
+  const handleToggleFrequentlyAdded = (e, item) => {
+    e.stopPropagation();
+    const itemId = item.id || item._id;
+    const isSelected = selectedFrequentlyAdded.some(
+      (selectedItem) => (selectedItem.id || selectedItem._id) === itemId
+    );
+
+    if (isSelected) {
+      setSelectedFrequentlyAdded((current) => current.filter(
+        (selectedItem) => (selectedItem.id || selectedItem._id) !== itemId
+      ));
+      return;
+    }
+
+    handleIncrementFrequentlyAdded(e, item);
+  };
   const handleIncrementFrequentlyAdded = (e, item) => {
     e.stopPropagation();
     const itemId = item.id || item._id;
@@ -704,6 +721,39 @@ const ServiceDetails = () => {
                     </button>
                   )}
                 </div>
+
+                {selectedItem && (
+                  <div
+                    className="absolute bottom-1 left-1/2 z-20 flex -translate-x-1/2 scale-90 items-center gap-0.5 rounded-lg border border-[#E8D9DF] bg-white/95 p-0.5 shadow-md backdrop-blur-sm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => handleDecrementFrequentlyAdded(e, item)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-[#831843] hover:bg-[#FFF7FA] active:scale-90"
+                      aria-label={`Decrease ${isItemDuration ? 'duration' : 'quantity'} for ${item.title}`}
+                    >
+                      <FiMinus className="text-xs" />
+                    </button>
+                    <div className="min-w-[28px] text-center leading-none">
+                      <div className="text-[11px] font-black text-[#831843]">
+                        {isItemDuration ? currentDuration : currentQty}
+                      </div>
+                      <div className="mt-0.5 text-[7px] font-semibold text-slate-400">
+                        {isItemDuration ? 'Minutes' : 'Qty'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => handleIncrementFrequentlyAdded(e, item)}
+                      disabled={isItemDuration && currentDuration >= maxDuration}
+                      className="flex h-6 w-6 items-center justify-center rounded-md bg-[#831843] text-white hover:bg-[#720C3E] active:scale-90 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={`Increase ${isItemDuration ? 'duration' : 'quantity'} for ${item.title}`}
+                    >
+                      <FiPlus className="text-xs" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Text content */}
@@ -1547,23 +1597,28 @@ const ServiceDetails = () => {
           </div>
         </div>
 
-        {showReviewServices && (
-          <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-end justify-center p-0 md:p-6">
-            <div className="w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-t-3xl md:rounded-3xl bg-[#FFF9FB] shadow-2xl">
-              <div className="sticky top-0 z-10 bg-[#FFF9FB] border-b border-[#E8D9DF] px-4 py-4 flex items-center justify-between">
-                <h3 className="text-base font-extrabold text-slate-900">Review Services</h3>
+        {showReviewServices && createPortal(
+          <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-[2px] flex items-end justify-center p-0 md:p-6 animate-in fade-in duration-200">
+            <div className="w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col rounded-t-[24px] md:rounded-3xl bg-[#FFF9FB] shadow-[0_-10px_35px_rgba(0,0,0,0.25)] border-t border-[#E8D9DF]/60 animate-in slide-in-from-bottom duration-200">
+              {/* Drag Handle Indicator */}
+              <div className="flex justify-center pt-2 pb-0.5 bg-[#FFF9FB] md:hidden">
+                <div className="h-1 w-10 rounded-full bg-slate-300/80" />
+              </div>
+
+              <div className="bg-[#FFF9FB] border-b border-[#E8D9DF]/70 px-4 py-2.5 flex items-center justify-between shrink-0">
+                <h3 className="text-base font-bold text-slate-900 tracking-tight">Review Services</h3>
                 <button
                   type="button"
                   onClick={() => setShowReviewServices(false)}
-                  className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center"
+                  className="w-7 h-7 rounded-full bg-slate-200/80 text-slate-600 flex items-center justify-center transition-colors hover:bg-slate-300 active:scale-95"
                   aria-label="Close review services"
                 >
-                  <FiX />
+                  <FiX className="h-4 w-4" />
                 </button>
               </div>
 
-              <div className="p-4 space-y-3">
-                <div className="space-y-3">
+              <div className="p-3.5 space-y-2.5 overflow-y-auto flex-1">
+                <div className="space-y-2.5">
                   {reviewServices.map((reviewItem, reviewIndex) => {
                     const itemIsDurationBased = reviewItem.pricingType === 'DURATION' || reviewItem.pricingType === 'HOURLY';
                     const itemDuration = getReviewItemDuration(reviewItem);
@@ -1574,93 +1629,93 @@ const ServiceDetails = () => {
                     const itemImage = reviewItem.image || reviewItem.icon || reviewItem.iconUrl || reviewItem.imageUrl;
 
                     return (
-                      <div key={reviewItem.id || reviewItem._id || reviewIndex} className="rounded-2xl bg-white border border-slate-100 p-3 shadow-2xs">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-[#FFF7FA] border border-[#E8D9DF] flex items-center justify-center overflow-hidden shrink-0">
+                      <div key={reviewItem.id || reviewItem._id || reviewIndex} className="rounded-xl bg-white border border-slate-100 p-2.5 shadow-xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-11 h-11 rounded-lg bg-[#FFF7FA] border border-[#E8D9DF] flex items-center justify-center overflow-hidden shrink-0 p-0.5">
                             {itemImage ? (
                               <img src={toAssetUrl(itemImage)} alt={reviewItem.title} className="w-full h-full object-contain" />
                             ) : (
-                              <span className="text-lg font-black text-[#831843]">{reviewItem.title?.charAt(0) || 'S'}</span>
+                              <span className="text-base font-black text-[#831843]">{reviewItem.title?.charAt(0) || 'S'}</span>
                             )}
                           </div>
 
                           <div className="min-w-0 flex-1">
-                            <p className="text-[10px] text-slate-400">{reviewItem.isPrimary ? 'Main service' : 'Added service'}</p>
-                            <p className="text-sm font-bold text-slate-800 truncate">{reviewItem.title}</p>
-                            <div className="flex items-center gap-2 mt-1">
+                            <p className="text-[10px] font-medium leading-none text-slate-400">{reviewItem.isPrimary ? 'Main service' : 'Added service'}</p>
+                            <p className="text-xs sm:text-sm font-semibold text-slate-800 truncate leading-snug mt-0.5">{reviewItem.title}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
                               {itemOriginalPrice && Number(itemOriginalPrice) > Number(itemPrice) && (
-                                <span className="text-xs text-slate-400 line-through">&#8377;{itemOriginalPrice}</span>
+                                <span className="text-[10px] text-slate-400 line-through">&#8377;{itemOriginalPrice}</span>
                               )}
-                              <span className="text-sm font-black text-[#831843]">&#8377;{Math.round(itemPrice)}</span>
+                              <span className="text-xs sm:text-sm font-black text-[#831843] leading-none">&#8377;{Math.round(itemPrice)}</span>
                             </div>
                           </div>
 
                           {reviewItem.isPrimary && itemIsDurationBased ? (
-                            <div className="flex items-center gap-1 rounded-xl border border-[#E8D9DF] bg-[#FFF7FA] px-1 py-1 shrink-0">
+                            <div className="flex items-center gap-1 rounded-lg border border-[#E8D9DF] bg-[#FFF7FA] p-0.5 shrink-0">
                               <button
                                 type="button"
                                 onClick={handleDurationDecrement}
                                 disabled={selectedDurationMinutes <= minDurationMinutes}
-                                className="w-7 h-7 rounded-lg text-[#831843] text-lg leading-none disabled:opacity-30"
+                                className="w-7 h-7 rounded-md text-[#831843] text-base leading-none hover:bg-white flex items-center justify-center active:scale-90 disabled:opacity-30"
                                 aria-label="Decrease duration"
                               >
                                 −
                               </button>
-                              <div className="min-w-[42px] text-center leading-none">
-                                <div className="text-sm font-black text-[#831843]">{selectedDurationMinutes}</div>
+                              <div className="min-w-[36px] text-center leading-none">
+                                <div className="text-xs sm:text-sm font-black text-[#831843]">{selectedDurationMinutes}</div>
                                 <div className="text-[8px] font-semibold text-slate-400 mt-0.5">Minutes</div>
                               </div>
                               <button
                                 type="button"
                                 onClick={handleDurationIncrement}
                                 disabled={selectedDurationMinutes >= maxDurationMinutes}
-                                className="w-7 h-7 rounded-lg bg-[#831843] text-white text-lg leading-none disabled:opacity-30"
+                                className="w-7 h-7 rounded-md bg-[#831843] text-white text-base leading-none hover:bg-[#720C3E] flex items-center justify-center active:scale-90 disabled:opacity-30"
                                 aria-label="Increase duration"
                               >
                                 +
                               </button>
                             </div>
                           ) : itemIsDurationBased ? (
-                            <div className="flex items-center gap-1 rounded-xl border border-[#E8D9DF] bg-[#FFF7FA] px-1 py-1 shrink-0">
+                            <div className="flex items-center gap-1 rounded-lg border border-[#E8D9DF] bg-[#FFF7FA] p-0.5 shrink-0">
                               <button
                                 type="button"
                                 onClick={(e) => handleDecrementFrequentlyAdded(e, reviewItem)}
-                                className="w-7 h-7 rounded-lg text-[#831843] text-lg leading-none hover:bg-white flex items-center justify-center cursor-pointer"
+                                className="w-7 h-7 rounded-md text-[#831843] text-base leading-none hover:bg-white flex items-center justify-center cursor-pointer active:scale-90"
                                 aria-label="Decrease duration"
                               >
                                 −
                               </button>
-                              <div className="min-w-[42px] text-center leading-none">
-                                <div className="text-sm font-black text-[#831843]">{itemDuration}</div>
+                              <div className="min-w-[36px] text-center leading-none">
+                                <div className="text-xs sm:text-sm font-black text-[#831843]">{itemDuration}</div>
                                 <div className="text-[8px] font-semibold text-slate-400 mt-0.5">Minutes</div>
                               </div>
                               <button
                                 type="button"
                                 onClick={(e) => handleIncrementFrequentlyAdded(e, reviewItem)}
-                                className="w-7 h-7 rounded-lg bg-[#831843] text-white text-lg leading-none hover:bg-[#720C3E] flex items-center justify-center cursor-pointer"
+                                className="w-7 h-7 rounded-md bg-[#831843] text-white text-base leading-none hover:bg-[#720C3E] flex items-center justify-center cursor-pointer active:scale-90"
                                 aria-label="Increase duration"
                               >
                                 +
                               </button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1 rounded-xl border border-[#E8D9DF] bg-[#FFF7FA] px-1 py-1 shrink-0">
+                            <div className="flex items-center gap-1 rounded-lg border border-[#E8D9DF] bg-[#FFF7FA] p-0.5 shrink-0">
                               <button
                                 type="button"
                                 onClick={(e) => handleDecrementFrequentlyAdded(e, reviewItem)}
-                                className="w-7 h-7 rounded-lg text-[#831843] text-lg leading-none hover:bg-white flex items-center justify-center cursor-pointer"
+                                className="w-7 h-7 rounded-md text-[#831843] text-base leading-none hover:bg-white flex items-center justify-center cursor-pointer active:scale-90"
                                 aria-label="Decrease quantity"
                               >
                                 −
                               </button>
-                              <div className="min-w-[32px] text-center leading-none">
-                                <div className="text-sm font-black text-[#831843]">{reviewItem.quantity || 1}</div>
+                              <div className="min-w-[30px] text-center leading-none">
+                                <div className="text-xs sm:text-sm font-black text-[#831843]">{reviewItem.quantity || 1}</div>
                                 <div className="text-[8px] font-semibold text-slate-400 mt-0.5">Qty</div>
                               </div>
                               <button
                                 type="button"
                                 onClick={(e) => handleIncrementFrequentlyAdded(e, reviewItem)}
-                                className="w-7 h-7 rounded-lg bg-[#831843] text-white text-lg leading-none hover:bg-[#720C3E] flex items-center justify-center cursor-pointer"
+                                className="w-7 h-7 rounded-md bg-[#831843] text-white text-base leading-none hover:bg-[#720C3E] flex items-center justify-center cursor-pointer active:scale-90"
                                 aria-label="Increase quantity"
                               >
                                 +
@@ -1674,18 +1729,19 @@ const ServiceDetails = () => {
                 </div>
               </div>
 
-              <div className="sticky bottom-0 bg-[#FFF9FB] border-t border-[#E8D9DF] p-4">
+              <div className="shrink-0 bg-white border-t border-[#E8D9DF]/70 px-4 py-2.5 pb-[max(12px,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={() => addSelectedServicesToCart()}
                   disabled={addingToCart}
-                  className="w-full rounded-xl bg-[#831843] hover:bg-[#720C3E] py-3.5 text-sm font-extrabold text-white shadow-md shadow-[#831843]/20 disabled:opacity-50"
+                  className="w-full rounded-xl bg-gradient-to-r from-[#720C3E] to-[#931448] py-2.5 text-sm font-bold text-white shadow-md shadow-[#831843]/20 transition-all hover:brightness-105 active:scale-[0.99] disabled:opacity-50"
                 >
                   {addingToCart ? 'Adding...' : 'Go to cart'}
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Flying Cart Items (Fly to cart animation) */}

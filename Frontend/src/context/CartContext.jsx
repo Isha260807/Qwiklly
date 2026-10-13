@@ -87,31 +87,49 @@ export const CartProvider = ({ children }) => {
     }
   }, []);
 
-  // Update item quantity
-  const updateItem = useCallback(async (itemId, serviceCount) => {
-    // Optimistic update
+  // Update fixed quantity or duration-based cart value.
+  const updateItem = useCallback(async (itemId, serviceCount, durationMinutes = null) => {
     setCartItems(prev =>
       prev.map(item => {
-        if (item._id === itemId || item.id === itemId) {
-          const unitPrice = item.unitPrice || (item.serviceCount ? item.price / item.serviceCount : item.price);
-          return {
-            ...item,
-            serviceCount,
-            price: unitPrice * serviceCount
-          };
-        }
-        return item;
+        if (item._id !== itemId && item.id !== itemId) return item;
+
+        const isDurationBased = item.pricingType === 'DURATION' || item.pricingType === 'HOURLY';
+        const billingUnitMinutes = Number(item.billingUnitMinutes || 30);
+        const unitPrice = Number(
+          item.pricePerUnit ??
+          item.unitPrice ??
+          (isDurationBased
+            ? item.price / Math.max(1, Number(item.durationMinutes || billingUnitMinutes) / billingUnitMinutes)
+            : item.price / Math.max(1, item.serviceCount || 1))
+        );
+        const nextDurationMinutes = isDurationBased
+          ? Number(durationMinutes || item.durationMinutes || billingUnitMinutes)
+          : item.durationMinutes;
+        const nextServiceCount = isDurationBased ? 1 : Number(serviceCount || 1);
+        const nextPrice = isDurationBased
+          ? (nextDurationMinutes / billingUnitMinutes) * unitPrice
+          : unitPrice * nextServiceCount;
+
+        return {
+          ...item,
+          serviceCount: nextServiceCount,
+          quantity: nextServiceCount,
+          durationMinutes: nextDurationMinutes,
+          hours: isDurationBased ? nextDurationMinutes / 60 : item.hours,
+          price: nextPrice
+        };
       })
     );
 
     try {
-      const response = await cartService.updateItem(itemId, serviceCount);
-      if (response.success && response.data) {
-        // Replace with server data to ensure correctness
+      const response = await cartService.updateItem(itemId, serviceCount, durationMinutes ?? undefined);
+      if (response.success && Array.isArray(response.data)) {
+        setCartItems(response.data);
+        setCartCount(response.data.length);
+      } else if (response.success && response.data) {
         setCartItems(prev =>
           prev.map(item => {
             if (item._id === itemId || item.id === itemId) {
-              // Merge server data with local item to preserve all display fields
               return { ...item, ...response.data, _id: item._id || item.id };
             }
             return item;
@@ -126,7 +144,6 @@ export const CartProvider = ({ children }) => {
       throw error;
     }
   }, [fetchCart]);
-
   // Remove item from cart - instant update
   const removeItem = useCallback(async (itemId) => {
     // Optimistic update

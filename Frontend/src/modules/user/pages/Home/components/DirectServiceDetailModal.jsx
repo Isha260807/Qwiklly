@@ -107,7 +107,6 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
 
       const response = await addToCart(cartItemData);
       if (response.success) {
-        toast.success(`${service.title} added to cart!`);
         onClose();
         navigate('/user/cart');
       } else {

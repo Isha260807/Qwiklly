@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import flutterBridge from '../../../../utils/flutterBridge';
 import { themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
-import BottomNav from '../../components/layout/BottomNav';
 import SearchBar from './components/SearchBar';
 import ServiceCategories from './components/ServiceCategories';
 import { publicCatalogService } from '../../../../services/catalogService';
@@ -12,7 +12,7 @@ import { useCart } from '../../../../context/CartContext';
 import { useCity } from '../../../../context/CityContext';
 import { toast } from 'react-hot-toast';
 import { motion } from 'framer-motion';
-import { FiMapPin, FiBell } from 'react-icons/fi';
+import { FiMapPin, FiBell, FiShoppingCart, FiChevronUp, FiMinus, FiPlus, FiX } from 'react-icons/fi';
 
 import PromoCarousel from './components/PromoCarousel';
 import TopHeroBanner from './components/TopHeroBanner';
@@ -186,7 +186,7 @@ const Home = () => {
   const [zoneStatus, setZoneStatus] = useState(null);
   const [zoneResolved, setZoneResolved] = useState(false);
 
-  const { cartCount, addToCart } = useCart();
+  const { cartItems, cartCount, addToCart, updateItem, removeItem } = useCart();
   const { currentCity, cities, selectCity, loading: cityLoading } = useCity();
   const [isLocating, setIsLocating] = useState(false);
   const [isEnableLocationModalOpen, setIsEnableLocationModalOpen] = useState(false);
@@ -453,6 +453,19 @@ const Home = () => {
 
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isCartReviewOpen, setIsCartReviewOpen] = useState(false);
+
+  // Prevent background scrolling when cart review modal is open
+  useEffect(() => {
+    if (isCartReviewOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isCartReviewOpen]);
 
   // Fetch categories, services and home content on mount (and when city changes)
   useEffect(() => {
@@ -581,27 +594,48 @@ const Home = () => {
       }
 
       if (service.targetCategoryId) {
-        const cat = categories.find(c => c.id === service.targetCategoryId);
+        const cat = categories.find(c => c.id === service.targetCategoryId || c._id === service.targetCategoryId);
         if (cat) {
           handleCategoryClick(cat);
           return;
         }
       }
 
-      if (service.serviceId && service.categoryId) {
+      const serviceId = service.serviceId || service._id || service.id;
+      const categoryId = service.categoryId?._id || service.categoryId?.id || service.categoryId;
+
+      if (serviceId) {
         const latitude = parseFloat(localStorage.getItem('userLat'));
         const longitude = parseFloat(localStorage.getItem('userLng'));
+        const isDurationBased = service.pricingType === 'DURATION' || service.pricingType === 'HOURLY';
+        const billingUnitMinutes = Number(service.billingUnitMinutes ?? service.durationPricing?.billingUnitMinutes ?? 30);
+        const minDurationMinutes = Number(service.minDurationMinutes ?? service.durationPricing?.minDurationMinutes ?? (service.minHours ? service.minHours * 60 : billingUnitMinutes));
+        const pricePerUnit = Number(
+          service.pricePerUnit ??
+          service.durationPricing?.pricePerUnit ??
+          service.pricePer30Minutes ??
+          (service.hourlyRate ? service.hourlyRate * (billingUnitMinutes / 60) : (service.basePrice || service.price || 0))
+        );
+        const fixedPrice = Number(service.discountPrice ?? service.price ?? service.basePrice ?? 0);
+        const durationMinutes = isDurationBased ? minDurationMinutes : null;
         const cartItemData = {
-          serviceId: service.serviceId,
-          categoryId: service.categoryId,
+          serviceId,
+          categoryId,
           title: service.title,
           description: service.subtitle || service.description || '',
           icon: service.image || '',
           category: service.category || 'Service',
-          price: parseInt(service.price?.toString().replace(/,/g, '') || 0),
-          originalPrice: service.originalPrice ? parseInt(service.originalPrice.toString().replace(/,/g, '')) : null,
-          unitPrice: parseInt(service.price?.toString().replace(/,/g, '') || 0),
+          price: isDurationBased ? pricePerUnit : fixedPrice,
+          originalPrice: service.originalPrice ? Number(service.originalPrice) : null,
+          unitPrice: isDurationBased ? pricePerUnit : fixedPrice,
+          pricingType: isDurationBased ? 'DURATION' : 'FIXED',
+          pricePerUnit: isDurationBased ? pricePerUnit : null,
+          billingUnitMinutes: isDurationBased ? billingUnitMinutes : null,
+          minDurationMinutes: isDurationBased ? minDurationMinutes : null,
+          durationMinutes,
+          hours: isDurationBased ? durationMinutes / 60 : null,
           serviceCount: 1,
+          quantity: 1,
           rating: service.rating || "4.8",
           reviews: service.reviews || "10k+",
           vendorId: service.vendorId || null,
@@ -610,27 +644,52 @@ const Home = () => {
         };
 
         const response = await addToCart(cartItemData);
-        if (response.success) {
-          toast.success(`${service.title} added to cart!`);
-          navigate('/user/cart');
-        } else {
+        if (!response.success) {
           toast.error(response.message || 'Failed to add to cart');
         }
       } else {
-        if (service.targetCategoryId) {
-          const cat = categories.find(c => (c.id === service.targetCategoryId || c._id === service.targetCategoryId));
-          if (cat) {
-            handleCategoryClick(cat);
-          } else {
-            toast.error('Unable to add this service to cart.');
-          }
-        } else {
-          toast.error('Unable to add this service to cart.');
-        }
+        toast.error('Unable to add this service to cart.');
       }
     } catch (error) {
       toast.error('Failed to add to cart. Please try again.');
     }
+  };
+
+  const handleCartItemChange = (item, direction) => {
+    const itemId = item?._id || item?.id;
+    if (!itemId) return;
+
+    const isDurationBased = item.pricingType === 'DURATION' || item.pricingType === 'HOURLY' || Boolean(item.durationMinutes);
+    if (isDurationBased) {
+      const billingUnitMinutes = Number(item.billingUnitMinutes || 30);
+      const minDurationMinutes = Number(item.minDurationMinutes || billingUnitMinutes);
+      const maxDurationMinutes = Number(item.maxDurationMinutes || 480);
+      const durationStepMinutes = Number(item.durationStepMinutes || billingUnitMinutes);
+      const currentDurationMinutes = Number(item.durationMinutes || ((item.hours || 0) * 60) || billingUnitMinutes);
+      const requestedDuration = currentDurationMinutes + (direction * durationStepMinutes);
+
+      if (requestedDuration < minDurationMinutes && direction < 0) {
+        removeItem(itemId);
+        return;
+      }
+
+      const nextDurationMinutes = Math.max(
+        minDurationMinutes,
+        Math.min(maxDurationMinutes, requestedDuration)
+      );
+      if (nextDurationMinutes !== currentDurationMinutes) {
+        updateItem(itemId, 1, nextDurationMinutes);
+      }
+      return;
+    }
+
+    const currentQuantity = Number(item.serviceCount || item.quantity || 1);
+    const nextQuantity = currentQuantity + direction;
+    if (nextQuantity <= 0) {
+      removeItem(itemId);
+      return;
+    }
+    updateItem(itemId, nextQuantity);
   };
 
   const handleReferClick = () => {
@@ -669,6 +728,7 @@ const Home = () => {
   if (loading) {
     return <LogoLoader />;
   }
+
 
   return (
     <div className="min-h-screen relative bg-white">
@@ -854,6 +914,10 @@ const Home = () => {
                 <motion.section variants={itemVariants}>
                   <ServicesWeOffer
                     services={services}
+                    cartItems={cartItems}
+                    onAddClick={handleAddClick}
+                    onUpdateItem={updateItem}
+                    onRemoveItem={removeItem}
                     onServiceClick={(svc) => {
                       const serviceId = svc._id || svc.id || svc.slug;
                       navigate(`/user/service/${serviceId}`, { state: { service: svc } });
@@ -1012,8 +1076,146 @@ const Home = () => {
         </main>
       </motion.div>
 
-      {/* Bottom Navigation */}
-      {!isAddressModalOpen && <BottomNav />}
+      {cartItems.length > 0 && !isAddressModalOpen && !isCartReviewOpen && (
+        <div className="fixed bottom-[54px] left-1/2 z-[45] w-full max-w-md -translate-x-1/2 px-3 lg:hidden">
+          <div className="mx-auto flex items-center justify-between gap-2.5 rounded-xl border border-[#E8D9DF]/80 bg-white/95 backdrop-blur-md px-3 py-1.5 shadow-[0_4px_16px_rgba(114,12,62,0.12)]">
+            <button
+              type="button"
+              onClick={() => setIsCartReviewOpen(true)}
+              className="flex min-w-0 flex-1 items-center gap-1.5 text-left py-0.5 active:opacity-80"
+              aria-label="Review cart services"
+            >
+              <FiShoppingCart className="h-4 w-4 shrink-0 text-[#720C3E]" />
+              <span className="truncate text-xs font-bold text-slate-800">
+                {cartItems.length} {cartItems.length === 1 ? 'service' : 'services'}
+              </span>
+              <FiChevronUp className="h-3.5 w-3.5 shrink-0 text-[#720C3E]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/user/cart')}
+              className="shrink-0 rounded-lg bg-gradient-to-r from-[#720C3E] to-[#9A2459] px-4 py-1.5 text-xs font-bold text-white shadow-xs shadow-[#720C3E]/20 active:scale-95 transition-transform"
+            >
+              Go to cart
+            </button>
+          </div>
+        </div>
+      )}
+
+      {cartItems.length > 0 && isCartReviewOpen && !isAddressModalOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 backdrop-blur-[2px] px-0 lg:hidden select-none animate-in fade-in duration-200"
+          onClick={() => setIsCartReviewOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-t-[24px] bg-[#FFF9FB] shadow-[0_-10px_35px_rgba(0,0,0,0.25)] border-t border-[#E8D9DF]/60 animate-in slide-in-from-bottom duration-200"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="review-services-title"
+          >
+            {/* Drag Handle Indicator */}
+            <div className="flex justify-center pt-2 pb-0.5 bg-[#FFF9FB]">
+              <div className="h-1 w-10 rounded-full bg-slate-300/80" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#E8D9DF]/70 px-4 py-2.5 bg-[#FFF9FB]">
+              <h2 id="review-services-title" className="text-base font-bold text-slate-900 tracking-tight">
+                Review Services
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsCartReviewOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200/80 text-slate-600 transition-colors hover:bg-slate-300 active:scale-95"
+                aria-label="Close review services"
+              >
+                <FiX className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Services List - Compact & Scrollable */}
+            <div className="max-h-[46vh] space-y-2.5 overflow-y-auto px-3.5 py-3">
+              {cartItems.map((item, index) => {
+                const isDurationBased = item.pricingType === 'DURATION' || item.pricingType === 'HOURLY' || Boolean(item.durationMinutes);
+                const currentDurationMinutes = Number(item.durationMinutes || ((item.hours || 0) * 60) || item.billingUnitMinutes || 30);
+                const currentQuantity = Number(item.serviceCount || item.quantity || 1);
+                const maxDurationMinutes = Number(item.maxDurationMinutes || 480);
+                const itemImage = item.icon || item.image || item.imageUrl;
+
+                return (
+                  <div
+                    key={item._id || item.id || `${item.title}-${index}`}
+                    className="flex items-center gap-2.5 rounded-xl border border-slate-100 bg-white p-2.5 shadow-xs"
+                  >
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#E8D9DF] bg-[#FFF7FA] p-0.5">
+                      {itemImage ? (
+                        <img src={toAssetUrl(itemImage)} alt={item.title} className="h-full w-full object-contain" />
+                      ) : (
+                        <span className="text-base font-black text-[#720C3E]">{item.title?.charAt(0) || 'S'}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-medium leading-none text-slate-400">
+                        {index === 0 ? 'Main service' : 'Added service'}
+                      </p>
+                      <p className="truncate text-xs sm:text-sm font-semibold text-slate-800 leading-snug mt-0.5">
+                        {item.title}
+                      </p>
+                      <p className="text-xs sm:text-sm font-black text-[#831843] leading-none mt-1">
+                        ₹{Math.round(Number(item.price || 0))}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[#E8D9DF] bg-[#FFF9FB] p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleCartItemChange(item, -1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-[#831843] transition-colors hover:bg-white active:scale-90"
+                        aria-label={`Decrease ${isDurationBased ? 'duration' : 'quantity'} for ${item.title}`}
+                      >
+                        <FiMinus className="h-3.5 w-3.5" />
+                      </button>
+                      <div className="min-w-[36px] text-center leading-none">
+                        <div className="text-xs sm:text-sm font-black text-[#831843]">
+                          {isDurationBased ? currentDurationMinutes : currentQuantity}
+                        </div>
+                        <div className="mt-0.5 text-[8px] font-semibold text-slate-400">
+                          {isDurationBased ? 'Minutes' : 'Qty'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCartItemChange(item, 1)}
+                        disabled={isDurationBased && currentDurationMinutes >= maxDurationMinutes}
+                        className="flex h-7 w-7 items-center justify-center rounded-md bg-[#831843] text-white transition-opacity active:scale-90 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label={`Increase ${isDurationBased ? 'duration' : 'quantity'} for ${item.title}`}
+                      >
+                        <FiPlus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-[#E8D9DF]/70 bg-white px-4 py-2.5 pb-[max(12px,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCartReviewOpen(false);
+                  navigate('/user/cart');
+                }}
+                className="w-full rounded-xl bg-gradient-to-r from-[#720C3E] to-[#931448] py-2.5 text-sm font-bold text-white shadow-md shadow-[#720C3E]/20 transition-all hover:brightness-105 active:scale-[0.99]"
+              >
+                Go to cart
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Category Modal */}
       <CategoryModal
