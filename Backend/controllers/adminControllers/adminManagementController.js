@@ -32,7 +32,7 @@ const normalizePermissions = (permissions, role) => {
  */
 const getAllAdmins = async (req, res) => {
   try {
-    const admins = await Admin.find()
+    const admins = await Admin.find({ isDeleted: { $ne: true } })
       .select('-password')
       .populate('cityId', 'name')
       .populate('zoneIds', 'name')
@@ -141,7 +141,23 @@ const deleteAdmin = async (req, res) => {
       });
     }
 
-    await Admin.findByIdAndDelete(id);
+    // Keep a tombstone instead of physically removing the record. This lets
+    // login/session checks distinguish a deleted profile from a wrong email.
+    admin.isDeleted = true;
+    admin.isActive = false;
+    admin.deletedAt = new Date();
+    admin.deletedBy = req.user.id;
+    await admin.save();
+
+    try {
+      const { getIO } = require('../../sockets');
+      getIO().to(`admin_${admin._id.toString()}`).emit('admin_profile_deleted', {
+        code: 'ADMIN_DELETED',
+        message: 'Your profile was deleted by admin.'
+      });
+    } catch (socketError) {
+      console.warn('Could not send admin deletion event:', socketError.message);
+    }
 
     res.status(200).json({
       success: true,

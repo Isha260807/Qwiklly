@@ -142,7 +142,9 @@ api.interceptors.response.use(
         // Refresh failed, logout
         processQueue(refreshError, null);
         isRefreshing = false;
-        if (role === 'admin' && refreshError.response?.data?.code === 'ADMIN_BLOCKED') {
+        if (role === 'admin' && refreshError.response?.data?.code === 'ADMIN_DELETED') {
+          toast.error('Your profile was deleted by admin.', { id: 'admin-deleted' });
+        } else if (role === 'admin' && refreshError.response?.data?.code === 'ADMIN_BLOCKED') {
           toast.error('Blocked by admin', { id: 'admin-blocked' });
         }
         handleLogout(role);
@@ -157,12 +159,19 @@ api.interceptors.response.use(
       console.error('Access Denied (403):', error.response.data.message);
       const { role } = getTokenKeys(originalRequest.url);
       const isAdminLoginRequest = originalRequest.url?.includes('/admin/auth/login');
+      const isDeletedAdmin = role === 'admin' && (
+        error.response.data.code === 'ADMIN_DELETED' ||
+        /profile was deleted by admin/i.test(error.response.data.message || '')
+      );
       const isBlockedAdmin = role === 'admin' && (
         error.response.data.code === 'ADMIN_BLOCKED' ||
         /blocked by admin/i.test(error.response.data.message || '')
       );
 
-      if (isBlockedAdmin && !isAdminLoginRequest) {
+      if (isDeletedAdmin && !isAdminLoginRequest) {
+        toast.error('Your profile was deleted by admin.', { id: 'admin-deleted' });
+        handleLogout('admin');
+      } else if (isBlockedAdmin && !isAdminLoginRequest) {
         toast.error('Blocked by admin', { id: 'admin-blocked' });
         handleLogout('admin');
       }

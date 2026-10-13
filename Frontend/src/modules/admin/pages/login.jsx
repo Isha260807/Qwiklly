@@ -53,7 +53,9 @@ const AdminLogin = () => {
       }
     } catch (error) {
       setIsLoading(false);
-      if (error.response?.data?.code === 'ADMIN_BLOCKED') {
+      if (error.response?.data?.code === 'ADMIN_DELETED') {
+        toast.error('Your profile was deleted by admin.', { id: 'admin-deleted' });
+      } else if (error.response?.data?.code === 'ADMIN_BLOCKED') {
         toast.error('Blocked by admin', { id: 'admin-blocked' });
       } else {
         toast.error(error.response?.data?.message || 'Login failed. Please check your credentials.');

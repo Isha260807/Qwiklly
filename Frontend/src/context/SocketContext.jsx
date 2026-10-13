@@ -154,14 +154,20 @@ export const SocketProvider = ({ children }) => {
 
     setSocket(newSocket);
 
-    let adminBlockedHandled = false;
-    const handleBlockedAdmin = () => {
-      if (adminBlockedHandled) return;
-      adminBlockedHandled = true;
-      toast.error('Blocked by admin', { id: 'admin-blocked' });
+    let adminForcedLogoutHandled = false;
+    const handleAdminForcedLogout = (reason = 'blocked') => {
+      if (adminForcedLogoutHandled) return;
+      adminForcedLogoutHandled = true;
+      const wasDeleted = reason === 'deleted';
+      toast.error(
+        wasDeleted ? 'Your profile was deleted by admin.' : 'Blocked by admin',
+        { id: wasDeleted ? 'admin-deleted' : 'admin-blocked' }
+      );
       handleLogout('admin');
       newSocket.disconnect();
     };
+    const handleBlockedAdmin = () => handleAdminForcedLogout('blocked');
+    const handleDeletedAdmin = () => handleAdminForcedLogout('deleted');
 
     newSocket.on('connect', () => {
       // console.log(`✅ ${userType.toUpperCase()} App Socket connected`);
@@ -200,13 +206,19 @@ export const SocketProvider = ({ children }) => {
     });
 
     newSocket.on('connect_error', (err) => {
-      if (userType === 'admin' && /ADMIN_BLOCKED|blocked by admin/i.test(err?.message || '')) {
-        handleBlockedAdmin();
+      if (userType === 'admin') {
+        const errorMessage = err?.message || '';
+        if (/ADMIN_DELETED|profile was deleted by admin/i.test(errorMessage)) {
+          handleDeletedAdmin();
+        } else if (/ADMIN_BLOCKED|blocked by admin/i.test(errorMessage)) {
+          handleBlockedAdmin();
+        }
       }
     });
 
     if (userType === 'admin') {
       newSocket.on('admin_blocked', handleBlockedAdmin);
+      newSocket.on('admin_profile_deleted', handleDeletedAdmin);
     }
 
     // Listen for Emergency SOS Alerts (Admin)
@@ -453,6 +465,7 @@ export const SocketProvider = ({ children }) => {
 
     return () => {
       newSocket.off('admin_blocked', handleBlockedAdmin);
+      newSocket.off('admin_profile_deleted', handleDeletedAdmin);
       newSocket.disconnect();
     };
   }, [userType]); // Only re-run if userType changes. Navigate is stable.

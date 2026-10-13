@@ -58,6 +58,22 @@ const adminSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // Keep a deletion tombstone so an already logged-in admin can be ended
+  // immediately and a later login can show the correct reason.
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    default: null
+  },
   lastLogin: {
     type: Date
   }

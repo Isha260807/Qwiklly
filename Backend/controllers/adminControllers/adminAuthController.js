@@ -28,6 +28,14 @@ const login = async (req, res) => {
       });
     }
 
+    if (admin.isDeleted) {
+      return res.status(403).json({
+        success: false,
+        code: 'ADMIN_DELETED',
+        message: 'Your profile was deleted by admin.'
+      });
+    }
+
     // Check if admin is active
     if (!admin.isActive) {
       return res.status(403).json({
@@ -211,6 +219,14 @@ const refreshToken = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Admin not found'
+      });
+    }
+
+    if (admin.isDeleted) {
+      return res.status(403).json({
+        success: false,
+        code: 'ADMIN_DELETED',
+        message: 'Your profile was deleted by admin.'
       });
     }
 

@@ -85,8 +85,9 @@ const initializeSocket = (server) => {
 
       if (ADMIN_SOCKET_ROLES.has(String(decoded.role))) {
         const Admin = require('../models/Admin');
-        const admin = await Admin.findById(decoded.userId).select('isActive').lean();
+        const admin = await Admin.findById(decoded.userId).select('isActive isDeleted').lean();
         if (!admin) return next(new Error('ADMIN_NOT_FOUND'));
+        if (admin.isDeleted) return next(new Error('ADMIN_DELETED'));
         if (!admin.isActive) return next(new Error('ADMIN_BLOCKED'));
       }
 

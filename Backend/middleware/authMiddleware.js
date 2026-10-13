@@ -90,6 +90,13 @@ const authenticate = async (req, res, next) => {
       case 'sub_admin':
       case 'ADMIN':
         user = await Admin.findById(decoded.userId).select('-password').lean();
+        if (user && user.isDeleted) {
+          return res.status(403).json({
+            success: false,
+            code: 'ADMIN_DELETED',
+            message: 'Your profile was deleted by admin.'
+          });
+        }
         if (user && !user.isActive) {
           return res.status(403).json({
             success: false,
