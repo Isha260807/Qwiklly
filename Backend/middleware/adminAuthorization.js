@@ -37,6 +37,7 @@ const PATH_PERMISSIONS = [
   ['/plans', ADMIN_PERMISSIONS.PLANS],
   ['/notifications', ADMIN_PERMISSIONS.NOTIFICATIONS],
   ['/settlements', ADMIN_PERMISSIONS.SETTLEMENTS],
+  ['/support-tickets', ADMIN_PERMISSIONS.SUPPORT],
   ['/settings', ADMIN_PERMISSIONS.SETTINGS]
 ];
 

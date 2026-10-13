@@ -18,7 +18,8 @@ export const ADMIN_PERMISSION_OPTIONS = [
   { value: 'zones', label: 'Zone Management' },
   { value: 'payments', label: 'Payments' },
   { value: 'settlements', label: 'Settlements' },
-  { value: 'reports', label: 'Reports' }
+  { value: 'reports', label: 'Reports' },
+  { value: 'support', label: 'Support & SOS' }
 ];
 
 export const SETTINGS_PERMISSION_OPTIONS = [
@@ -43,6 +44,7 @@ const PATH_PERMISSIONS = [
   ['/payments', 'payments'],
   ['/settlements', 'settlements'],
   ['/reports', 'reports'],
+  ['/support', 'support'],
   ['/plans', 'plans'],
   ['/notifications', 'notifications'],
   ['/transactions', 'transactions'],
@@ -60,7 +62,8 @@ const ADMIN_ENTRY_PATHS = [
   ['/admin/zones', 'zones'],
   ['/admin/payments', 'payments'],
   ['/admin/settlements', 'settlements'],
-  ['/admin/reports', 'reports']
+  ['/admin/reports', 'reports'],
+  ['/admin/support', 'support']
 ];
 
 const matchesPath = (path, prefix) => path === prefix || path.startsWith(`${prefix}/`);

@@ -21,6 +21,7 @@ import {
   FiImage,
   FiTag,
   FiMapPin,
+  FiAlertTriangle,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
 import { canAccessAdminPath } from "../../../../components/auth/adminAccess";
@@ -48,6 +49,7 @@ const iconMap = {
   Settings: FiSettings,
   Plans: FiPackage,
   "Zone Management": FiMapPin,
+  "Support & SOS": FiAlertTriangle,
 };
 
 // Helper function to convert child name to route path
@@ -101,6 +103,10 @@ const getChildRoute = (parentRoute, childName) => {
       "Pending": "/admin/settlements/pending",
       "Vendors with Due": "/admin/settlements/vendors",
       "History": "/admin/settlements/history",
+    },
+    "/admin/support": {
+      "SOS Requests": "/admin/support/sos",
+      "Support Tickets": "/admin/support/tickets",
     },
   };
 

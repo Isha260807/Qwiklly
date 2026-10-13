@@ -30,6 +30,21 @@ const reviewService = {
   getReviewStats: async () => {
     const response = await api.get('/admin/reviews/stats');
     return response.data;
+  },
+
+  /**
+   * Get week/month rating trend for a selected vendor
+   */
+  getVendorRatingAnalytics: async (vendorId, period = 'week', dateRange = {}) => {
+    const response = await api.get('/admin/reviews/vendor-analytics', {
+      params: {
+        vendorId,
+        period,
+        ...(dateRange.fromDate ? { fromDate: dateRange.fromDate } : {}),
+        ...(dateRange.toDate ? { toDate: dateRange.toDate } : {})
+      }
+    });
+    return response.data;
   }
 };
 

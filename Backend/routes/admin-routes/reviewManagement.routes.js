@@ -5,7 +5,8 @@ const { isAdmin } = require('../../middleware/roleMiddleware');
 const {
   getAllReviews,
   updateReviewStatus,
-  getReviewStats
+  getReviewStats,
+  getVendorRatingAnalytics
 } = require('../../controllers/adminControllers/adminReviewController');
 
 // All routes require authentication and admin role
@@ -16,6 +17,9 @@ router.get('/reviews', getAllReviews);
 
 // Get review statistics
 router.get('/reviews/stats', getReviewStats);
+
+// Get week/month rating trend for one vendor
+router.get('/reviews/vendor-analytics', getVendorRatingAnalytics);
 
 // Update review status
 router.patch('/reviews/:id/status', updateReviewStatus);

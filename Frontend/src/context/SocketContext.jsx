@@ -293,6 +293,7 @@ export const SocketProvider = ({ children }) => {
       }
       if (userType === 'user') {
         window.dispatchEvent(new Event('userBookingsUpdated'));
+        window.dispatchEvent(new Event('userNotificationsUpdated'));
       }
     });
 

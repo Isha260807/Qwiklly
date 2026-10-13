@@ -39,6 +39,7 @@ const ADMIN_PERMISSIONS = {
   NOTIFICATIONS: 'notifications',
   TRANSACTIONS: 'transactions',
   SETTLEMENTS: 'settlements',
+  SUPPORT: 'support',
   SETTINGS_PROFILE: 'settings_profile',
   SETTINGS_SUPPORT: 'settings_support',
   SETTINGS_FINANCIAL: 'settings_financial',

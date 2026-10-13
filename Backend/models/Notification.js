@@ -62,6 +62,8 @@ const notificationSchema = new mongoose.Schema({
       'payout_processed',
       'vendor_withdrawal_request',
       'emergency_sos',
+      'support_ticket',
+      'support_ticket_update',
       'general'
     ],
     index: true
@@ -84,7 +86,7 @@ const notificationSchema = new mongoose.Schema({
   },
   relatedType: {
     type: String,
-    enum: ['booking', 'payment', 'payroll', 'user', 'vendor', 'service', 'withdrawal', 'sos'],
+    enum: ['booking', 'payment', 'payroll', 'user', 'vendor', 'service', 'withdrawal', 'sos', 'support_ticket'],
     default: null
   },
   // Notification Status

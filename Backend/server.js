@@ -176,6 +176,7 @@ app.use('/api/user/referral', require('./routes/user-routes/referral.routes'));
 app.use('/api/users/bookings', require('./routes/user-routes/booking.routes'));
 app.use('/api/users', require('./routes/user-routes/cart.routes'));
 app.use('/api/users/fcm-tokens', require('./routes/user-routes/fcmToken.routes'));
+app.use('/api/users/support-tickets', require('./routes/user-routes/supportTicket.routes'));
 app.use('/api/coupons', require('./routes/user-routes/coupon.routes'));
 
 // API Routes
@@ -221,6 +222,7 @@ app.use('/api/admin', require('./routes/admin-routes/planManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/settings.routes'));
 app.use('/api/admin', require('./routes/admin-routes/reviewManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/reportManagement.routes'));
+app.use('/api/admin/support-tickets', require('./routes/admin-routes/supportTicket.routes'));
 app.use('/api/admin/admins', require('./routes/admin-routes/adminManagement.routes'));
 app.use('/api/image', require('./routes/admin-routes/image.routes'));
 app.use('/api', require('./routes/admin-routes/upload.routes')); // Generic upload access

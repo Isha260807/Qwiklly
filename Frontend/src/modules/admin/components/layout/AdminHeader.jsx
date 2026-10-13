@@ -58,6 +58,7 @@ const AdminHeader = ({ onMenuClick }) => {
       { path: '/admin/payments', title: 'Payments', description: 'Monitor transactions and revenue' },
       { path: '/admin/reports', title: 'Reports', description: 'Analyze platform performance with data insights' },
       { path: '/admin/notifications', title: 'Notifications', description: 'Stay updated with platform activities' },
+      { path: '/admin/support', title: 'Support & SOS', description: 'Manage emergency alerts and user support tickets' },
       { path: '/admin/settings', title: 'Settings', description: 'Configure platform preferences' },
       { path: '/admin/plans', title: 'Subscription Plans', description: 'Manage service subscription plans' },
       { path: '/admin/services', title: 'Services', description: 'Manage platform service categories' },
