@@ -412,14 +412,18 @@ const Login = () => {
               {/* Terms and Privacy Policy */}
               <p className="text-[10px] sm:text-[11px] text-center text-[#6F5A64] pt-1 leading-relaxed">
                 By continuing, you agree to our{' '}
-                <Link to="/terms" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
+                 <Link to="/login/terms" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
                   Terms of Service
                 </Link>{' '}
                 &{' '}
-                <Link to="/privacy" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
-                  Privacy Policy
-                </Link>
-              </p>
+                 <Link to="/login/privacy" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
+                   Privacy Policy
+                 </Link>
+                 {' '}|{' '}
+                 <Link to="/login/support" className="underline font-semibold text-[#24151D] hover:text-[#720C3E]">
+                   Support
+                 </Link>
+               </p>
             </form>
           ) : (
             /* OTP VERIFICATION STEP */

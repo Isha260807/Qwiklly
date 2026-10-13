@@ -17,7 +17,8 @@ router.get('/settings', requireAdminSettingsPermission([
   'settings_financial',
   'settings_billing',
   'settings_referral',
-  'settings_slots'
+  'settings_slots',
+  'settings_legal'
 ]), getSettings);
 
 router.put('/settings', requireAdminSettingsUpdatePermission, updateSettings);

@@ -55,7 +55,9 @@ exports.updateSettings = async (req, res, next) => {
       // Payment Control
       isOnlinePaymentEnabled,
       // Dynamic Booking Slots Configuration
-      slotStartHour, slotEndHour, slotIntervalMins, maxDaysInAdvance, leadTimeHours, slotServiceDurationMins, disabledSlots, customSlots
+      slotStartHour, slotEndHour, slotIntervalMins, maxDaysInAdvance, leadTimeHours, slotServiceDurationMins, disabledSlots, customSlots,
+      // Public legal content
+      termsOfService, privacyPolicy
     } = req.body;
 
     let settings = await Settings.findOne({ type: 'global' });
@@ -90,7 +92,9 @@ exports.updateSettings = async (req, res, next) => {
         leadTimeHours,
         slotServiceDurationMins,
         disabledSlots,
-        customSlots
+        customSlots,
+        termsOfService,
+        privacyPolicy
       });
     } else {
       // Update fields if provided
@@ -146,6 +150,10 @@ exports.updateSettings = async (req, res, next) => {
       if (disabledSlots !== undefined) settings.disabledSlots = disabledSlots;
       if (customSlots !== undefined) settings.customSlots = customSlots;
 
+      // Public legal content update
+      if (termsOfService !== undefined) settings.termsOfService = termsOfService;
+      if (privacyPolicy !== undefined) settings.privacyPolicy = privacyPolicy;
+
       await settings.save();
     }
 
@@ -169,7 +177,7 @@ exports.updateSettings = async (req, res, next) => {
 exports.getPublicSettings = async (req, res, next) => {
   try {
     let settings = await Settings.findOne({ type: 'global' }).select(
-      'visitedCharges instantBookingCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty companyName companyGSTIN companyPAN companyAddress companyCity companyState companyPincode companyPhone companyEmail invoicePrefix sacCode isOnlinePaymentEnabled slotStartHour slotEndHour slotIntervalMins maxDaysInAdvance leadTimeHours slotServiceDurationMins disabledSlots customSlots'
+      'visitedCharges instantBookingCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty companyName companyGSTIN companyPAN companyAddress companyCity companyState companyPincode companyPhone companyEmail invoicePrefix sacCode isOnlinePaymentEnabled slotStartHour slotEndHour slotIntervalMins maxDaysInAdvance leadTimeHours slotServiceDurationMins disabledSlots customSlots termsOfService privacyPolicy'
     );
 
     // Default if not found (fallback values)

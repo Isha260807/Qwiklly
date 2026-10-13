@@ -152,6 +152,7 @@ const SETTINGS_FIELD_PERMISSIONS = [
   [ADMIN_PERMISSIONS.SETTINGS_REFERRAL, ['referralEnabled', 'referrerRewardAmount', 'referredRewardAmount']],
   [ADMIN_PERMISSIONS.SETTINGS_FINANCIAL, ['companyName', 'companyGSTIN', 'companyPAN', 'companyAddress', 'companyCity', 'companyState', 'companyPincode', 'companyPhone', 'companyEmail', 'invoicePrefix', 'sacCode']],
   [ADMIN_PERMISSIONS.SETTINGS_SUPPORT, ['supportEmail', 'supportPhone', 'supportWhatsapp']],
+  [ADMIN_PERMISSIONS.SETTINGS_LEGAL, ['termsOfService', 'privacyPolicy']],
   [ADMIN_PERMISSIONS.SETTINGS_SLOTS, ['slotStartHour', 'slotEndHour', 'slotIntervalMins', 'maxDaysInAdvance', 'leadTimeHours', 'slotServiceDurationMins', 'disabledSlots', 'customSlots']]
 ];
 

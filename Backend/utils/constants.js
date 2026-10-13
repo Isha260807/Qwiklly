@@ -46,6 +46,7 @@ const ADMIN_PERMISSIONS = {
   SETTINGS_BILLING: 'settings_billing',
   SETTINGS_REFERRAL: 'settings_referral',
   SETTINGS_SLOTS: 'settings_slots',
+  SETTINGS_LEGAL: 'settings_legal',
   SETTINGS_ZONES: 'settings_zones',
   SETTINGS_ADMINS: 'settings_admins'
 };

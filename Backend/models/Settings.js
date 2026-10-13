@@ -236,7 +236,9 @@ const settingsSchema = new mongoose.Schema({
     end: { type: String, required: true },
     display: { type: String, required: true },
     isActive: { type: Boolean, default: true }
-  }]
+  }],
+  termsOfService: { type: String, default: '' },
+  privacyPolicy: { type: String, default: '' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Settings', settingsSchema);

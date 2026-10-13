@@ -59,6 +59,11 @@ const AdminSettings = () => {
     supportWhatsapp: ''
   });
   const [supportLoading, setSupportLoading] = useState(false);
+  const [legalSettings, setLegalSettings] = useState({
+    termsOfService: '',
+    privacyPolicy: ''
+  });
+  const [legalLoading, setLegalLoading] = useState(false);
   const [referralLoading, setReferralLoading] = useState(false);
 
   const [profile, setProfile] = useState({
@@ -164,6 +169,10 @@ const AdminSettings = () => {
             supportEmail: res.settings.supportEmail || '',
             supportPhone: res.settings.supportPhone || '',
             supportWhatsapp: res.settings.supportWhatsapp || ''
+          });
+          setLegalSettings({
+            termsOfService: res.settings.termsOfService || '',
+            privacyPolicy: res.settings.privacyPolicy || ''
           });
           // Load slot settings
           setSlotSettings({
@@ -504,6 +513,24 @@ const AdminSettings = () => {
     setShowAddAdmin(true);
   };
 
+  const handleLegalChange = (e) => {
+    const { name, value } = e.target;
+    setLegalSettings(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleLegalSave = async (e) => {
+    e.preventDefault();
+    setLegalLoading(true);
+    try {
+      await updateSettings(legalSettings);
+      toast.success('Terms and privacy content updated');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update legal content');
+    } finally {
+      setLegalLoading(false);
+    }
+  };
+
   const toggleAdminPermission = (permission) => {
     setNewAdmin(prev => {
       const hasPermission = prev.permissions.includes(permission);
@@ -562,6 +589,16 @@ const AdminSettings = () => {
         </div>
         <h3 className="text-lg font-bold text-gray-800 mb-2">Profile Settings</h3>
         <p className="text-sm text-gray-500">Manage your personal account details and password</p>
+      </div>}
+
+      {/* Legal Content Card */}
+      {hasSettingsSection('settings_legal') && <div onClick={() => setActiveView('legal')}
+        className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
+        <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-100 transition-colors">
+          <FiFileText className="w-6 h-6 text-purple-600" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-800 mb-2">Terms & Privacy Content</h3>
+        <p className="text-sm text-gray-500">Manage the legal content shown to users and vendors</p>
       </div>}
 
       {/* Financial Settings Card - Super Admin Only */}
@@ -755,6 +792,57 @@ const AdminSettings = () => {
               </div>
               )}
           </motion.div >
+        )}
+
+        {/* Legal Content View */}
+        {activeView === 'legal' && hasSettingsSection('settings_legal') && (
+          <motion.div key="legal" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+            <div className="max-w-4xl mx-auto bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <FiFileText className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800">Terms & Privacy Content</h2>
+                  <p className="text-sm text-gray-500">This content will be visible on both user and vendor sides.</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleLegalSave} className="space-y-6 mt-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Terms of Service</label>
+                  <textarea
+                    name="termsOfService"
+                    value={legalSettings.termsOfService}
+                    onChange={handleLegalChange}
+                    rows="12"
+                    placeholder="Enter the Terms of Service shown to users and vendors..."
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all resize-y"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Privacy Policy</label>
+                  <textarea
+                    name="privacyPolicy"
+                    value={legalSettings.privacyPolicy}
+                    onChange={handleLegalChange}
+                    rows="12"
+                    placeholder="Enter the Privacy Policy shown to users and vendors..."
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all resize-y"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <button type="submit" disabled={legalLoading}
+                    className="px-6 py-2.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 flex items-center gap-2 disabled:opacity-60 shadow-lg shadow-purple-200">
+                    {legalLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiSave className="w-4 h-4" />}
+                    Save Legal Content
+                  </button>
+                </div>
+              </form>
+            </div>
+          </motion.div>
         )}
 
         {/* Financial View */}

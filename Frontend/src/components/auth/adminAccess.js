@@ -25,7 +25,8 @@ export const ADMIN_PERMISSION_OPTIONS = [
 export const SETTINGS_PERMISSION_OPTIONS = [
   { value: 'settings_financial', label: 'Financial Info' },
   { value: 'settings_referral', label: 'Referral Settings' },
-  { value: 'settings_slots', label: 'Booking Slots & Timing' }
+  { value: 'settings_slots', label: 'Booking Slots & Timing' },
+  { value: 'settings_legal', label: 'Terms & Privacy Content' }
 ];
 
 const SUPER_ADMIN_ONLY_PATHS = [['/admins', 'admin_management']];

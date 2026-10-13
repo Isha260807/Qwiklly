@@ -323,6 +323,20 @@ const VendorLogin = () => {
             Register Now
           </Link>
         </p>
+        <p className="mt-3 text-center text-xs text-gray-500">
+          By continuing, you agree to our{' '}
+          <Link to="/login/terms" className="underline font-semibold text-[#347989] hover:text-[#D68F35]">
+            Terms of Service
+          </Link>{' '}
+          &{' '}
+          <Link to="/login/privacy" className="underline font-semibold text-[#347989] hover:text-[#D68F35]">
+            Privacy Policy
+          </Link>
+          {' '}|{' '}
+          <Link to="/login/support" className="underline font-semibold text-[#347989] hover:text-[#D68F35]">
+            Support
+          </Link>
+        </p>
       </div>
     </div>
   );

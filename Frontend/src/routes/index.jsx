@@ -13,6 +13,8 @@ import PublicContact from '../modules/public/pages/Contact';
 import PublicPrivacyPolicy from '../modules/public/pages/PrivacyPolicy';
 import PublicTermsConditions from '../modules/public/pages/TermsConditions';
 import PublicRefundPolicy from '../modules/public/pages/RefundPolicy';
+import LoginLegalPage from '../modules/public/pages/LoginLegalPage';
+import LoginSupportPage from '../modules/public/pages/LoginSupportPage';
 
 const AppRoutes = () => {
   const navigate = useNavigate();
@@ -35,9 +37,16 @@ const AppRoutes = () => {
       <Route path="/Home" element={<PublicHome />} />
       <Route path="/about" element={<PublicAbout />} />
       <Route path="/contact" element={<PublicContact />} />
+      <Route path="/privacy" element={<PublicPrivacyPolicy />} />
       <Route path="/privacy-policy" element={<PublicPrivacyPolicy />} />
+      <Route path="/terms" element={<PublicTermsConditions />} />
       <Route path="/terms-and-conditions" element={<PublicTermsConditions />} />
       <Route path="/refund-policy" element={<PublicRefundPolicy />} />
+
+      {/* Separate legal pages opened from user/vendor login */}
+      <Route path="/login/terms" element={<LoginLegalPage type="terms" />} />
+      <Route path="/login/privacy" element={<LoginLegalPage type="privacy" />} />
+      <Route path="/login/support" element={<LoginSupportPage />} />
 
       {/* 2. Existing Qwiklly User Application (login/signup intact) */}
       <Route path="/user/*" element={<UserRoutes />} />
