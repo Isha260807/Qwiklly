@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion as Motion, useReducedMotion } from 'framer-motion';
 import { brand } from '../../theme';
 import { hasQwikllySplashPlayed, markQwikllySplashPlayed } from './qwikllySplashSession';
@@ -6,6 +6,27 @@ import { hasQwikllySplashPlayed, markQwikllySplashPlayed } from './qwikllySplash
 const QwikllySplash = ({ onComplete }) => {
   const prefersReducedMotion = useReducedMotion();
   const reducedMotion = prefersReducedMotion === true;
+  const wordRef = useRef(null);
+  const letterIRef = useRef(null);
+  const [zoomOrigin, setZoomOrigin] = useState('50% 50%');
+
+  useLayoutEffect(() => {
+    const updateZoomOrigin = () => {
+      const word = wordRef.current;
+      const letterI = letterIRef.current;
+      if (!word || !letterI) return;
+
+      const wordRect = word.getBoundingClientRect();
+      const letterRect = letterI.getBoundingClientRect();
+      const letterCenter = letterRect.left + (letterRect.width / 2);
+      const originX = ((letterCenter - wordRect.left) / wordRect.width) * 100;
+      setZoomOrigin(`${originX}% 50%`);
+    };
+
+    updateZoomOrigin();
+    window.addEventListener('resize', updateZoomOrigin);
+    return () => window.removeEventListener('resize', updateZoomOrigin);
+  }, []);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -45,7 +66,8 @@ const QwikllySplash = ({ onComplete }) => {
       </div>
 
       <Motion.div
-        className="relative z-10 whitespace-nowrap font-outfit text-[clamp(3.5rem,17.5vw,7.5rem)] font-extrabold tracking-[-0.06em] text-white"
+        ref={wordRef}
+        className="relative z-10 whitespace-nowrap font-outfit text-[clamp(4rem,20vw,8.5rem)] font-extrabold tracking-[-0.06em] text-white"
         initial={{ opacity: 0, scale: 0.84 }}
         animate={reducedMotion
           ? { opacity: 1, scale: 1 }
@@ -61,11 +83,11 @@ const QwikllySplash = ({ onComplete }) => {
             ease: ['easeOut', 'easeOut', 'easeInOut', 'easeIn', 'easeIn']
           }}
         style={{
-          transformOrigin: 'center center',
+          transformOrigin: zoomOrigin,
           willChange: 'transform, opacity'
         }}
       >
-        Qwiklly
+        <span>Qw</span><span ref={letterIRef}>i</span><span>klly</span>
       </Motion.div>
     </Motion.div>
   );
