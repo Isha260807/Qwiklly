@@ -34,6 +34,23 @@ const AllVendors = () => {
   const [zones, setZones] = useState([]);
   const [selectedZoneIds, setSelectedZoneIds] = useState([]);
   const [savingZones, setSavingZones] = useState(false);
+  const [canEditVendorZones, setCanEditVendorZones] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedData = sessionStorage.getItem('adminData') || localStorage.getItem('adminData');
+      const adminData = JSON.parse(storedData || '{}');
+      // Vendor admins may reassign vendors to existing zones. Zone
+      // Management permission remains reserved for zone CRUD.
+      setCanEditVendorZones(
+        adminData.role === 'super_admin' ||
+        !Array.isArray(adminData.permissions) ||
+        adminData.permissions?.includes('vendors')
+      );
+    } catch (error) {
+      setCanEditVendorZones(false);
+    }
+  }, []);
 
   // Load vendors from backend
   useEffect(() => {
@@ -107,6 +124,9 @@ const AllVendors = () => {
           createdAt: vendor.createdAt,
           isActive: vendor.isActive,
           zoneIds: (vendor.zoneIds || []).map(z => (typeof z === 'object' ? z._id : z)),
+          assignedZoneNames: (vendor.zoneIds || [])
+            .map(z => (typeof z === 'object' ? z.name : null))
+            .filter(Boolean),
           currentZoneIds: (vendor.currentZoneIds || []).map(z => (typeof z === 'object' ? z._id : z)),
           lastLocationSyncAt: vendor.lastLocationSyncAt || null
         }));
@@ -157,6 +177,19 @@ const AllVendors = () => {
       };
     }
     return { key: 'outside', label: 'Outside Zone', cls: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' };
+  };
+
+  const getAssignedZoneLabel = (vendor) => {
+    if (vendor.assignedZoneNames?.length) return vendor.assignedZoneNames.join(', ');
+
+    const names = (vendor.zoneIds || [])
+      .map(zone => {
+        if (typeof zone === 'object') return zone.name;
+        return zones.find(item => String(item._id) === String(zone))?.name;
+      })
+      .filter(Boolean);
+
+    return names.length ? names.join(', ') : 'No Zone Assigned';
   };
 
   const filteredVendors = useMemo(() => {
@@ -262,19 +295,27 @@ const AllVendors = () => {
   };
 
   const toggleZoneSelection = (zoneId) => {
+    if (!canEditVendorZones) return;
     setSelectedZoneIds(prev =>
       prev.includes(zoneId) ? [] : [zoneId] // Single zone selection in UI (1 Vendor = 1 Zone)
     );
   };
 
   const handleSaveVendorZones = async () => {
-    if (!selectedVendor) return;
+    if (!selectedVendor || !canEditVendorZones) return;
     try {
       setSavingZones(true);
       const response = await zoneService.assignVendorZones(selectedVendor.id, selectedZoneIds);
       if (response.success) {
-        setVendors(prev => prev.map(v => v.id === selectedVendor.id ? { ...v, zoneIds: selectedZoneIds } : v));
-        setSelectedVendor(prev => prev ? { ...prev, zoneIds: selectedZoneIds } : prev);
+        const savedZoneIds = response.vendor?.zoneIds || selectedZoneIds;
+        const savedZoneNames = savedZoneIds
+          .map(zone => (typeof zone === 'object' ? zone.name : null))
+          .filter(Boolean);
+        const savedZoneIdList = savedZoneIds.map(zone => (typeof zone === 'object' ? zone._id : zone));
+        setVendors(prev => prev.map(v => v.id === selectedVendor.id
+          ? { ...v, zoneIds: savedZoneIdList, assignedZoneNames: savedZoneNames }
+          : v));
+        setSelectedVendor(prev => prev ? { ...prev, zoneIds: savedZoneIdList, assignedZoneNames: savedZoneNames } : prev);
         toast.success('Vendor zones updated successfully');
       } else {
         toast.error(response.message || 'Failed to update vendor zones');
@@ -500,8 +541,16 @@ const AllVendors = () => {
                       <td className="px-4 py-3">
                         {(() => {
                           const zs = getZoneStatus(vendor);
+                          const assignedZoneLabel = getAssignedZoneLabel(vendor);
                           return (
                             <div className="space-y-0.5">
+                              <p
+                                className="inline-flex items-center gap-1 text-[9px] text-gray-600 max-w-[170px]"
+                                title={'Assigned zone: ' + assignedZoneLabel}
+                              >
+                                <FiMapPin className="w-2.5 h-2.5 shrink-0 text-gray-500" />
+                                <span className="truncate">Assigned: {assignedZoneLabel}</span>
+                              </p>
                               <span
                                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border max-w-[170px] ${zs.cls}`}
                                 title={zs.label}
@@ -652,17 +701,24 @@ const AllVendors = () => {
                   <h4 className="text-xs font-bold text-gray-900">Assigned Zone</h4>
                   <p className="text-[10px] text-gray-500">Select 1 operational zone for this vendor</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSaveVendorZones}
-                  disabled={savingZones}
-                  className="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-medium hover:bg-rose-700 disabled:opacity-60 cursor-pointer shadow-xs"
-                >
-                  {savingZones ? 'Saving...' : 'Save Zone'}
-                </button>
+                {canEditVendorZones && (
+                  <button
+                    type="button"
+                    onClick={handleSaveVendorZones}
+                    disabled={savingZones}
+                    className="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-medium hover:bg-rose-700 disabled:opacity-60 cursor-pointer shadow-xs"
+                  >
+                    {savingZones ? 'Saving...' : 'Save Zone'}
+                  </button>
+                )}
               </div>
-              {zones.length === 0 ? (
-                <p className="text-xs text-gray-400">No zones configured yet. Add zones under Zone Management.</p>
+              {!canEditVendorZones ? (
+                <div className="bg-white rounded-lg border border-rose-100 px-3 py-2">
+                  <p className="text-xs font-semibold text-gray-800">Assigned: {getAssignedZoneLabel(selectedVendor)}</p>
+                  <p className="text-[10px] text-gray-500 mt-1">This assignment is read-only for this account.</p>
+                </div>
+              ) : zones.length === 0 ? (
+                <p className="text-xs text-gray-400">No admin-created zones are available yet.</p>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pt-1">
                   {zones.map(zone => {

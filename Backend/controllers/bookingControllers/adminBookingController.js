@@ -4,6 +4,7 @@ const Zone = require('../../models/Zone');
 const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, VENDOR_STATUS } = require('../../utils/constants');
 const { findQualifiedVendors } = require('../../services/vendorMatchService');
+const { getAdminBookingCityFilter, getAdminVendorCityFilter } = require('../../utils/adminCityScope');
 
 /**
  * Get all bookings with filters and search
@@ -25,7 +26,7 @@ const getAllBookings = async (req, res) => {
     } = req.query;
 
     // Build query
-    const query = {};
+    const query = { ...getAdminBookingCityFilter(req) };
 
     if (zoneId) query.zoneId = zoneId;
 
@@ -145,7 +146,9 @@ const getBookingById = async (req, res) => {
       query = { bookingNumber: id };
     }
 
-    const booking = await Booking.findOne(query)
+    const cityFilter = getAdminBookingCityFilter(req);
+    const scopedQuery = Object.keys(cityFilter).length ? { $and: [query, cityFilter] } : query;
+    const booking = await Booking.findOne(scopedQuery)
       .populate('userId', 'name phone email addresses')
       .populate('vendorId', 'name businessName phone email address profilePhoto')
       .populate('serviceId', 'title description iconUrl images')
@@ -188,7 +191,7 @@ const cancelBooking = async (req, res) => {
     const { id } = req.params;
     const { cancellationReason } = req.body;
 
-    const booking = await Booking.findById(id);
+    const booking = await Booking.findOne({ _id: id, ...getAdminBookingCityFilter(req) });
 
     if (!booking) {
       return res.status(404).json({
@@ -241,7 +244,7 @@ const getBookingAnalytics = async (req, res) => {
     const { startDate, endDate } = req.query;
 
     // Build date filter
-    const dateFilter = {};
+    const dateFilter = { ...getAdminBookingCityFilter(req) };
     if (startDate || endDate) {
       dateFilter.createdAt = {};
       if (startDate) dateFilter.createdAt.$gte = new Date(startDate);
@@ -367,7 +370,7 @@ const getBookingAnalytics = async (req, res) => {
  */
 const getEligibleVendorsForBooking = async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id).lean();
+    const booking = await Booking.findOne({ _id: req.params.id, ...getAdminBookingCityFilter(req) }).lean();
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
@@ -421,7 +424,7 @@ const assignVendorToBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: 'vendorId is required' });
     }
 
-    const booking = await Booking.findById(id);
+    const booking = await Booking.findOne({ _id: id, ...getAdminBookingCityFilter(req) });
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
@@ -432,7 +435,7 @@ const assignVendorToBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Booking has no resolved zone' });
     }
 
-    const vendor = await Vendor.findById(vendorId);
+    const vendor = await Vendor.findOne({ _id: vendorId, ...getAdminVendorCityFilter(req) });
     if (!vendor) {
       return res.status(404).json({ success: false, message: 'Vendor not found' });
     }

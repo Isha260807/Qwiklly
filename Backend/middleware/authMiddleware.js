@@ -87,8 +87,15 @@ const authenticate = async (req, res, next) => {
       case USER_ROLES.ADMIN:
       case 'super_admin':
       case 'admin':
+      case 'sub_admin':
       case 'ADMIN':
         user = await Admin.findById(decoded.userId).select('-password').lean();
+        if (user && !user.isActive) {
+          return res.status(403).json({
+            success: false,
+            message: 'Your admin account has been deactivated. Please contact support.'
+          });
+        }
         break;
       default:
         console.error('Role mismatch in middleware:', decoded.role);

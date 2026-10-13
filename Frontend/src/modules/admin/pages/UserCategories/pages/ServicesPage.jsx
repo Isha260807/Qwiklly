@@ -20,7 +20,8 @@ import {
   FiTag,
   FiImage,
   FiShield,
-  FiClock
+  FiClock,
+  FiMapPin
 } from "react-icons/fi";
 import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
@@ -68,6 +69,8 @@ const ServicesPage = () => {
   const [formData, setFormData] = useState(initialServiceForm);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [canEditZoneAssignments, setCanEditZoneAssignments] = useState(false);
+  const [formZoneOptions, setFormZoneOptions] = useState([]);
 
   // Delete Confirmation Modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -75,6 +78,22 @@ const ServicesPage = () => {
   const [loadingImpact, setLoadingImpact] = useState(false);
   const [serviceImpact, setServiceImpact] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedData = sessionStorage.getItem('adminData') || localStorage.getItem('adminData');
+      const adminData = JSON.parse(storedData || '{}');
+      // Catalog admins may assign an existing admin-created zone to a
+      // service. Zone Management permission is only needed for zone CRUD.
+      setCanEditZoneAssignments(
+        adminData.role === 'super_admin' ||
+        !Array.isArray(adminData.permissions) ||
+        adminData.permissions?.includes('catalog')
+      );
+    } catch (error) {
+      setCanEditZoneAssignments(false);
+    }
+  }, []);
 
   const fetchZones = async () => {
     try {
@@ -133,10 +152,13 @@ const ServicesPage = () => {
     );
   }, [services, searchTerm]);
 
+  const formZoneChoices = zones.length ? zones : formZoneOptions;
+
   // Open Modal for Add
   const handleOpenAdd = () => {
     setEditingServiceId(null);
     setFormData(initialServiceForm);
+    setFormZoneOptions([]);
     setIsModalOpen(true);
   };
 
@@ -148,6 +170,9 @@ const ServicesPage = () => {
     const pUnit = service.pricePerUnit ?? service.durationPricing?.pricePerUnit ?? service.pricePer30Minutes ?? (service.hourlyRate ? service.hourlyRate * (billingUnit / 60) : (service.basePrice || ""));
     const minM = service.minDurationMinutes ?? service.durationPricing?.minDurationMinutes ?? (service.minHours ? service.minHours * 60 : billingUnit);
     const maxM = service.maxDurationMinutes ?? service.durationPricing?.maxDurationMinutes ?? (service.maxHours ? service.maxHours * 60 : 240);
+    setFormZoneOptions((service.zoneIds || [])
+      .filter(zone => typeof zone === 'object' && (zone._id || zone.id))
+      .map(zone => ({ _id: zone._id || zone.id, name: zone.name || 'Assigned zone' })));
 
     setFormData({
       title: service.title || "",
@@ -179,6 +204,7 @@ const ServicesPage = () => {
   };
 
   const toggleFormZone = (zoneId) => {
+    if (!canEditZoneAssignments) return;
     setFormData(prev => ({
       ...prev,
       zoneIds: prev.zoneIds.includes(zoneId)
@@ -491,6 +517,15 @@ const ServicesPage = () => {
             const id = service._id || service.id;
             const hasDiscount =
               service.originalPrice && service.originalPrice > service.basePrice;
+            const assignedZoneNames = (service.zoneIds || [])
+              .map((zone) => {
+                if (typeof zone === 'object') return zone.name;
+                return zones.find((item) => String(item._id) === String(zone))?.name;
+              })
+              .filter(Boolean);
+            const zoneLabel = assignedZoneNames.length
+              ? assignedZoneNames.join(', ')
+              : 'All Zones';
 
             return (
               <div
@@ -546,6 +581,13 @@ const ServicesPage = () => {
                         {service.tagline}
                       </p>
                     )}
+                    <div
+                      className='mt-2 flex items-center gap-1 text-[10px] text-slate-500'
+                      title={'Assigned zones: ' + zoneLabel}
+                    >
+                      <FiMapPin className='w-3 h-3 shrink-0 text-[#720C3E]' />
+                      <span className='truncate'>Zones: {zoneLabel}</span>
+                    </div>
                   </div>
 
                   {/* Pricing & Status Row */}
@@ -905,11 +947,24 @@ const ServicesPage = () => {
             <p className="text-[10px] text-slate-400 mb-2">
               Select where this service is bookable. Leave empty to make it available in every active zone.
             </p>
-            {zones.length === 0 ? (
-              <p className="text-xs text-slate-400">No zones configured yet. Add zones under Settings &gt; Zone Management.</p>
+            {formZoneChoices.length === 0 ? (
+              <p className="text-xs text-slate-400">
+                No admin-created zones are available yet.
+              </p>
+            ) : !canEditZoneAssignments ? (
+              <div className="space-y-2">
+                <p className="text-[10px] text-slate-500">Assigned zones are read-only for this account.</p>
+                <div className="flex flex-wrap gap-2">
+                  {formZoneChoices.map(zone => (
+                    <span key={zone._id} className="inline-flex items-center px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg">
+                      {zone.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-36 overflow-y-auto">
-                {zones.map(zone => (
+                {formZoneChoices.map(zone => (
                   <label key={zone._id} className="flex items-center gap-2 text-xs bg-white rounded-lg px-2 py-1.5 border border-slate-200 cursor-pointer">
                     <input
                       type="checkbox"

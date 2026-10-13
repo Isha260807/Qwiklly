@@ -5,10 +5,11 @@ const {
   login,
   logout,
   updateProfile,
-  getProfile
+  getProfile,
+  refreshToken
 } = require('../../controllers/adminControllers/adminAuthController');
 const { authenticate } = require('../../middleware/authMiddleware');
-const { isAdmin } = require('../../middleware/roleMiddleware');
+const { isAdmin, isSuperAdmin } = require('../../middleware/roleMiddleware');
 
 // Validation rules
 const loginValidation = [
@@ -18,8 +19,12 @@ const loginValidation = [
 
 // Routes
 router.post('/login', loginValidation, login);
+router.post('/refresh-token', refreshToken);
 router.post('/logout', authenticate, isAdmin, logout);
-router.put('/profile', authenticate, isAdmin, updateProfile);
+router.put('/profile', authenticate, isAdmin, isSuperAdmin, updateProfile);
+// Profile data is also used to refresh a sub-admin's latest permissions after
+// the Super Admin changes module access. Updating the profile remains
+// Super Admin-only below.
 router.get('/profile', authenticate, isAdmin, getProfile);
 
 module.exports = router;

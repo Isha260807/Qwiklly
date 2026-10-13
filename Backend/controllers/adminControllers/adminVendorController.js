@@ -3,8 +3,9 @@ const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
 const VendorSalaryEarning = require('../../models/VendorSalaryEarning');
 const { validationResult } = require('express-validator');
-const { VENDOR_STATUS, BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
+const { VENDOR_STATUS, BOOKING_STATUS, PAYMENT_STATUS, ADMIN_ROLES, ADMIN_PERMISSIONS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
+const { getAdminVendorCityFilter, getAdminBookingCityFilter } = require('../../utils/adminCityScope');
 
 /**
  * Get all vendors with filters and pagination
@@ -20,7 +21,7 @@ const getAllVendors = async (req, res) => {
     } = req.query;
 
     // Build query
-    const query = {};
+    const query = { ...getAdminVendorCityFilter(req) };
 
     if (approvalStatus) {
       query.approvalStatus = approvalStatus;
@@ -45,6 +46,7 @@ const getAllVendors = async (req, res) => {
     // Get vendors
     const vendors = await Vendor.find(query)
       .select('-password')
+      .populate('zoneIds', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -78,7 +80,7 @@ const getVendorDetails = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const vendor = await Vendor.findById(id).select('-password');
+    const vendor = await Vendor.findOne({ _id: id, ...getAdminVendorCityFilter(req) }).select('-password');
 
     if (!vendor) {
       return res.status(404).json({
@@ -88,8 +90,8 @@ const getVendorDetails = async (req, res) => {
     }
 
     // Get vendor stats from VendorBill (single source of truth)
-    const totalBookings = await Booking.countDocuments({ vendorId: vendor._id });
-    const completedBookings = await Booking.countDocuments({ vendorId: vendor._id, status: BOOKING_STATUS.COMPLETED });
+    const totalBookings = await Booking.countDocuments({ vendorId: vendor._id, ...getAdminBookingCityFilter(req) });
+    const completedBookings = await Booking.countDocuments({ vendorId: vendor._id, status: BOOKING_STATUS.COMPLETED, ...getAdminBookingCityFilter(req) });
 
     const earningsResult = await VendorSalaryEarning.aggregate([
       {
@@ -140,7 +142,7 @@ const approveVendor = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const vendor = await Vendor.findById(id);
+    const vendor = await Vendor.findOne({ _id: id, ...getAdminVendorCityFilter(req) });
 
     if (!vendor) {
       return res.status(404).json({
@@ -208,7 +210,7 @@ const rejectVendor = async (req, res) => {
     const { id } = req.params;
     const { reason } = req.body;
 
-    const vendor = await Vendor.findById(id);
+    const vendor = await Vendor.findOne({ _id: id, ...getAdminVendorCityFilter(req) });
 
     if (!vendor) {
       return res.status(404).json({
@@ -267,7 +269,7 @@ const suspendVendor = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const vendor = await Vendor.findById(id);
+    const vendor = await Vendor.findOne({ _id: id, ...getAdminVendorCityFilter(req) });
 
     if (!vendor) {
       return res.status(404).json({
@@ -303,7 +305,12 @@ const getVendorBookings = async (req, res) => {
     const { status, page = 1, limit = 20 } = req.query;
 
     // Build query
-    const query = { vendorId: id };
+    const scopedVendor = await Vendor.findOne({ _id: id, ...getAdminVendorCityFilter(req) }).select('_id');
+    if (!scopedVendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+
+    const query = { vendorId: id, ...getAdminBookingCityFilter(req) };
     if (status) {
       query.status = status;
     }
@@ -347,6 +354,11 @@ const getVendorEarnings = async (req, res) => {
   try {
     const { id } = req.params;
     const { startDate, endDate } = req.query;
+
+    const scopedVendor = await Vendor.findOne({ _id: id, ...getAdminVendorCityFilter(req) }).select('_id');
+    if (!scopedVendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
 
     const earningQuery = {
       vendorId: require('mongoose').Types.ObjectId(id),
@@ -397,7 +409,7 @@ const getAllVendorBookings = async (req, res) => {
   try {
     const { status, page = 1, limit = 20, search } = req.query;
 
-    const query = { vendorId: { $exists: true, $ne: null } };
+    const query = { vendorId: { $exists: true, $ne: null }, ...getAdminBookingCityFilter(req) };
     if (status) {
       query.status = status;
     }
@@ -408,6 +420,7 @@ const getAllVendorBookings = async (req, res) => {
     // If search is provided, we need to find vendors by business name or name first
     if (search) {
       const vendors = await Vendor.find({
+        ...getAdminVendorCityFilter(req),
         $or: [
           { businessName: { $regex: search, $options: 'i' } },
           { name: { $regex: search, $options: 'i' } },
@@ -455,6 +468,7 @@ const getVendorPaymentsSummary = async (req, res) => {
   try {
     // Return vendors with their wallet balances and earnings
     const vendors = await Vendor.find({
+      ...getAdminVendorCityFilter(req),
       'wallet.balance': { $exists: true }
     })
       .select('name businessName phone wallet email approvalStatus')
@@ -481,7 +495,7 @@ const toggleVendorStatus = async (req, res) => {
     const { id } = req.params;
     const { isActive } = req.body; // Expecting { isActive: true/false }
 
-    const vendor = await Vendor.findById(id);
+    const vendor = await Vendor.findOne({ _id: id, ...getAdminVendorCityFilter(req) });
 
     if (!vendor) {
       return res.status(404).json({
@@ -517,7 +531,7 @@ const deleteVendor = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const vendor = await Vendor.findByIdAndDelete(id);
+    const vendor = await Vendor.findOneAndDelete({ _id: id, ...getAdminVendorCityFilter(req) });
 
     if (!vendor) {
       return res.status(404).json({
@@ -548,6 +562,17 @@ const assignVendorZones = async (req, res) => {
     const { id } = req.params;
     const { zoneIds } = req.body;
 
+    const canEditVendorZones =
+      (req.user?.role || req.userRole) === ADMIN_ROLES.SUPER_ADMIN ||
+      !Array.isArray(req.user?.permissions) ||
+      req.user.permissions.includes(ADMIN_PERMISSIONS.VENDORS);
+    if (!canEditVendorZones) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Vendor Management permission is required to change vendor zones.'
+      });
+    }
+
     if (!Array.isArray(zoneIds)) {
       return res.status(400).json({
         success: false,
@@ -564,8 +589,8 @@ const assignVendorZones = async (req, res) => {
       });
     }
 
-    const vendor = await Vendor.findByIdAndUpdate(
-      id,
+    const vendor = await Vendor.findOneAndUpdate(
+      { _id: id, ...getAdminVendorCityFilter(req) },
       { zoneIds },
       { new: true, runValidators: true }
     ).select('-password').populate('zoneIds', 'name');

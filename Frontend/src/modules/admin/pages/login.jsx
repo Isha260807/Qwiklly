@@ -4,6 +4,7 @@ import { FiMail, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../theme';
 import { adminAuthService } from '../../../services/authService';
+import { getFirstAccessibleAdminPath } from '../../../components/auth/adminAccess';
 
 const AdminLogin = () => {
   const navigate = useNavigate();
@@ -41,9 +42,11 @@ const AdminLogin = () => {
         // Store remember me preference
         if (rememberMe) {
           localStorage.setItem('adminRememberMe', 'true');
+        } else {
+          localStorage.removeItem('adminRememberMe');
         }
         toast.success('Login successful!');
-        navigate('/admin/dashboard');
+        navigate(getFirstAccessibleAdminPath(response.admin) || '/admin/dashboard');
       } else {
         setIsLoading(false);
         toast.error(response.message || 'Login failed'); // Reading file to debug token key mismatch (error)

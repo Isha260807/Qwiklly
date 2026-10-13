@@ -10,7 +10,7 @@ const Review = require('../../models/Review');
 const Plan = require('../../models/Plan');
 const VendorService = require('../../models/VendorService');
 const { validationResult } = require('express-validator');
-const { SERVICE_STATUS, BOOKING_STATUS } = require('../../utils/constants');
+const { SERVICE_STATUS, BOOKING_STATUS, ADMIN_ROLES, ADMIN_PERMISSIONS } = require('../../utils/constants');
 
 const SUPPORTED_BILLING_UNITS = [15, 30, 60];
 
@@ -37,6 +37,17 @@ const LIVE_BOOKING_STATUSES = [
 // as non-live and historical booking snapshots are preserved separately.
 const SERVICE_DELETE_BLOCKING_STATUSES = LIVE_BOOKING_STATUSES;
 
+const getAdminServiceScopeQuery = (req) => {
+  if (!Array.isArray(req.adminZoneIds)) return {};
+  return {
+    $or: [
+      { zoneIds: { $in: req.adminZoneIds } },
+      { zoneIds: { $size: 0 } },
+      { zoneIds: { $exists: false } }
+    ]
+  };
+};
+
 const normalizeFrequentlyAddedTogether = (ids, selfId = null) => [...new Set(
   (Array.isArray(ids) ? ids : [])
     .filter(id => mongoose.Types.ObjectId.isValid(id))
@@ -61,7 +72,7 @@ const getAllServices = async (req, res) => {
   try {
     const { status, brandId, categoryId, zoneId, search } = req.query;
 
-    const query = {};
+    const query = getAdminServiceScopeQuery(req);
     if (status) query.status = status;
     if (brandId) query.brandId = brandId;
     if (categoryId) query.categoryId = categoryId;
@@ -70,11 +81,16 @@ const getAllServices = async (req, res) => {
       // zone by design (see checkServiceAvailabilityInZone) - the filter
       // must include those "global" services alongside ones explicitly
       // assigned to this zone, not just the explicit matches.
-      query.$or = [
+      const zoneQuery = [
         { zoneIds: zoneId },
         { zoneIds: { $size: 0 } },
         { zoneIds: { $exists: false } }
       ];
+      query.$and = [
+        ...(query.$or ? [{ $or: query.$or }] : []),
+        { $or: zoneQuery }
+      ];
+      delete query.$or;
     }
     if (search) {
       query.title = { $regex: search, $options: 'i' };
@@ -109,7 +125,7 @@ const getAllServices = async (req, res) => {
  */
 const getServiceById = async (req, res) => {
   try {
-    const service = await Service.findById(req.params.id)
+    const service = await Service.findOne({ _id: req.params.id, ...getAdminServiceScopeQuery(req) })
       .populate('brandId', 'title')
       .populate('categoryId', 'title')
       .populate('zoneIds', 'name')
@@ -335,13 +351,18 @@ const updateService = async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const service = await Service.findById(id);
+    const service = await Service.findOne({ _id: id, ...getAdminServiceScopeQuery(req) });
     if (!service) {
       return res.status(404).json({
         success: false,
         message: 'Service not found'
       });
     }
+
+    const canEditServiceZones =
+      (req.user?.role || req.userRole) === ADMIN_ROLES.SUPER_ADMIN ||
+      !Array.isArray(req.user?.permissions) ||
+      req.user.permissions.includes(ADMIN_PERMISSIONS.CATALOG);
 
     if (updates.title !== undefined) service.title = updates.title.trim();
     if (updates.originalPrice !== undefined) service.originalPrice = Number(updates.originalPrice);
@@ -459,7 +480,9 @@ const updateService = async (req, res) => {
     if (updates.frequentlyAddedTogetherByZone !== undefined) {
       service.frequentlyAddedTogetherByZone = normalizeFrequentlyAddedTogetherByZone(updates.frequentlyAddedTogetherByZone, service._id);
     }
-    if (updates.zoneIds !== undefined) service.zoneIds = updates.zoneIds;
+    // Existing zone assignments are part of Catalog management. Zone CRUD is
+    // still protected separately by the Zone Management permission.
+    if (updates.zoneIds !== undefined && canEditServiceZones) service.zoneIds = updates.zoneIds;
     if (updates.description !== undefined) service.description = updates.description;
     if (updates.status !== undefined) service.status = updates.status;
     if (updates.iconUrl !== undefined) service.iconUrl = updates.iconUrl;
@@ -489,7 +512,7 @@ const updateService = async (req, res) => {
 const getServiceImpact = async (req, res) => {
   try {
     const { id } = req.params;
-    const service = await Service.findById(id).select('title status').lean();
+    const service = await Service.findOne({ _id: id, ...getAdminServiceScopeQuery(req) }).select('title status').lean();
     if (!service) {
       return res.status(404).json({ success: false, message: 'Service not found' });
     }
@@ -586,7 +609,7 @@ const deleteService = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const service = await Service.findById(id);
+    const service = await Service.findOne({ _id: id, ...getAdminServiceScopeQuery(req) });
     if (!service) {
       return res.status(404).json({
         success: false,

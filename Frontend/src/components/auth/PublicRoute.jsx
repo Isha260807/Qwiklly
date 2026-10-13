@@ -45,7 +45,13 @@ const checkPublicAuthSync = (userType) => {
             worker: 'worker',
             admin: 'admin'
           };
-          if (payload.role === roleMap[userType]) {
+          const isAdminToken = userType === 'admin' && [
+            'ADMIN',
+            'admin',
+            'super_admin',
+            'sub_admin'
+          ].includes(payload.role);
+          if (payload.role === roleMap[userType] || isAdminToken) {
             return true;
           }
         }

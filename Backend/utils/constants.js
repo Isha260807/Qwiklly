@@ -10,6 +10,54 @@ const USER_ROLES = {
   ADMIN: 'ADMIN'
 };
 
+// Admin roles are stored on the Admin document. `admin` is retained as a
+// backwards-compatible alias for older records created before sub-admins were
+// introduced.
+const ADMIN_ROLES = {
+  SUPER_ADMIN: 'super_admin',
+  SUB_ADMIN: 'sub_admin',
+  LEGACY_ADMIN: 'admin'
+};
+
+// Permissions are deliberately module-level. The backend uses these values
+// for authorization; the sidebar only mirrors the same access for UX.
+const ADMIN_PERMISSIONS = {
+  DASHBOARD: 'dashboard',
+  USERS: 'users',
+  VENDORS: 'vendors',
+  BOOKINGS: 'bookings',
+  CATALOG: 'catalog',
+  COUPONS: 'coupons',
+  SETTINGS: 'settings',
+  ADMIN_MANAGEMENT: 'admin_management',
+  CITIES: 'cities',
+  ZONES: 'zones',
+  PAYMENTS: 'payments',
+  REPORTS: 'reports',
+  REVIEWS: 'reviews',
+  PLANS: 'plans',
+  NOTIFICATIONS: 'notifications',
+  TRANSACTIONS: 'transactions',
+  SETTLEMENTS: 'settlements',
+  SETTINGS_PROFILE: 'settings_profile',
+  SETTINGS_SUPPORT: 'settings_support',
+  SETTINGS_FINANCIAL: 'settings_financial',
+  SETTINGS_BILLING: 'settings_billing',
+  SETTINGS_REFERRAL: 'settings_referral',
+  SETTINGS_SLOTS: 'settings_slots',
+  SETTINGS_ZONES: 'settings_zones',
+  SETTINGS_ADMINS: 'settings_admins'
+};
+
+const DEFAULT_SUB_ADMIN_PERMISSIONS = [
+  ADMIN_PERMISSIONS.DASHBOARD,
+  ADMIN_PERMISSIONS.USERS,
+  ADMIN_PERMISSIONS.VENDORS,
+  ADMIN_PERMISSIONS.BOOKINGS,
+  ADMIN_PERMISSIONS.CATALOG,
+  ADMIN_PERMISSIONS.COUPONS
+];
+
 // Token Types
 const TOKEN_TYPES = {
   EMAIL_VERIFICATION: 'EMAIL_VERIFICATION',
@@ -96,6 +144,9 @@ const BILL_STATUS = {
 
 module.exports = {
   USER_ROLES,
+  ADMIN_ROLES,
+  ADMIN_PERMISSIONS,
+  DEFAULT_SUB_ADMIN_PERMISSIONS,
   TOKEN_TYPES,
   VENDOR_STATUS,
   WORKER_STATUS,

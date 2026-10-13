@@ -195,6 +195,10 @@ app.use('/api/vendors/salary', require('./routes/vendor-routes/salary.routes'));
 
 // Admin routes
 app.use('/api/admin/auth', require('./routes/admin-routes/adminAuth.routes'));
+// Central admin authorization boundary. The route-level auth middleware is
+// kept for compatibility, while this layer enforces selected module
+// permissions before any admin module can be reached. Admin data access is global.
+app.use('/api/admin', require('./middleware/adminAuthorization').adminAccessControl);
 app.use('/api/admin', require('./routes/admin-routes/cityManagement.routes.js'));
 app.use('/api/admin', require('./routes/admin-routes/zoneManagement.routes.js'));
 app.use('/api/admin', require('./routes/admin-routes/dashboard.routes'));

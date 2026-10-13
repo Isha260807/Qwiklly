@@ -5,7 +5,8 @@
     "route": "/admin/dashboard",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": []
   },
@@ -15,7 +16,8 @@
     "route": "/admin/users",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "All Users",
@@ -29,13 +31,13 @@
     "route": "/admin/vendors",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "All Vendors",
       "Vendor Bookings",
-      "Vendor Analytics",
-      "Vendor Wallets"
+      "Vendor Analytics"
     ]
   },
   {
@@ -44,7 +46,8 @@
     "route": "/admin/bookings",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "All Bookings",
@@ -58,7 +61,8 @@
     "route": "/admin/user-categories",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "Manage Services",
@@ -72,7 +76,9 @@
     "title": "Reviews",
     "route": "/admin/reviews",
     "allowedRoles": [
-      "super_admin"
+      "super_admin",
+      "admin",
+      "sub_admin"
     ],
     "children": []
   },
@@ -82,7 +88,8 @@
     "route": "/admin/coupons",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": []
   },
@@ -91,7 +98,9 @@
     "title": "Zone Management",
     "route": "/admin/zones",
     "allowedRoles": [
-      "super_admin"
+      "super_admin",
+      "admin",
+      "sub_admin"
     ],
     "children": []
   },
@@ -100,7 +109,9 @@
     "title": "Payments",
     "route": "/admin/payments",
     "allowedRoles": [
-      "super_admin"
+      "super_admin",
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "Payment Overview",
@@ -115,7 +126,9 @@
     "title": "Settlements",
     "route": "/admin/settlements",
     "allowedRoles": [
-      "super_admin"
+      "super_admin",
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "Pending",
@@ -127,7 +140,9 @@
     "title": "Reports",
     "route": "/admin/reports",
     "allowedRoles": [
-      "super_admin"
+      "super_admin",
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "Revenue Report",
@@ -141,7 +156,8 @@
     "route": "/admin/settings",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": []
   }

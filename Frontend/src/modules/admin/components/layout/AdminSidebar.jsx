@@ -23,7 +23,9 @@ import {
   FiMapPin,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
+import { canAccessAdminPath } from "../../../../components/auth/adminAccess";
 import dashboardService from "../../services/dashboardService";
+import { getAdminProfile } from "../../services/settingsService";
 
 // Icon mapping for menu items
 const iconMap = {
@@ -61,7 +63,6 @@ const getChildRoute = (parentRoute, childName) => {
       "All Vendors": "/admin/vendors/all",
       "Vendor Bookings": "/admin/vendors/bookings",
       "Vendor Analytics": "/admin/vendors/analytics",
-      "Vendor Wallets": "/admin/vendors/wallets",
     },
     "/admin/bookings": {
       "All Bookings": "/admin/bookings",
@@ -112,7 +113,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedItems, setExpandedItems] = useState({});
   const [isMobile, setIsMobile] = useState(false);
-  const [adminUser, setAdminUser] = useState({ name: 'Admin', email: '', role: 'admin' });
+  const [adminUser, setAdminUser] = useState({ name: 'Admin', email: '', role: 'sub_admin', permissions: [] });
   const [counts, setCounts] = useState({
     bookings: 0,
     vendors: 0,
@@ -120,26 +121,56 @@ const AdminSidebar = ({ isOpen, onClose }) => {
 
   // Load admin user from storage
   useEffect(() => {
+    let stored = {};
     try {
       const storedData = sessionStorage.getItem('adminData') || localStorage.getItem('adminData');
-      const stored = JSON.parse(storedData || '{}');
+      stored = JSON.parse(storedData || '{}');
       if (stored.name || stored.email) {
         setAdminUser({
           name: stored.name || 'Admin',
           email: stored.email || '',
-          role: stored.role || 'admin'
+          role: stored.role || 'sub_admin',
+          permissions: stored.permissions || []
         });
       }
     } catch (e) {
       console.error('Failed to parse admin data:', e);
     }
+
+    // Permissions can be changed by the Super Admin while this account is
+    // already logged in. Refresh the profile so the sidebar reflects the
+    // latest module access without requiring a logout/login cycle.
+    const syncAdminProfile = async () => {
+      try {
+        const response = await getAdminProfile();
+        if (!response.success || !response.data) return;
+
+        const latest = { ...stored, ...response.data };
+        setAdminUser({
+          name: latest.name || 'Admin',
+          email: latest.email || '',
+          role: latest.role || 'sub_admin',
+          permissions: latest.permissions || []
+        });
+
+        const storage = sessionStorage.getItem('adminAccessToken') ? sessionStorage : localStorage;
+        storage.setItem('adminData', JSON.stringify(latest));
+      } catch (error) {
+        // Keep the cached permissions if the profile refresh is unavailable.
+      }
+    };
+
+    syncAdminProfile();
   }, []);
 
   // Filter menu items by role and search query
   const filteredMenu = useMemo(() => {
-    return adminMenu.filter(item => item.title !== 'Settlements').filter(item => {
+    return adminMenu.filter(item => {
       // Role filter
       if (item.allowedRoles && !item.allowedRoles.includes(adminUser.role)) {
+        return false;
+      }
+      if (!canAccessAdminPath(item.route, adminUser)) {
         return false;
       }
       // Search filter
@@ -149,7 +180,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
       const childMatch = item.children && item.children.some(c => c.toLowerCase().includes(q));
       return titleMatch || childMatch;
     });
-  }, [adminUser.role, searchQuery]);
+  }, [adminUser, searchQuery]);
 
   // Group filtered menu by section
   const groupedSections = useMemo(() => {
@@ -409,7 +440,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
                 {adminUser.name}
               </h2>
               <p className="text-[11px] text-amber-400 font-semibold truncate flex items-center gap-1">
-                ⭐ {adminUser.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                ⭐ {adminUser.role === 'super_admin' ? 'Super Admin' : 'Sub Admin'}
               </p>
             </div>
           </div>

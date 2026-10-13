@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { canAccessAdminPath, getFirstAccessibleAdminPath } from './adminAccess';
 
 /**
  * Synchronous token & session validator to eliminate async blank screen delays
@@ -64,6 +65,23 @@ const checkAuthSync = (userType) => {
 const ProtectedRoute = ({ children, userType = 'user', redirectTo = null }) => {
   const location = useLocation();
   const isAuthenticated = useMemo(() => checkAuthSync(userType), [userType, location.pathname]);
+  const adminData = useMemo(() => {
+    if (userType !== 'admin' || !isAuthenticated) return {};
+    try {
+      const storedData = sessionStorage.getItem('adminData') || localStorage.getItem('adminData');
+      return JSON.parse(storedData || '{}');
+    } catch {
+      return {};
+    }
+  }, [userType, isAuthenticated, location.pathname]);
+  const hasAdminModuleAccess = useMemo(() => {
+    if (userType !== 'admin' || !isAuthenticated) return true;
+    return canAccessAdminPath(location.pathname, adminData);
+  }, [userType, isAuthenticated, location.pathname, adminData]);
+  const firstAccessibleAdminPath = useMemo(
+    () => getFirstAccessibleAdminPath(adminData),
+    [adminData]
+  );
 
   if (!isAuthenticated) {
     const defaultRedirects = {
@@ -75,6 +93,23 @@ const ProtectedRoute = ({ children, userType = 'user', redirectTo = null }) => {
 
     const redirectPath = redirectTo || defaultRedirects[userType] || '/user/login';
     return <Navigate to={redirectPath} state={{ from: location }} replace />;
+  }
+
+  if (userType === 'admin' && !hasAdminModuleAccess) {
+    if (firstAccessibleAdminPath && firstAccessibleAdminPath !== location.pathname) {
+      return <Navigate to={firstAccessibleAdminPath} replace />;
+    }
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6 text-center">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-800">No admin access assigned</h1>
+          <p className="mt-2 text-sm text-gray-500">
+            Please ask the Super Admin to assign at least one module.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return children;
