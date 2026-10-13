@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 
 let io = null;
+const ADMIN_SOCKET_ROLES = new Set(['ADMIN', 'admin', 'super_admin', 'sub_admin']);
 const TRACKING_JOIN_STATUSES = new Set(['assigned', 'journey_started', 'visited', 'in_progress']);
 const TRACKING_UPDATE_STATUSES = new Set(['journey_started', 'visited', 'in_progress']);
 const latestLocationTimestamps = new Map();
@@ -82,6 +83,13 @@ const initializeSocket = (server) => {
       const { verifyAccessToken } = require('../utils/tokenService');
       const decoded = verifyAccessToken(token);
 
+      if (ADMIN_SOCKET_ROLES.has(String(decoded.role))) {
+        const Admin = require('../models/Admin');
+        const admin = await Admin.findById(decoded.userId).select('isActive').lean();
+        if (!admin) return next(new Error('ADMIN_NOT_FOUND'));
+        if (!admin.isActive) return next(new Error('ADMIN_BLOCKED'));
+      }
+
       socket.userId = decoded.userId;
       socket.userRole = decoded.role;
 
@@ -105,7 +113,7 @@ const initializeSocket = (server) => {
       socket.join(`worker_${socket.userId.toString()}`);
       // Update worker online status
       updateWorkerOnlineStatus(socket.userId, true, socket.id);
-    } else if (socket.userRole === 'ADMIN' || socket.userRole === 'admin' || socket.userRole === 'super_admin') {
+    } else if (ADMIN_SOCKET_ROLES.has(String(socket.userRole))) {
       socket.join(`admin_${socket.userId.toString()}`);
       socket.join('admin_room');
       socket.join('admins');
@@ -114,7 +122,7 @@ const initializeSocket = (server) => {
 
     // Explicit Room Join Events (Fallback/Frontend Initiated)
     socket.on('join_admin_room', () => {
-      if (socket.userRole === 'ADMIN' || socket.userRole === 'admin' || socket.userRole === 'super_admin') {
+      if (ADMIN_SOCKET_ROLES.has(String(socket.userRole))) {
         socket.join('admin_room');
         socket.join('admins');
         console.log(`Socket ${socket.id} explicitly joined admin_room`);

@@ -5,6 +5,7 @@ import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { playNotificationSound, isSoundEnabled, playAlertRing } from '../utils/notificationSound';
 import { registerFCMToken } from '../services/pushNotificationService';
+import { handleLogout } from '../services/api';
 import formatDistance from '../utils/formatDistance';
 
 const SwipeableNotification = ({ t, data, onClick }) => {
@@ -111,7 +112,7 @@ export const SocketProvider = ({ children }) => {
         break;
     }
 
-    const token = localStorage.getItem(tokenKey);
+    const token = sessionStorage.getItem(tokenKey) || localStorage.getItem(tokenKey);
     // If no token, we don't connect
     if (!token) {
       if (socket) {
@@ -153,6 +154,15 @@ export const SocketProvider = ({ children }) => {
 
     setSocket(newSocket);
 
+    let adminBlockedHandled = false;
+    const handleBlockedAdmin = () => {
+      if (adminBlockedHandled) return;
+      adminBlockedHandled = true;
+      toast.error('Blocked by admin', { id: 'admin-blocked' });
+      handleLogout('admin');
+      newSocket.disconnect();
+    };
+
     newSocket.on('connect', () => {
       // console.log(`✅ ${userType.toUpperCase()} App Socket connected`);
 
@@ -190,9 +200,14 @@ export const SocketProvider = ({ children }) => {
     });
 
     newSocket.on('connect_error', (err) => {
-      // Silently handle typical connection errors to avoid spam, or log only critical ones
-      // console.error(`Socket connection error (${userType}):`, err);
+      if (userType === 'admin' && /ADMIN_BLOCKED|blocked by admin/i.test(err?.message || '')) {
+        handleBlockedAdmin();
+      }
     });
+
+    if (userType === 'admin') {
+      newSocket.on('admin_blocked', handleBlockedAdmin);
+    }
 
     // Listen for Emergency SOS Alerts (Admin)
     newSocket.on('emergency_sos', (data) => {
@@ -437,6 +452,7 @@ export const SocketProvider = ({ children }) => {
     }
 
     return () => {
+      newSocket.off('admin_blocked', handleBlockedAdmin);
       newSocket.disconnect();
     };
   }, [userType]); // Only re-run if userType changes. Navigate is stable.

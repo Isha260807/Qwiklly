@@ -32,7 +32,8 @@ const login = async (req, res) => {
     if (!admin.isActive) {
       return res.status(403).json({
         success: false,
-        message: 'Your account has been deactivated. Please contact support.'
+        code: 'ADMIN_BLOCKED',
+        message: 'Blocked by admin.'
       });
     }
 
@@ -216,7 +217,8 @@ const refreshToken = async (req, res) => {
     if (!admin.isActive) {
       return res.status(403).json({
         success: false,
-        message: 'Account is not active'
+        code: 'ADMIN_BLOCKED',
+        message: 'Blocked by admin.'
       });
     }
 

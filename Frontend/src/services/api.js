@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from 'react-hot-toast';
 import { apiCache } from '../utils/apiCache';
 
 // API Base URL
@@ -141,15 +142,30 @@ api.interceptors.response.use(
         // Refresh failed, logout
         processQueue(refreshError, null);
         isRefreshing = false;
+        if (role === 'admin' && refreshError.response?.data?.code === 'ADMIN_BLOCKED') {
+          toast.error('Blocked by admin', { id: 'admin-blocked' });
+        }
         handleLogout(role);
         return Promise.reject(refreshError);
       }
     }
 
-    // Handle 403 Forbidden - Role mismatch or Invalid Token
+    // A blocked admin must be logged out immediately. Keep ordinary module
+    // permission 403s non-destructive so a missing module does not log out a
+    // valid session.
     if (error.response?.status === 403) {
       console.error('Access Denied (403):', error.response.data.message);
-      // Removed automatic logout to prevent login loops during debugging
+      const { role } = getTokenKeys(originalRequest.url);
+      const isAdminLoginRequest = originalRequest.url?.includes('/admin/auth/login');
+      const isBlockedAdmin = role === 'admin' && (
+        error.response.data.code === 'ADMIN_BLOCKED' ||
+        /blocked by admin/i.test(error.response.data.message || '')
+      );
+
+      if (isBlockedAdmin && !isAdminLoginRequest) {
+        toast.error('Blocked by admin', { id: 'admin-blocked' });
+        handleLogout('admin');
+      }
     }
 
     return Promise.reject(error);

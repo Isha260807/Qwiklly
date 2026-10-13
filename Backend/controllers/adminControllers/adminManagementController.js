@@ -314,6 +314,20 @@ module.exports = {
       admin.isActive = !admin.isActive;
       await admin.save();
 
+      // End every active session immediately when an admin is blocked. The
+      // HTTP middleware still protects the next request as a fallback.
+      if (!admin.isActive) {
+        try {
+          const { getIO } = require('../../sockets');
+          getIO().to(`admin_${admin._id.toString()}`).emit('admin_blocked', {
+            code: 'ADMIN_BLOCKED',
+            message: 'Blocked by admin.'
+          });
+        } catch (socketError) {
+          console.warn('Could not send admin block event:', socketError.message);
+        }
+      }
+
       res.status(200).json({
         success: true,
         message: `Admin ${admin.isActive ? 'unblocked' : 'blocked'} successfully`,

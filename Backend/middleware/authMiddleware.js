@@ -93,7 +93,8 @@ const authenticate = async (req, res, next) => {
         if (user && !user.isActive) {
           return res.status(403).json({
             success: false,
-            message: 'Your admin account has been deactivated. Please contact support.'
+            code: 'ADMIN_BLOCKED',
+            message: 'Blocked by admin.'
           });
         }
         break;
