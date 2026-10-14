@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import useAppNotifications from '../../../../hooks/useAppNotifications';
@@ -72,6 +72,29 @@ const BookingDetails = () => {
   const [serviceGstPct, setServiceGstPct] = useState(0);
 
   const socket = useAppNotifications();
+
+  // ── Cancellation window (server decides; client only runs the countdown) ──
+  // Offset corrects for a wrong device clock so the timer matches the server.
+  const cancellation = booking?.cancellation;
+  // Computed once per server response (not per render), otherwise it cancels out Date.now() and freezes the timer.
+  const clockOffsetMs = useMemo(
+    () => (cancellation?.serverTime ? new Date(cancellation.serverTime).getTime() - Date.now() : 0),
+    [cancellation?.serverTime]
+  );
+  const [cancelTick, setCancelTick] = useState(0);
+  useEffect(() => {
+    if (!cancellation?.cancelDeadline) return undefined;
+    const timer = setInterval(() => setCancelTick((t) => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, [cancellation?.cancelDeadline]);
+  const cancelRemainingMs = cancellation?.cancelDeadline
+    ? new Date(cancellation.cancelDeadline).getTime() - (Date.now() + clockOffsetMs)
+    : null;
+  const canCancelNow = !!cancellation?.canCancel && (cancelRemainingMs === null || cancelRemainingMs > 0);
+  const cancelCountdownLabel = cancelRemainingMs !== null && cancelRemainingMs > 0
+    ? `${Math.floor(cancelRemainingMs / 60000)}:${String(Math.floor((cancelRemainingMs % 60000) / 1000)).padStart(2, '0')}`
+    : null;
+  void cancelTick; // re-render driver for the countdown
 
   // Fetch support settings
   useEffect(() => {
@@ -305,31 +328,33 @@ const BookingDetails = () => {
   // ... (keep handle methods same) ...
 
   const handleCancelBooking = async () => {
-    // Check if journey has started to determine if a fee applies
-    const journeyStarted = ['journey_started', 'visited', 'in_progress'].includes(booking.status?.toLowerCase());
-    const cancellationFee = booking.visitingCharges || 49;
+    if (!canCancelNow) {
+      toast.error('This booking can no longer be cancelled. Please contact support.');
+      return;
+    }
 
-    const modalTitle = journeyStarted ? 'Cancellation Fee Applies' : 'Cancel Booking';
-    const modalMessage = journeyStarted
-      ? `The service agent has already started their journey. Cancelling now will incur a fee of ₹${cancellationFee}, which will be deducted from your wallet or refund amount. Do you want to proceed?`
-      : 'Are you sure you want to cancel this booking? You will receive a full refund if applicable. This action cannot be undone.';
+    const isPaid = booking.paymentStatus === 'success';
+    const modalMessage = isPaid
+      ? `Are you sure you want to cancel this booking? The full amount of ₹${booking.finalAmount} will be refunded to your wallet instantly. This action cannot be undone.`
+      : 'Are you sure you want to cancel this booking? This action cannot be undone.';
 
     setConfirmDialog({
       isOpen: true,
-      title: modalTitle,
+      title: 'Cancel Booking',
       message: modalMessage,
       type: 'danger',
       onConfirm: async () => {
         try {
           const response = await bookingService.cancel(booking._id || booking.id, 'Cancelled by user');
           if (response.success) {
-            toast.success('Booking cancelled successfully');
+            toast.success(response.message || 'Booking cancelled successfully');
             loadBooking();
           } else {
             toast.error(response.message || 'Failed to cancel booking');
           }
         } catch (error) {
-          toast.error('Failed to cancel booking. Please try again.');
+          toast.error(error?.response?.data?.message || 'Failed to cancel booking. Please try again.');
+          loadBooking(); // window may have just expired - refresh button state
         }
       }
     });
@@ -1471,13 +1496,43 @@ const BookingDetails = () => {
                 </button>
 
                 {/* Cancel */}
-                {!['cancelled', 'completed', 'work_done'].includes(booking.status?.toLowerCase()) && (
-                  <button
-                    onClick={handleCancelBooking}
-                    className="col-span-2 py-3.5 sm:py-4 rounded-2xl text-red-600 font-bold text-xs sm:text-sm bg-red-50 border border-red-100 hover:bg-red-100 transition-colors active:scale-95 cursor-pointer"
-                  >
-                    Cancel Booking
-                  </button>
+                {!['cancelled', 'completed', 'work_done', 'rejected'].includes(booking.status?.toLowerCase()) && (
+                  canCancelNow ? (
+                    <button
+                      onClick={handleCancelBooking}
+                      className="col-span-2 py-3.5 sm:py-4 rounded-2xl text-red-600 font-bold text-xs sm:text-sm bg-red-50 border border-red-100 hover:bg-red-100 transition-colors active:scale-95 cursor-pointer"
+                    >
+                      Cancel Booking{cancelCountdownLabel ? ` (${cancelCountdownLabel} left)` : ''}
+                    </button>
+                  ) : (
+                    <div className="col-span-2 space-y-2">
+                      <button
+                        disabled
+                        className="w-full py-3.5 sm:py-4 rounded-2xl text-gray-400 font-bold text-xs sm:text-sm bg-gray-100 border border-gray-200 cursor-not-allowed"
+                      >
+                        Cancel Booking
+                      </button>
+                      <p className="text-[11px] sm:text-xs text-gray-500 text-center px-2">
+                        {cancellation?.reason === 'JOURNEY_STARTED'
+                          ? 'Your service agent has started the journey, so this booking can no longer be cancelled.'
+                          : 'The 3-minute free cancellation window has ended.'}{' '}
+                        Need help? Contact our support team.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (supportInfo.phone) {
+                            window.location.href = `tel:${supportInfo.phone}`;
+                          } else {
+                            window.location.href = `mailto:${supportInfo.email || 'help@Qwiklly.in'}?subject=Help with booking ${booking.bookingNumber || ''}`;
+                          }
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-[#720C3E] font-bold text-xs sm:text-sm bg-[#FFF7FA] border border-[#E8D9DF] hover:bg-[#FCEBF3] transition-colors active:scale-95 cursor-pointer"
+                      >
+                        <FiPhone className="w-4 h-4" /> Contact Support
+                      </button>
+                    </div>
+                  )
                 )}
               </div>
             </div>

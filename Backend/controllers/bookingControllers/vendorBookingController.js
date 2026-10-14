@@ -847,13 +847,30 @@ const startSelfJob = async (req, res) => {
     // Generate Visit OTP
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
-    // Update booking
-    booking.status = BOOKING_STATUS.JOURNEY_STARTED;
-    booking.journeyStartedAt = new Date();
-    booking.visitOtp = otp;
-    booking.assignedAt = new Date(); // Implicitly assigned to self now
+    // Update booking atomically: a customer cancel that lands first must win,
+    // otherwise this write would resurrect a cancelled (and refunded) booking.
+    const startedAt = new Date();
+    const startedBooking = await Booking.findOneAndUpdate(
+      { _id: booking._id, vendorId, status: { $in: allowed }, journeyStartedAt: null },
+      {
+        $set: {
+          status: BOOKING_STATUS.JOURNEY_STARTED,
+          journeyStartedAt: startedAt,
+          visitOtp: otp,
+          assignedAt: startedAt // Implicitly assigned to self now
+        }
+      },
+      { new: true }
+    );
 
-    await booking.save();
+    if (!startedBooking) {
+      return res.status(409).json({
+        success: false,
+        message: 'This booking is no longer available to start (it may have been cancelled by the customer).'
+      });
+    }
+    booking.status = startedBooking.status;
+    booking.journeyStartedAt = startedBooking.journeyStartedAt;
 
     // Notify user
     const { createNotification } = require('../notificationControllers/notificationController');

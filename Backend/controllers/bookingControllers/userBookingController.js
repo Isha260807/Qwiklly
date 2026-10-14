@@ -14,6 +14,7 @@ const { BOOKING_STATUS, PAYMENT_STATUS, MATCH_FAILURE_REASONS } = require('../..
 const { createNotification } = require('../notificationControllers/notificationController');
 const { sendNotificationToUser, sendNotificationToVendor } = require('../../services/firebaseAdmin');
 const { findAvailableVendorForSlot, findSlotCandidateVendors } = require('../../services/vendorMatchService');
+const { CANCELLATION_WINDOW_MS, USER_CANCELLABLE_STATUSES, getCancellationState } = require('../../utils/cancellationWindow');
 const { getSlotRules, isDateWithinWindow, isSlotStartAllowed } = require('../../services/slotSettingsService');
 
 const NORMAL_SLOT_BLOCKING_STATUSES = [
@@ -875,6 +876,9 @@ const getBookingById = async (req, res) => {
       bookingData.bill = bill;
     }
 
+    // Server-computed cancel eligibility (3-min window after vendor accepts)
+    bookingData.cancellation = getCancellationState(bookingData);
+
     res.status(200).json({
       success: true,
       data: bookingData
@@ -889,7 +893,15 @@ const getBookingById = async (req, res) => {
 };
 
 /**
- * Cancel booking
+ * Cancel booking (customer)
+ *
+ * Rules:
+ *  - Before any vendor accepts: cancel anytime.
+ *  - After a vendor accepts: cancel only within CANCELLATION_WINDOW (3 min from
+ *    acceptedAt) and only before the vendor starts the journey.
+ *  - A paid booking is refunded in full to the user's wallet.
+ * The status transition is a single atomic update so double taps / a racing
+ * journey-start can never produce a double refund or a cancelled+started booking.
  */
 const cancelBooking = async (req, res) => {
   try {
@@ -906,98 +918,70 @@ const cancelBooking = async (req, res) => {
     const { id } = req.params;
     const { cancellationReason } = req.body;
 
-    const booking = await Booking.findOne({ _id: id, userId });
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
 
-    if (!booking) {
-      return res.status(404).json({
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - CANCELLATION_WINDOW_MS);
+
+    // Atomic claim: only one request can move the booking to CANCELLED, and only
+    // while the cancellation rules still hold at this exact moment.
+    const previous = await Booking.findOneAndUpdate(
+      {
+        _id: id,
+        userId,
+        status: { $in: USER_CANCELLABLE_STATUSES },
+        journeyStartedAt: null,
+        $or: [{ acceptedAt: null }, { acceptedAt: { $gte: windowStart } }]
+      },
+      {
+        $set: {
+          status: BOOKING_STATUS.CANCELLED,
+          cancelledAt: now,
+          cancelledBy: 'user',
+          cancellationReason: cancellationReason || 'Cancelled by user'
+        }
+      },
+      { new: false }
+    ).lean();
+
+    if (!previous) {
+      const existing = await Booking.findOne({ _id: id, userId }).lean();
+      if (!existing) {
+        return res.status(404).json({ success: false, message: 'Booking not found' });
+      }
+      if (existing.status === BOOKING_STATUS.CANCELLED) {
+        return res.status(400).json({ success: false, message: 'Booking is already cancelled' });
+      }
+      const state = getCancellationState(existing, now);
+      const messages = {
+        WINDOW_EXPIRED: 'The 3-minute cancellation window has ended. Please contact support for help.',
+        JOURNEY_STARTED: 'The service agent has already started the journey, so this booking can no longer be cancelled. Please contact support.',
+        STATUS_NOT_CANCELLABLE: 'This booking can no longer be cancelled. Please contact support.'
+      };
+      return res.status(403).json({
         success: false,
-        message: 'Booking not found'
+        code: state.reason || 'NOT_CANCELLABLE',
+        message: messages[state.reason] || 'This booking cannot be cancelled.',
+        cancellation: state
       });
     }
 
-    // Check if booking can be cancelled
-    if (booking.status === BOOKING_STATUS.CANCELLED) {
-      return res.status(400).json({
-        success: false,
-        message: 'Booking is already cancelled'
-      });
-    }
+    // --- REFUND (full amount, to wallet) ---
+    const isPaid = previous.paymentStatus === PAYMENT_STATUS.SUCCESS;
+    const refundAmount = isPaid ? Number(previous.finalAmount || 0) : 0;
+    let refundMessage = 'Booking cancelled successfully.';
 
-    if (booking.status === BOOKING_STATUS.COMPLETED) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot cancel completed booking'
-      });
-    }
-
-    // --- REFUND & CANCELLATION FEE LOGIC ---
-    let refundAmount = 0;
-    let cancellationFee = 0;
-    let refundMessage = '';
-
-    // Fetch dynamic cancellation penalty from Settings
-    const Settings = require('../../models/Settings');
-    let settingsPenalty = 0; // Default — admin se set hoga
-    try {
-      const globalSettings = await Settings.findOne({ type: 'global' });
-      if (globalSettings && globalSettings.cancellationPenalty !== undefined) {
-        settingsPenalty = globalSettings.cancellationPenalty;
-      }
-    } catch (err) {
-      console.error('Error fetching settings for cancellation penalty:', err);
-    }
-
-    const hasStartedJourney = !!booking.journeyStartedAt;
-    const isPaid = booking.paymentStatus === PAYMENT_STATUS.SUCCESS;
-
-    if (hasStartedJourney) {
-      // SCENARIO: Worker/Vendor already started journey
-
-      const hasReached = !!booking.visitedAt || booking.status === 'visited';
-
-      if (hasReached) {
-        // Professional Reached -> Full Visiting Charges
-        cancellationFee = booking.visitingCharges || 49;
-      } else {
-        // Before Arrival (Journey Started) -> Dynamic Penalty
-        cancellationFee = settingsPenalty;
-      }
-
-      if (isPaid) {
-        // User paid upfront -> Refund (Total - Fee)
-        refundAmount = Math.max(0, booking.finalAmount - cancellationFee);
-        refundMessage = `Booking cancelled after ${hasReached ? 'professional arrival' : 'journey start'}. Refund of ₹${refundAmount} initiated (Cancellation Fee: ₹${cancellationFee} deducted).`;
-      } else {
-        // User hasn't paid (e.g. COD or pending) -> Add Penalty to Wallet for Next Booking
-        refundAmount = 0;
-        refundMessage = `Booking cancelled after ${hasReached ? 'professional arrival' : 'journey start'}. A cancellation fee of ₹${cancellationFee} has been added to your account and will be charged on your next booking.`;
-
-        // We will add this to user.wallet.penalty below
-      }
-    } else {
-      // SCENARIO: Cancelled before journey start
-      // Policy: Full Refund
-      cancellationFee = 0;
-
-      if (isPaid) {
-        refundAmount = booking.finalAmount;
-        refundMessage = `Booking cancelled successfully. Full refund of ₹${refundAmount} initiated to your wallet.`;
-      } else {
-        refundAmount = 0;
-        refundMessage = 'Booking cancelled successfully.';
-      }
-    }
-
-    // Update User Wallet
-    if (refundAmount > 0 || (cancellationFee > 0 && !isPaid)) {
-      const User = require('../../models/User');
-      const Transaction = require('../../models/Transaction');
-
-      const user = await User.findById(userId);
-
-      // 1. Process Refund
-      if (refundAmount > 0) {
-        user.wallet.balance = (user.wallet.balance || 0) + refundAmount;
+    if (refundAmount > 0) {
+      try {
+        const Transaction = require('../../models/Transaction');
+        const user = await User.findByIdAndUpdate(
+          userId,
+          { $inc: { 'wallet.balance': refundAmount } },
+          { new: true }
+        );
+        if (!user) throw new Error('User not found for refund');
 
         await Transaction.create({
           userId: user._id,
@@ -1005,42 +989,62 @@ const cancelBooking = async (req, res) => {
           amount: refundAmount,
           status: 'completed',
           paymentMethod: 'wallet',
-          description: `Refund for booking #${booking.bookingNumber}`,
-          bookingId: booking._id,
+          description: `Refund for booking #${previous.bookingNumber}`,
+          bookingId: previous._id,
           balanceAfter: user.wallet.balance
         });
 
-        booking.paymentStatus = PAYMENT_STATUS.REFUNDED;
+        await Booking.updateOne({ _id: previous._id }, { $set: { paymentStatus: PAYMENT_STATUS.REFUNDED } });
+        refundMessage = `Booking cancelled successfully. ₹${refundAmount} has been added to your wallet.`;
+      } catch (refundErr) {
+        console.error('[CancelBooking] Refund failed, reverting cancellation:', refundErr);
+        await Booking.updateOne(
+          { _id: previous._id, status: BOOKING_STATUS.CANCELLED },
+          {
+            $set: { status: previous.status },
+            $unset: { cancelledAt: '', cancelledBy: '', cancellationReason: '' }
+          }
+        );
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to refund your payment, so the booking was not cancelled. Please try again.'
+        });
       }
-
-      // 2. Process Cancellation Fee (Add to Penalty Bucket if Unpaid)
-      if (cancellationFee > 0 && !isPaid) {
-        // Use wallet.penalty bucket
-        user.wallet.penalty = (user.wallet.penalty || 0) + cancellationFee;
-        // Do NOT create a 'debit' transaction yet, as money hasn't left.
-        // Or create a 'penalty_added' transaction?
-        // User didn't ask for transaction record logic, just functionality.
-        // We will skip transaction for penalty addition to keep it simple,
-        // as the actual CHARGE happens on next booking creation.
-
-        console.log(`[CancelBooking] Added penalty of ₹${cancellationFee} to user ${userId}. Total Penalty: ${user.wallet.penalty}`);
-      }
-
-      await user.save();
     }
 
-    // Update booking status
-    booking.status = BOOKING_STATUS.CANCELLED;
-    booking.cancelledAt = new Date();
-    booking.cancelledBy = 'user';
-    booking.cancellationReason = cancellationReason || 'Cancelled by user';
+    const booking = await Booking.findById(previous._id);
 
-    await booking.save();
+    // ── Free the slot / vendor ──
+    // The unique slot index only covers active statuses, so the user's and the
+    // vendor's slot are released by the status change above. Reset the vendor.
+    try {
+      const BookingRequest = require('../../models/BookingRequest');
+      await BookingRequest.deleteMany({ bookingId: previous._id });
+
+      if (previous.vendorId) {
+        const stillBusy = await Booking.exists({
+          _id: { $ne: previous._id },
+          vendorId: previous.vendorId,
+          $or: [
+            { status: { $in: [BOOKING_STATUS.JOURNEY_STARTED, BOOKING_STATUS.VISITED, BOOKING_STATUS.IN_PROGRESS, BOOKING_STATUS.WORK_DONE] } },
+            {
+              bookingType: { $ne: 'scheduled' },
+              status: { $in: [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.AWAITING_PAYMENT] }
+            }
+          ]
+        });
+        if (!stillBusy) {
+          await Vendor.findByIdAndUpdate(previous.vendorId, { availability: 'AVAILABLE' });
+        }
+      }
+    } catch (releaseErr) {
+      console.error('[CancelBooking] Error releasing vendor/requests:', releaseErr);
+    }
 
     // ── Restore Coupon if Applicable ──
-    if (booking.coupon && booking.coupon.couponId) {
+    if (previous.coupon && previous.coupon.couponId) {
       try {
-        const usage = await CouponUsage.findOne({ bookingId: booking._id });
+        const usage = await CouponUsage.findOne({ bookingId: previous._id });
         if (usage) {
           if (usage.status === 'CONSUMED') {
             await Coupon.findByIdAndUpdate(usage.couponId, { $inc: { usedCount: -1 } });
@@ -1053,62 +1057,85 @@ const cancelBooking = async (req, res) => {
       }
     }
 
+    // ── Real-time updates ──
+    try {
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io) {
+        const payload = {
+          bookingId: previous._id,
+          status: BOOKING_STATUS.CANCELLED,
+          message: 'Booking cancelled by the customer'
+        };
+        io.to(`user_${userId}`).emit('booking_updated', payload);
+        if (previous.vendorId) {
+          io.to(`vendor_${previous.vendorId.toString()}`).emit('booking_updated', payload);
+          io.to(`vendor_${previous.vendorId.toString()}`).emit('booking_cancelled', payload);
+        }
+        // Vendors who were still being offered this job should drop it.
+        (previous.notifiedVendors || []).forEach((vid) => {
+          io.to(`vendor_${vid.toString()}`).emit('booking_taken', {
+            bookingId: previous._id.toString(),
+            message: 'This booking was cancelled by the customer.'
+          });
+        });
+      }
+    } catch (socketErr) {
+      console.error('[CancelBooking] Socket emit failed:', socketErr);
+    }
+
     // Send notification to user
     await createNotification({
       userId,
       type: 'booking_cancelled',
       title: 'Booking Cancelled',
-      message: refundMessage || `Your booking ${booking.bookingNumber} has been cancelled.`,
-      relatedId: booking._id,
+      message: refundMessage,
+      relatedId: previous._id,
       relatedType: 'booking',
       pushData: {
         type: 'booking_cancelled',
-        bookingId: booking._id.toString(),
-        link: `/user/booking/${booking._id}`
+        bookingId: previous._id.toString(),
+        link: `/user/booking/${previous._id}`
       }
     });
 
-    // Manual FCM push removed (handled by createNotification)
-
     // Send notification to vendor
-    if (booking.vendorId) {
+    if (previous.vendorId) {
       await createNotification({
-        vendorId: booking.vendorId,
+        vendorId: previous.vendorId,
         type: 'booking_cancelled',
         title: 'Booking Cancelled',
-        message: `Booking ${booking.bookingNumber} has been cancelled by the customer.`,
-        relatedId: booking._id,
+        message: `Booking ${previous.bookingNumber} has been cancelled by the customer.`,
+        relatedId: previous._id,
         relatedType: 'booking',
         pushData: {
           type: 'booking_cancelled',
-          bookingId: booking._id.toString(),
-          link: `/vendor/bookings/${booking._id}`
+          bookingId: previous._id.toString(),
+          link: `/vendor/bookings/${previous._id}`
         }
       });
-      // Manual FCM push removed
     }
 
     // Notify worker if assigned
-    if (booking.workerId) {
+    if (previous.workerId) {
       await createNotification({
-        workerId: booking.workerId,
+        workerId: previous.workerId,
         type: 'booking_cancelled',
         title: 'Booking Cancelled',
-        message: `Job ${booking.bookingNumber} has been cancelled by the customer.`,
-        relatedId: booking._id,
+        message: `Job ${previous.bookingNumber} has been cancelled by the customer.`,
+        relatedId: previous._id,
         relatedType: 'booking',
         pushData: {
           type: 'job_cancelled',
-          bookingId: booking._id.toString(),
-          link: `/worker/job/${booking._id}`
+          bookingId: previous._id.toString(),
+          link: `/worker/job/${previous._id}`
         }
       });
-      // Manual FCM push removed
     }
 
     res.status(200).json({
       success: true,
-      message: refundMessage || 'Booking cancelled successfully',
+      message: refundMessage,
       data: booking
     });
   } catch (error) {
@@ -1119,6 +1146,7 @@ const cancelBooking = async (req, res) => {
     });
   }
 };
+
 
 /**
  * Reschedule booking

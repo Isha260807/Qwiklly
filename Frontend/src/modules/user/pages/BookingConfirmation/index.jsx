@@ -388,12 +388,12 @@ const BookingConfirmation = () => {
   const handleCancelBooking = async () => {
     try {
       setLoading(true);
-      await bookingService.cancel(booking._id || booking.id, { reason: 'Cancelled during uncertain vendor search' });
-      toast.success('Booking cancelled successfully');
+      const response = await bookingService.cancel(booking._id || booking.id, 'Cancelled during vendor search');
+      toast.success(response?.message || 'Booking cancelled successfully');
       navigate('/user');
     } catch (error) {
       console.error(error);
-      toast.error('Failed to cancel booking');
+      toast.error(error?.response?.data?.message || 'Failed to cancel booking');
       setLoading(false);
     }
   };
