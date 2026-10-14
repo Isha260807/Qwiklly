@@ -233,9 +233,14 @@ const setVendorPresence = async ({
     };
   }
 
+  // An automatic reconnect must not free a vendor who is mid-job.
+  const keepBusyState = requestedOnline &&
+    normalizedSource === 'socket_connect' &&
+    ['ON_JOB', 'BUSY'].includes(vendor.availability);
+
   const update = {
     isOnline: requestedOnline,
-    availability: requestedOnline ? 'AVAILABLE' : 'OFFLINE',
+    availability: requestedOnline ? (keepBusyState ? vendor.availability : 'AVAILABLE') : 'OFFLINE',
     lastSeenAt: now
   };
 

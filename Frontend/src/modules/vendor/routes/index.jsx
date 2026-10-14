@@ -1,4 +1,5 @@
 import React, { lazy, Suspense } from 'react';
+import { isChunkLoadError, reloadOnceForNewVersion } from '../../../utils/chunkReload';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/common/PageTransition';
 import BottomNav from '../components/layout/BottomNav';
@@ -15,6 +16,10 @@ import { useVendorZonePresenceTracker } from '../hooks/useVendorZonePresence';
 const lazyLoad = (importFunc) => {
   return lazy(() => {
     return Promise.resolve(importFunc()).catch((error) => {
+      // Stale chunk after a new deploy: reload once to pick up the new build.
+      if (isChunkLoadError(error) && reloadOnceForNewVersion()) {
+        return new Promise(() => {}); // keep Suspense fallback while the page reloads
+      }
       console.error('Failed to load vendor page:', error);
       // Return a fallback component wrapped in a Promise
       return Promise.resolve({

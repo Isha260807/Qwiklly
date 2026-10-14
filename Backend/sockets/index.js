@@ -283,14 +283,28 @@ const initializeSocket = (server) => {
       } catch (error) { console.error('Error saving live location:', error); }
     });    socket.on('disconnect', () => {
       console.log(`Socket disconnected: ${socket.id}`);
-      // Update online status
+      // A closed/killed app is NOT the vendor going offline. Presence only changes
+      // on manual toggle, logout or confirmed zone exit, so the vendor keeps
+      // receiving booking requests (via push) while the app is closed.
       if (socket.userRole === 'VENDOR') {
-        updateVendorOnlineStatus(socket.userId, false, socket.id, socket.loginSessionId);
+        markVendorSocketClosed(socket.userId, socket.id, socket.loginSessionId);
       }
     });
   });
 
   console.log('Socket.io initialized successfully');
+};
+
+// Socket closed: forget the socket id and record last seen, but keep isOnline/availability.
+const markVendorSocketClosed = async (vendorId, socketId, sessionId = null) => {
+  try {
+    const Vendor = require('../models/Vendor');
+    const filter = { _id: vendorId, currentSocketId: socketId };
+    if (sessionId) filter.loginSessionId = sessionId;
+    await Vendor.updateOne(filter, { $set: { currentSocketId: null, lastSeenAt: new Date() } });
+  } catch (error) {
+    console.error('[Socket] Error recording vendor socket close:', error);
+  }
 };
 
 // Helper function to update vendor online status
