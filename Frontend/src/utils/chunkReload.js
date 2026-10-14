@@ -9,6 +9,19 @@ export const isChunkLoadError = (error) => {
   return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS|ChunkLoadError/i.test(msg);
 };
 
+// A plain location.reload() can be answered from the WebView's HTTP cache with the
+// same stale index.html. Navigating to the same URL with a unique query param
+// forces a network fetch of the HTML (and therefore the new chunk names).
+export const hardReload = () => {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('_v', String(Date.now()));
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
+};
+
 // Returns true when a reload was triggered.
 export const reloadOnceForNewVersion = () => {
   try {
@@ -19,6 +32,6 @@ export const reloadOnceForNewVersion = () => {
     // sessionStorage blocked: still reload once per call site is risky, so skip.
     return false;
   }
-  window.location.reload();
+  hardReload();
   return true;
 };

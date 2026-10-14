@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { isChunkLoadError, reloadOnceForNewVersion } from '../../../utils/chunkReload';
+import { isChunkLoadError, reloadOnceForNewVersion, hardReload } from '../../../utils/chunkReload';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/common/PageTransition';
 import BottomNav from '../components/layout/BottomNav';
@@ -29,7 +29,7 @@ const lazyLoad = (importFunc) => {
               <h2 className="text-xl font-bold text-gray-800 mb-2">Failed to load page</h2>
               <p className="text-gray-600 mb-4">Please refresh the page or try again later.</p>
               <button
-                onClick={() => window.location.reload()}
+                onClick={hardReload}
                 className="px-6 py-3 rounded-xl text-white font-semibold transition-all duration-300 hover:opacity-90"
                 style={{ backgroundColor: '#347989' }}
               >

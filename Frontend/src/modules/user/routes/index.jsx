@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { isChunkLoadError, reloadOnceForNewVersion } from '../../../utils/chunkReload';
+import { isChunkLoadError, reloadOnceForNewVersion, hardReload } from '../../../utils/chunkReload';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import PageTransition from '../components/common/PageTransition';
 import BottomNav from '../components/layout/BottomNav';
@@ -37,7 +37,7 @@ const lazyLoad = (importFunc) => {
 
               <div className="flex flex-col gap-3">
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={hardReload}
                   className="px-6 py-3 rounded-xl text-white font-bold transition-all duration-300 hover:opacity-90 active:scale-95 shadow-lg shadow-teal-500/20"
                   style={{ backgroundColor: '#00a6a6' }}
                 >
