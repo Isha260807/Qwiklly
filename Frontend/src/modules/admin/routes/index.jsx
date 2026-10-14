@@ -24,7 +24,7 @@ const Notifications = lazy(() => import('../pages/Notifications'));
 const Support = lazy(() => import('../pages/Support'));
 
 const Plans = lazy(() => import('../pages/Plans/Plans'));
-const Settlements = () => <Navigate to={'/admin/vendors/wallets'} replace />;
+const Settlements = lazy(() => import('../pages/Settlements'));
 const Reviews = lazy(() => import('../pages/Reviews'));
 const Banners = lazy(() => import('../pages/Banners'));
 const Coupons = lazy(() => import('../pages/Coupons'));
