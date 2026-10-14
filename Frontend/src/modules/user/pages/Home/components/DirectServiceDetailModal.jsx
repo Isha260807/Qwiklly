@@ -113,7 +113,7 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
         toast.error(response.message || 'Failed to add to cart');
       }
     } catch (error) {
-      toast.error('Failed to book service');
+      toast.error(error.response?.data?.message || error.message || 'Failed to book service');
     } finally {
       setAddingToCart(false);
     }

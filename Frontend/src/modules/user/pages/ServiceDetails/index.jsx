@@ -421,7 +421,7 @@ const ServiceDetails = () => {
       toast.success(cartItems.length + ' service' + (cartItems.length > 1 ? 's' : '') + ' added to cart');
       navigate('/user/cart');
     } catch (error) {
-      toast.error(error.message || 'Failed to add services to cart');
+      toast.error(error.response?.data?.message || error.message || 'Failed to add services to cart');
     } finally {
       setAddingToCart(false);
     }

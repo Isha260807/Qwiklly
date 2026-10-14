@@ -30,8 +30,6 @@ import CategoryModal from './components/CategoryModal';
 import SearchOverlay from './components/SearchOverlay';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
-import EnableLocationModal from '../../components/common/EnableLocationModal';
-import CitySelectorModal from '../../components/common/CitySelectorModal';
 import { useJsApiLoader } from '@react-google-maps/api';
 
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
@@ -189,9 +187,6 @@ const Home = () => {
   const { cartItems, cartCount, addToCart, updateItem, removeItem } = useCart();
   const { currentCity, cities, selectCity, loading: cityLoading } = useCity();
   const [isLocating, setIsLocating] = useState(false);
-  const [isEnableLocationModalOpen, setIsEnableLocationModalOpen] = useState(false);
-  const [isCityModalOpen, setIsCityModalOpen] = useState(false);
-  const [locationErrorType, setLocationErrorType] = useState(null);
   const autoLocationAttemptedRef = useRef(false);
 
   // Initialize Google Maps API for geocoding
@@ -212,10 +207,10 @@ const Home = () => {
     }
   }, []);
 
-  const fetchUserLocation = async (isManualRetry = false) => {
+  const fetchUserLocation = async () => {
     setIsLocating(true);
     try {
-      const pos = await flutterBridge.getCurrentLocation();
+      const pos = await flutterBridge.getCurrentLocation({ allowBrowserFallback: false });
       const lat = pos?.coords?.latitude || pos?.latitude;
       const lng = pos?.coords?.longitude || pos?.longitude;
 
@@ -249,20 +244,60 @@ const Home = () => {
           }
         }
       }
-
-      setIsEnableLocationModalOpen(false);
-      window.dispatchEvent(new CustomEvent('locationUpdate', { detail: { lat, lng, address: newAddress } }));
+      window.dispatchEvent(new CustomEvent('locationUpdate', { detail: { lat, lng, address: newAddress, handledByHome: true } }));
       toast.success(`Location detected: ${newCity || newAddress}`, { id: 'auto-location-toast' });
     } catch (err) {
-      console.warn('Auto location detection failed/unavailable:', err);
-      const isPermissionDenied = err?.code === 1;
-      setLocationErrorType(isPermissionDenied ? 'denied' : 'unavailable');
-      setIsEnableLocationModalOpen(true);
+      // Permission UI is owned by the Flutter host; web stays silent when native GPS is unavailable.
+      console.warn('Native location detection unavailable:', err);
     } finally {
       setIsLocating(false);
     }
   };
 
+  useEffect(() => {
+    const handleNativeLocationUpdate = async (event) => {
+      const detail = event.detail || {};
+      if (detail.handledByHome) return;
+
+      const latitude = Number(detail.lat ?? detail.coords?.latitude ?? detail.latitude);
+      const longitude = Number(detail.lng ?? detail.coords?.longitude ?? detail.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+      setUserCoords({ lat: latitude, lng: longitude });
+      localStorage.setItem('userLat', String(latitude));
+      localStorage.setItem('userLng', String(longitude));
+      localStorage.setItem('location_granted', 'true');
+
+      let resolvedAddress = detail.address || '';
+      let resolvedCity = detail.city || '';
+
+      if (!resolvedAddress || !resolvedCity) {
+        const geo = await reverseGeocodeCoords(latitude, longitude, cities);
+        resolvedAddress = resolvedAddress || geo?.address || '';
+        resolvedCity = resolvedCity || geo?.city || '';
+      }
+
+      if (resolvedAddress) {
+        setAddress(resolvedAddress);
+        localStorage.setItem('currentAddress', resolvedAddress);
+      }
+
+      if (resolvedCity) {
+        setDetectedCityName(resolvedCity);
+        localStorage.setItem('currentCity', resolvedCity);
+
+        const matched = (cities || []).find(city =>
+          city.name.toLowerCase() === resolvedCity.toLowerCase() ||
+          city.name.toLowerCase().includes(resolvedCity.toLowerCase()) ||
+          resolvedCity.toLowerCase().includes(city.name.toLowerCase())
+        );
+        if (matched) selectCity(matched);
+      }
+    };
+
+    window.addEventListener('locationUpdate', handleNativeLocationUpdate);
+    return () => window.removeEventListener('locationUpdate', handleNativeLocationUpdate);
+  }, [cities, selectCity]);
   // Automatically fetch GPS location if skipped from login or if not yet set
   useEffect(() => {
     const isExplicitAutoFetch = Boolean(location.state?.autoFetchLocation);
@@ -277,21 +312,6 @@ const Home = () => {
 
     fetchUserLocation();
   }, [location.state?.autoFetchLocation, cities, selectCity]);
-
-  const handleCitySelectedFromModal = (city) => {
-    if (city) {
-      selectCity(city);
-      const formatted = `${city.name}${city.state ? `, ${city.state}` : ''}`;
-      setAddress(formatted);
-      setDetectedCityName(city.name);
-      localStorage.setItem('currentAddress', formatted);
-      localStorage.setItem('currentCity', city.name);
-      localStorage.setItem('location_granted', 'true');
-      toast.success(`Location set to ${city.name}`);
-      setIsCityModalOpen(false);
-      setIsEnableLocationModalOpen(false);
-    }
-  };
 
   // Sync detectedCityName with Address on mount/update if not already set
   useEffect(() => {
@@ -651,7 +671,7 @@ const Home = () => {
         toast.error('Unable to add this service to cart.');
       }
     } catch (error) {
-      toast.error('Failed to add to cart. Please try again.');
+      toast.error(error.response?.data?.message || error.message || 'Failed to add to cart. Please try again.');
     }
   };
 
@@ -1258,25 +1278,6 @@ const Home = () => {
         service={selectedDirectService}
       />
 
-      {/* Enable Location Permission/Device Location Modal */}
-      <EnableLocationModal
-        isOpen={isEnableLocationModalOpen}
-        onClose={() => setIsEnableLocationModalOpen(false)}
-        onRetry={() => fetchUserLocation(true)}
-        onSelectManually={() => {
-          setIsEnableLocationModalOpen(false);
-          setIsCityModalOpen(true);
-        }}
-        isLoading={isLocating}
-        errorType={locationErrorType}
-      />
-
-      {/* City Selector Modal for manual selection fallback */}
-      <CitySelectorModal
-        isOpen={isCityModalOpen}
-        onClose={() => setIsCityModalOpen(false)}
-        onCitySelected={handleCitySelectedFromModal}
-      />
     </div>
   );
 };
