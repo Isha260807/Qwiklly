@@ -80,7 +80,7 @@ class FlutterBridge {
   /* ================================
         LOCATION (NATIVE + FALLBACK)
   ================================== */
-  async getCurrentLocation() {
+  async getCurrentLocation(options = {}) {
     // If inside Flutter app WebView, attempt native bridge first
     if (this.isFlutter) {
       try {
@@ -95,6 +95,10 @@ class FlutterBridge {
       } catch (nativeErr) {
         console.warn("[FlutterBridge] Native Flutter location error:", nativeErr);
       }
+    }
+
+    if (options.allowBrowserFallback === false) {
+      throw new Error('Native Flutter location is unavailable');
     }
 
     // Web Browser Geolocation fallback

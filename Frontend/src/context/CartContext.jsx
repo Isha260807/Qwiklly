@@ -7,6 +7,19 @@ import { cartService } from '../services/cartService';
  * No polling - cart count updates instantly on add/remove actions
  */
 
+const hasValidUserLocation = () => {
+  if (typeof window === 'undefined') return false;
+
+  const latitude = Number(window.localStorage.getItem('userLat'));
+  const longitude = Number(window.localStorage.getItem('userLng'));
+
+  return Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180;
+};
 const CartContext = createContext(null);
 
 export const CartProvider = ({ children }) => {
@@ -58,6 +71,18 @@ export const CartProvider = ({ children }) => {
 
   // Add item to cart - instant update + server sync
   const addToCart = useCallback(async (itemData) => {
+    if (!hasValidUserLocation()) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('requestLocationPrompt', { detail: { suppressToast: true } }));
+      }
+
+      return {
+        success: false,
+        code: 'LOCATION_REQUIRED',
+        message: 'Please enable or select your location before adding a service.'
+      };
+    }
+
     // Optimistic Update
     const tempId = `temp-${Date.now()}`;
     const tempItem = { ...itemData, _id: tempId, id: tempId };
@@ -83,6 +108,15 @@ export const CartProvider = ({ children }) => {
       // Revert on error
       setCartItems(prev => prev.filter(item => item._id !== tempId));
       setCartCount(prev => Math.max(0, prev - 1));
+
+      const backendError = error.response?.data;
+      if (backendError?.code === 'LOCATION_REQUIRED') {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('requestLocationPrompt', { detail: { suppressToast: true } }));
+        }
+        return backendError;
+      }
+
       throw error;
     }
   }, []);

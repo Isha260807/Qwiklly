@@ -181,7 +181,7 @@ const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCou
         toast.error(response.message || 'Failed to add to cart');
       }
     } catch (error) {
-      toast.error('Failed to add to cart');
+      toast.error(error.response?.data?.message || error.message || 'Failed to add to cart');
     }
   };
 

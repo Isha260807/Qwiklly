@@ -171,6 +171,15 @@ const addToCart = async (req, res) => {
     // restrictions prevent adding the item.
     const bookingLatitude = Number(latitude);
     const bookingLongitude = Number(longitude);
+
+    if (!Number.isFinite(bookingLatitude) || bookingLatitude < -90 || bookingLatitude > 90 ||
+      !Number.isFinite(bookingLongitude) || bookingLongitude < -180 || bookingLongitude > 180) {
+      return res.status(400).json({
+        success: false,
+        code: 'LOCATION_REQUIRED',
+        message: 'Please enable or select your location before adding a service to cart.'
+      });
+    }
     if (serviceId && Number.isFinite(bookingLatitude) && Number.isFinite(bookingLongitude)) {
       const serviceability = await checkBookingServiceability({
         serviceId,

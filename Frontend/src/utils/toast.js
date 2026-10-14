@@ -16,7 +16,7 @@ export const showToast = {
         duration: 3000,
         position: 'top-center',
         style: {
-          background: '#10b981',
+          background: '#720C3E',
           color: '#fff',
           borderRadius: '8px',
           padding: '12px 16px',
@@ -36,7 +36,7 @@ export const showToast = {
         duration: 4000,
         position: 'top-center',
         style: {
-          background: '#ef4444',
+          background: '#C0394B',
           color: '#fff',
           borderRadius: '8px',
           padding: '12px 16px',

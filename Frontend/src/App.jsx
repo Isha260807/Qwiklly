@@ -8,6 +8,7 @@ import { CartProvider } from './context/CartContext';
 import { CityProvider } from './context/CityContext';
 import { initializePushNotifications, setupForegroundNotificationHandler } from './services/pushNotificationService';
 import { LocationPermissionChecker, ScrollToTop } from './components/common';
+import { brand } from './theme';
 
 function App() {
   // Initialize push notifications on app load
@@ -64,13 +65,13 @@ function App() {
                   success: {
                     duration: 1000, // 1 second as requested
                     style: {
-                      background: '#10B981',
+                      background: brand.primary,
                     },
                   },
                   error: {
                     duration: 2000, // Reduced from 4000
                     style: {
-                      background: '#EF4444',
+                      background: brand.error,
                     },
                   },
                 }}
