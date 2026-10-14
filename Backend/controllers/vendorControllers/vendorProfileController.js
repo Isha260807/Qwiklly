@@ -6,6 +6,7 @@ const {
   syncVendorLocation,
   checkCanGoOnline
 } = require('../../services/vendorZonePresenceService');
+const { setVendorPresence } = require('../../services/vendorPresenceService');
 
 const PRESENCE_MESSAGES = {
   [PRESENCE_REASONS.NO_ZONE_ASSIGNED]: 'No service zone is assigned to you yet. Please contact admin.',
@@ -104,6 +105,7 @@ const toggleOnlineStatus = async (req, res) => {
 
     // Zone gate: going ONLINE requires being physically inside an assigned,
     // active zone. Going OFFLINE is always allowed.
+    let hasFreshLocation = false;
     if (newStatus) {
       const gate = await checkCanGoOnline(vendor, { lat, lng });
       if (!gate.allowed) {
@@ -116,6 +118,7 @@ const toggleOnlineStatus = async (req, res) => {
         });
       }
       if (gate.freshReading) {
+        hasFreshLocation = true;
         vendor.location = { lat, lng, updatedAt: new Date() };
         vendor.geoLocation = { type: 'Point', coordinates: [lng, lat] };
         vendor.currentZoneIds = gate.zones.map(z => z._id);
@@ -124,16 +127,23 @@ const toggleOnlineStatus = async (req, res) => {
       }
     }
 
-    vendor.isOnline = newStatus;
-    vendor.availability = newStatus ? 'AVAILABLE' : 'OFFLINE';
-    vendor.lastSeenAt = new Date();
-    await vendor.save();
+    if (hasFreshLocation) {
+      await vendor.save();
+    }
+
+    const presence = await setVendorPresence({
+      vendorId,
+      isOnline: newStatus,
+      source: 'manual_toggle',
+      eventId: req.headers['x-event-id'] || req.body.eventId
+    });
 
     res.status(200).json({
       success: true,
-      message: `You are now ${newStatus ? 'Online' : 'Offline'}`,
-      isOnline: vendor.isOnline,
-      availability: vendor.availability
+      message: `You are now ${presence.isOnline ? 'Online' : 'Offline'}`,
+      isOnline: presence.isOnline,
+      availability: presence.availability,
+      attendanceUpdated: newStatus === false
     });
   } catch (error) {
     console.error('Toggle online status error:', error);

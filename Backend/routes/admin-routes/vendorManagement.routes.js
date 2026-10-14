@@ -5,6 +5,7 @@ const { authenticate } = require('../../middleware/authMiddleware');
 const { isAdmin } = require('../../middleware/roleMiddleware');
 const {
   getAllVendors,
+  getVendorAttendance,
   getVendorDetails,
   approveVendor,
   rejectVendor,
@@ -27,6 +28,7 @@ const rejectVendorValidation = [
 router.get('/vendors', authenticate, isAdmin, getAllVendors);
 router.get('/vendors/bookings', authenticate, isAdmin, getAllVendorBookings);
 router.get('/vendors/payments', authenticate, isAdmin, getVendorPaymentsSummary);
+router.get('/vendors/:id/attendance', authenticate, isAdmin, getVendorAttendance);
 router.get('/vendors/:id', authenticate, isAdmin, getVendorDetails);
 router.post('/vendors/:id/approve', authenticate, isAdmin, approveVendor);
 router.post('/vendors/:id/reject', authenticate, isAdmin, rejectVendorValidation, rejectVendor);

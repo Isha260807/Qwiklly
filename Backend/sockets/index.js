@@ -271,7 +271,7 @@ const initializeSocket = (server) => {
       console.log(`Socket disconnected: ${socket.id}`);
       // Update online status
       if (socket.userRole === 'VENDOR') {
-        updateVendorOnlineStatus(socket.userId, false, null);
+        updateVendorOnlineStatus(socket.userId, false, socket.id);
       }
     });
   });
@@ -283,12 +283,8 @@ const initializeSocket = (server) => {
 const updateVendorOnlineStatus = async (vendorId, isOnline, socketId) => {
   try {
     const Vendor = require('../models/Vendor');
+    const { setVendorPresence } = require('../services/vendorPresenceService');
     const { setVendorOnline, setVendorAvailability } = require('../services/redisService');
-
-    const updateData = {
-      isOnline,
-      currentSocketId: socketId
-    };
 
     if (isOnline) {
       // Zone gate: a vendor whose last GPS sync placed them outside all of
@@ -300,20 +296,21 @@ const updateVendorOnlineStatus = async (vendorId, isOnline, socketId) => {
         console.log(`[Socket] Vendor ${vendorId} connected but is outside assigned zones - kept OFFLINE`);
         return;
       }
-      updateData.availability = 'AVAILABLE';
-    } else {
-      updateData.lastSeenAt = new Date();
-      updateData.availability = 'OFFLINE';
     }
 
-    // Update MongoDB
-    await Vendor.findByIdAndUpdate(vendorId, updateData);
+    const presence = await setVendorPresence({
+      vendorId,
+      isOnline,
+      source: isOnline ? 'socket_connect' : 'socket_disconnect',
+      eventId: `socket:${isOnline ? 'connect' : 'disconnect'}:${socketId || 'unknown'}`,
+      socketId
+    });
 
     // Update Redis cache (fast lookup)
-    await setVendorOnline(vendorId, isOnline);
-    await setVendorAvailability(vendorId, updateData.availability);
+    await setVendorOnline(vendorId, presence.isOnline);
+    await setVendorAvailability(vendorId, presence.availability);
 
-    console.log(`[Socket] Vendor ${vendorId} is now ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
+    console.log(`[Socket] Vendor ${vendorId} is now ${presence.isOnline ? 'ONLINE' : 'OFFLINE'}`);
   } catch (error) {
     console.error('[Socket] Error updating vendor online status:', error);
   }

@@ -38,8 +38,11 @@ const vendorService = {
 
   // Toggle online/offline status. Going online should include fresh coords
   // ({ lat, lng }) so the backend can verify the vendor is inside an assigned zone.
-  toggleOnlineStatus: async (isOnline, coords = null) => {
-    const payload = { isOnline };
+  toggleOnlineStatus: async (isOnline, coords = null, eventId = null) => {
+    const payload = {
+      isOnline,
+      eventId: eventId || `manual-toggle:${isOnline ? 'on' : 'off'}:${Date.now()}`
+    };
     if (coords && typeof coords.lat === 'number' && typeof coords.lng === 'number') {
       payload.lat = coords.lat;
       payload.lng = coords.lng;

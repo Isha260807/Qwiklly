@@ -5,6 +5,7 @@ const { sendOTP: sendSMSOTP } = require('../../services/smsService');
 const cloudinaryService = require('../../services/cloudinaryService');
 const { USER_ROLES, VENDOR_STATUS } = require('../../utils/constants');
 const { validationResult } = require('express-validator');
+const { setVendorPresence } = require('../../services/vendorPresenceService');
 
 /**
  * Send OTP for vendor registration/login
@@ -115,9 +116,13 @@ const verifyLogin = async (req, res) => {
       const loginSessionId = Date.now().toString();
       await Vendor.findByIdAndUpdate(vendor._id, { 
         loginSessionId,
-        isOnline: true,
-        availability: 'AVAILABLE',
         $set: { fcmTokens: [], fcmTokenMobile: [] } // Clear all old tokens to prevent ghost notifications
+      });
+      const presence = await setVendorPresence({
+        vendorId: vendor._id,
+        isOnline: true,
+        source: 'login',
+        eventId: `login:${vendor._id}:${loginSessionId}`
       });
 
       const tokens = generateTokenPair({
@@ -137,7 +142,9 @@ const verifyLogin = async (req, res) => {
           phone: vendor.phone,
           businessName: vendor.businessName,
           service: vendor.service,
-          approvalStatus: vendor.approvalStatus
+          approvalStatus: vendor.approvalStatus,
+          isOnline: presence.isOnline,
+          availability: presence.availability
         },
         ...tokens
       });
@@ -365,9 +372,13 @@ const login = async (req, res) => {
     const loginSessionId = Date.now().toString();
     await Vendor.findByIdAndUpdate(vendor._id, { 
       loginSessionId,
-      isOnline: true,
-      availability: 'AVAILABLE',
       $set: { fcmTokens: [], fcmTokenMobile: [] } // Clear all old tokens to prevent ghost notifications
+    });
+    const presence = await setVendorPresence({
+      vendorId: vendor._id,
+      isOnline: true,
+      source: 'login',
+      eventId: `login:${vendor._id}:${loginSessionId}`
     });
 
     // Generate JWT tokens
@@ -388,8 +399,8 @@ const login = async (req, res) => {
         businessName: vendor.businessName,
         service: vendor.service,
         approvalStatus: vendor.approvalStatus,
-        isOnline: true,
-        availability: 'AVAILABLE'
+        isOnline: presence.isOnline,
+        availability: presence.availability
       },
       ...tokens
     });
@@ -412,9 +423,15 @@ const logout = async (req, res) => {
     // Clear FCM tokens based on platform, reset Session ID and set OFFLINE
     if (req.user && req.user.id) {
       const updateQuery = platform === 'mobile'
-        ? { $set: { fcmTokenMobile: [], loginSessionId: null, isOnline: false, availability: 'OFFLINE' } }
-        : { $set: { fcmTokens: [], loginSessionId: null, isOnline: false, availability: 'OFFLINE' } };
+        ? { $set: { fcmTokenMobile: [], loginSessionId: null } }
+        : { $set: { fcmTokens: [], loginSessionId: null } };
 
+      await setVendorPresence({
+        vendorId: req.user.id,
+        isOnline: false,
+        source: 'logout',
+        eventId: req.headers['x-event-id'] || req.body.eventId || `logout:${req.user.id}:${req.user.loginSessionId || Date.now()}`
+      });
       await Vendor.findByIdAndUpdate(req.user.id, updateQuery);
       console.log(`[AUTH] ✅ ${platform} session, tokens & status set to OFFLINE for vendor: ${req.user.id}`);
     }

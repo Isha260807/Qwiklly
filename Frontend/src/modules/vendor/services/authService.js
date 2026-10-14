@@ -46,8 +46,9 @@ export const verifyLogin = async (data) => {
       localStorage.setItem('vendorAccessToken', response.data.accessToken);
       localStorage.setItem('vendorRefreshToken', response.data.refreshToken);
       localStorage.setItem('vendorData', JSON.stringify(response.data.vendor));
-      localStorage.setItem('vendorIsOnline', 'true');
-      window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: true } }));
+      const loginIsOnline = response.data.vendor?.isOnline === true;
+      localStorage.setItem('vendorIsOnline', String(loginIsOnline));
+      window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: loginIsOnline } }));
 
       // Notify Flutter about the login for mobile app FCM token handling
       notifyFlutterLogin(response.data);
@@ -79,8 +80,9 @@ export const login = async (credentials) => {
       localStorage.setItem('vendorAccessToken', response.data.accessToken);
       localStorage.setItem('vendorRefreshToken', response.data.refreshToken);
       localStorage.setItem('vendorData', JSON.stringify(response.data.vendor));
-      localStorage.setItem('vendorIsOnline', 'true');
-      window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: true } }));
+      const loginIsOnline = response.data.vendor?.isOnline === true;
+      localStorage.setItem('vendorIsOnline', String(loginIsOnline));
+      window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: loginIsOnline } }));
     }
 
     return response.data;

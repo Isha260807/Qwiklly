@@ -35,6 +35,7 @@ const AllVendors = () => {
   const [selectedZoneIds, setSelectedZoneIds] = useState([]);
   const [savingZones, setSavingZones] = useState(false);
   const [canEditVendorZones, setCanEditVendorZones] = useState(false);
+  const [vendorAttendance, setVendorAttendance] = useState(null);
 
   useEffect(() => {
     try {
@@ -156,6 +157,14 @@ const AllVendors = () => {
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h ago`;
     return `${Math.floor(hrs / 24)}d ago`;
+  };
+
+  const formatAttendanceTime = (date) => {
+    if (!date) return 'Not recorded';
+    return new Date(date).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   // Live zone presence derived from the vendor's last GPS sync
@@ -288,10 +297,20 @@ const AllVendors = () => {
     }
   };
 
-  const handleViewDetails = (vendor) => {
+  const handleViewDetails = async (vendor) => {
     setSelectedVendor(vendor);
     setSelectedZoneIds(vendor.zoneIds || []);
+    setVendorAttendance(null);
     setIsViewModalOpen(true);
+
+    try {
+      const response = await adminVendorService.getVendorAttendance(vendor.id);
+      if (response.success) {
+        setVendorAttendance(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading vendor attendance:', error);
+    }
   };
 
   const toggleZoneSelection = (zoneId) => {
@@ -694,6 +713,26 @@ const AllVendors = () => {
               </div>
             </div>
 
+            <div className='bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-3'>
+              <div className='flex items-center gap-2'>
+                <span className='text-blue-700'>Attendance</span>
+                <span className='text-xs font-bold text-gray-900'>Today</span>
+              </div>
+              <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
+                <div className='bg-white rounded-lg border border-blue-100 p-3'>
+                  <span className='text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1'>Day Start</span>
+                  <span className='text-sm font-bold text-gray-900'>{formatAttendanceTime(vendorAttendance?.attendance?.firstOnlineAt)}</span>
+                </div>
+                <div className='bg-white rounded-lg border border-blue-100 p-3'>
+                  <span className='text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1'>Day End</span>
+                  <span className='text-sm font-bold text-gray-900'>{formatAttendanceTime(vendorAttendance?.attendance?.lastOfflineAt)}</span>
+                </div>
+                <div className='bg-white rounded-lg border border-blue-100 p-3'>
+                  <span className='text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1'>Status</span>
+                  <span className='text-sm font-bold text-gray-900'>{vendorAttendance?.attendance?.dayStatus || 'Not started'}</span>
+                </div>
+              </div>
+            </div>
             {/* Zone Assignment - controls which zone this vendor receives bookings from */}
             <div className="bg-rose-50/60 rounded-xl p-4 border border-rose-100 space-y-3">
               <div className="flex items-center justify-between">

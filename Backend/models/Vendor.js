@@ -272,6 +272,13 @@ const vendorSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // Prevent login/socket reconnects from reopening attendance after the
+  // vendor has manually ended their day. This is cleared by a manual ON.
+  manualOffDateKey: {
+    type: String,
+    default: null,
+    index: true
+  },
   // Availability Status
   availability: {
     type: String,

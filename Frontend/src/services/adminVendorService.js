@@ -18,6 +18,16 @@ const adminVendorService = {
   },
 
   /**
+   * Get a vendor's daily attendance summary.
+   */
+  getVendorAttendance: async (id, date) => {
+    const response = await api.get(`/admin/vendors/${id}/attendance`, {
+      params: date ? { date } : undefined
+    });
+    return response.data;
+  },
+
+  /**
    * Approve vendor registration
    */
   approveVendor: async (id) => {

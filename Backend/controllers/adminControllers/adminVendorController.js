@@ -1,4 +1,5 @@
 const Vendor = require('../../models/Vendor');
+const VendorAttendance = require('../../models/VendorAttendance');
 const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
 const VendorSalaryEarning = require('../../models/VendorSalaryEarning');
@@ -6,6 +7,7 @@ const { validationResult } = require('express-validator');
 const { VENDOR_STATUS, BOOKING_STATUS, PAYMENT_STATUS, ADMIN_ROLES, ADMIN_PERMISSIONS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { getAdminVendorCityFilter, getAdminBookingCityFilter } = require('../../utils/adminCityScope');
+const { getPresenceDateKey, PRESENCE_TIME_ZONE } = require('../../services/vendorPresenceService');
 
 /**
  * Get all vendors with filters and pagination
@@ -69,6 +71,62 @@ const getAllVendors = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch vendors. Please try again.'
+    });
+  }
+};
+
+/**
+ * Get one vendor's daily attendance summary.
+ * Attendance is deliberately separate from booking/job metrics.
+ */
+const getVendorAttendance = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const requestedDate = req.query.date;
+    const dateKey = requestedDate || getPresenceDateKey();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date must be in YYYY-MM-DD format'
+      });
+    }
+
+    const vendor = await Vendor.findOne({
+      _id: id,
+      ...getAdminVendorCityFilter(req)
+    }).select('_id isOnline availability manualOffDateKey').lean();
+
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vendor not found'
+      });
+    }
+
+    const attendance = await VendorAttendance.findOne({
+      vendorId: vendor._id,
+      dateKey
+    }).lean();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        dateKey,
+        timezone: PRESENCE_TIME_ZONE,
+        attendance,
+        currentPresence: {
+          isOnline: Boolean(vendor.isOnline),
+          availability: vendor.availability || 'OFFLINE',
+          manualOffToday: vendor.manualOffDateKey === dateKey
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get vendor attendance error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch vendor attendance'
     });
   }
 };
@@ -615,6 +673,7 @@ const assignVendorZones = async (req, res) => {
 
 module.exports = {
   getAllVendors,
+  getVendorAttendance,
   getVendorDetails,
   approveVendor,
   rejectVendor,
