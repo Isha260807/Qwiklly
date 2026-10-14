@@ -109,12 +109,20 @@ const getVendorAttendance = async (req, res) => {
       dateKey
     }).lean();
 
+    const recentHistory = await VendorAttendance.find({
+      vendorId: vendor._id
+    })
+      .sort({ dateKey: -1 })
+      .limit(10)
+      .lean();
+
     res.status(200).json({
       success: true,
       data: {
         dateKey,
         timezone: PRESENCE_TIME_ZONE,
         attendance,
+        recentHistory: recentHistory || [],
         currentPresence: {
           isOnline: Boolean(vendor.isOnline),
           availability: vendor.availability || 'OFFLINE',
