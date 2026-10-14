@@ -8,6 +8,7 @@ import api from '../../../../services/api';
 import vendorService from '../../../../services/vendorService';
 import { toast } from 'react-hot-toast';
 import SOSModal from '../common/SOSModal';
+import LanguageToggle from '../../../../components/common/LanguageToggle';
 import { useZonePresence, getCurrentCoords, syncZonePresence } from '../../hooks/useVendorZonePresence';
 
 const Header = memo(({
@@ -203,6 +204,8 @@ const Header = memo(({
 
           {/* Right Area: SOS Button + Online/Offline Toggle + Search + Notifications */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            <LanguageToggle />
+
             {/* SOS Emergency Button */}
             <motion.button
               onClick={() => setShowSOSModal(true)}

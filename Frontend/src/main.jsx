@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { reloadOnceForNewVersion } from './utils/chunkReload'
+import { initTranslator } from './i18n/translator'
+
+// Applies the saved English/Hindi choice and keeps rendered content translated.
+initTranslator();
 
 // Vite fires this when a lazy chunk/CSS fails to load (usually a stale build after a deploy).
 window.addEventListener('vite:preloadError', (event) => {

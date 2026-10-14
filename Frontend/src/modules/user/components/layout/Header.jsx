@@ -4,6 +4,7 @@ import { HiChevronDown } from 'react-icons/hi';
 import { FiSearch, FiShoppingCart, FiSend } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import NotificationBell from '../common/NotificationBell';
+import LanguageToggle from '../../../../components/common/LanguageToggle';
 import { useCart } from '../../../../context/CartContext';
 import { testPushNotification } from '../../../../services/pushNotificationService';
 
@@ -70,6 +71,8 @@ const Header = ({ location, onLocationClick, onSearchClick }) => {
 
         {/* Right Side: Test Push, Search, Notification & Cart Button */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          <LanguageToggle className="bg-white/20 text-white hover:bg-white/30 border border-white/25" />
+
           {/* Test Push Button */}
           <button
             type="button"

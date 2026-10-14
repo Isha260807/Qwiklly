@@ -5,11 +5,12 @@ import { toast } from 'react-hot-toast';
 import { vendorTheme as themeColors } from '../../../../theme';
 import { vendorAuthService } from '../../../../services/authService';
 import Header from '../../components/layout/Header';
+import { setLanguage as setAppLanguage, getLanguage } from '../../../../i18n/translator';
 
 const Settings = () => {
   const navigate = useNavigate();
   const [settings, setSettings] = useState({
-    language: 'en',
+    language: getLanguage(),
   });
 
   useLayoutEffect(() => {
@@ -48,6 +49,7 @@ const Settings = () => {
     const updated = { ...settings, language: lang };
     setSettings(updated);
     localStorage.setItem('vendorSettings', JSON.stringify(updated));
+    setAppLanguage(lang);
     toast.success(`Language set to ${lang === 'en' ? 'English' : 'हिंदी'}`);
   };
 
@@ -122,6 +124,7 @@ const Settings = () => {
             ].map((lang) => (
               <button
                 key={lang.code}
+                translate="no"
                 onClick={() => handleLanguageChange(lang.code)}
                 className={`py-2.5 px-4 rounded-xl text-center font-semibold text-sm transition-all duration-200 cursor-pointer ${
                   settings.language === lang.code
