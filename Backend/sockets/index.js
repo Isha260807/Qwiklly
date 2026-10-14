@@ -1,6 +1,5 @@
 // Socket.io initialization
 const { Server } = require('socket.io');
-const { authenticateSocket } = require('../middleware/authMiddleware');
 const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 
@@ -91,8 +90,23 @@ const initializeSocket = (server) => {
         if (!admin.isActive) return next(new Error('ADMIN_BLOCKED'));
       }
 
+      if (String(decoded.role).toUpperCase() === 'VENDOR') {
+        const Vendor = require('../models/Vendor');
+        const vendor = await Vendor.findById(decoded.userId)
+          .select('loginSessionId isActive approvalStatus')
+          .lean();
+        if (!vendor) return next(new Error('VENDOR_NOT_FOUND'));
+        if (!vendor.isActive || ['rejected', 'suspended'].includes(vendor.approvalStatus)) {
+          return next(new Error('VENDOR_BLOCKED'));
+        }
+        if (!decoded.loginSessionId || !vendor.loginSessionId || vendor.loginSessionId !== decoded.loginSessionId) {
+          return next(new Error('VENDOR_SESSION_REPLACED'));
+        }
+      }
+
       socket.userId = decoded.userId;
       socket.userRole = decoded.role;
+      socket.loginSessionId = decoded.loginSessionId || null;
 
       next();
     } catch (error) {
@@ -109,7 +123,7 @@ const initializeSocket = (server) => {
     } else if (socket.userRole === 'VENDOR') {
       socket.join(`vendor_${socket.userId.toString()}`);
       // Update vendor online status
-      updateVendorOnlineStatus(socket.userId, true, socket.id);
+      updateVendorOnlineStatus(socket.userId, true, socket.id, socket.loginSessionId);
     } else if (socket.userRole === 'WORKER') {
       socket.join(`worker_${socket.userId.toString()}`);
       // Update worker online status
@@ -271,7 +285,7 @@ const initializeSocket = (server) => {
       console.log(`Socket disconnected: ${socket.id}`);
       // Update online status
       if (socket.userRole === 'VENDOR') {
-        updateVendorOnlineStatus(socket.userId, false, socket.id);
+        updateVendorOnlineStatus(socket.userId, false, socket.id, socket.loginSessionId);
       }
     });
   });
@@ -280,30 +294,40 @@ const initializeSocket = (server) => {
 };
 
 // Helper function to update vendor online status
-const updateVendorOnlineStatus = async (vendorId, isOnline, socketId) => {
+const updateVendorOnlineStatus = async (vendorId, isOnline, socketId, sessionId = null) => {
   try {
     const Vendor = require('../models/Vendor');
     const { setVendorPresence } = require('../services/vendorPresenceService');
     const { setVendorOnline, setVendorAvailability } = require('../services/redisService');
 
+    const current = await Vendor.findById(vendorId)
+      .select('currentZoneIds loginSessionId currentSocketId')
+      .lean();
+    if (!current) return;
+
+    // A socket from a replaced login must not update presence or socket state.
+    if (sessionId && current.loginSessionId !== sessionId) return;
+
     if (isOnline) {
       // Zone gate: a vendor whose last GPS sync placed them outside all of
       // their assigned zones must not be auto-marked online on connect.
-      const current = await Vendor.findById(vendorId).select('currentZoneIds').lean();
-      const inAssignedZone = Array.isArray(current?.currentZoneIds) && current.currentZoneIds.length > 0;
+      const inAssignedZone = Array.isArray(current.currentZoneIds) && current.currentZoneIds.length > 0;
       if (!inAssignedZone) {
-        await Vendor.findByIdAndUpdate(vendorId, { currentSocketId: socketId });
-        console.log(`[Socket] Vendor ${vendorId} connected but is outside assigned zones - kept OFFLINE`);
+        const vendorFilter = sessionId
+          ? { _id: vendorId, loginSessionId: sessionId }
+          : { _id: vendorId };
+        await Vendor.findOneAndUpdate(vendorFilter, { $set: { currentSocketId: socketId } });
+        console.log('[Socket] Vendor ' + vendorId + ' connected but is outside assigned zones - kept OFFLINE');
         return;
       }
     }
-
     const presence = await setVendorPresence({
       vendorId,
       isOnline,
       source: isOnline ? 'socket_connect' : 'socket_disconnect',
-      eventId: `socket:${isOnline ? 'connect' : 'disconnect'}:${socketId || 'unknown'}`,
-      socketId
+      eventId: 'socket:' + (isOnline ? 'connect' : 'disconnect') + ':' + (socketId || 'unknown'),
+      socketId,
+      sessionId
     });
 
     // Update Redis cache (fast lookup)

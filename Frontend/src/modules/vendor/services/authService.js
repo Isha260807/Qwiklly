@@ -46,6 +46,7 @@ export const verifyLogin = async (data) => {
       localStorage.setItem('vendorAccessToken', response.data.accessToken);
       localStorage.setItem('vendorRefreshToken', response.data.refreshToken);
       localStorage.setItem('vendorData', JSON.stringify(response.data.vendor));
+      window.dispatchEvent(new Event('vendor_session_authenticated'));
       const loginIsOnline = response.data.vendor?.isOnline === true;
       localStorage.setItem('vendorIsOnline', String(loginIsOnline));
       window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: loginIsOnline } }));
@@ -80,6 +81,7 @@ export const login = async (credentials) => {
       localStorage.setItem('vendorAccessToken', response.data.accessToken);
       localStorage.setItem('vendorRefreshToken', response.data.refreshToken);
       localStorage.setItem('vendorData', JSON.stringify(response.data.vendor));
+      window.dispatchEvent(new Event('vendor_session_authenticated'));
       const loginIsOnline = response.data.vendor?.isOnline === true;
       localStorage.setItem('vendorIsOnline', String(loginIsOnline));
       window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: loginIsOnline } }));

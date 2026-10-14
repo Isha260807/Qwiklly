@@ -224,6 +224,7 @@ const VendorSignup = () => {
             localStorage.setItem('vendorAccessToken', response.accessToken);
             localStorage.setItem('vendorRefreshToken', response.refreshToken);
             localStorage.setItem('vendorData', JSON.stringify(response.vendor));
+            window.dispatchEvent(new Event('vendor_session_authenticated'));
             toast.success(
               <div className="flex flex-col">
                 <span className="font-bold">Application Submitted!</span>

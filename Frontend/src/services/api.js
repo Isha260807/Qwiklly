@@ -77,6 +77,26 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+    const requestRole = getTokenKeys(originalRequest?.url).role;
+    const vendorSessionReplaced =
+      requestRole === 'vendor' &&
+      error.response?.status === 401 &&
+      (
+        error.response?.data?.code === 'VENDOR_SESSION_REPLACED' ||
+        /another device|no longer active/i.test(error.response?.data?.message || '')
+      );
+
+    // A replaced vendor session must not enter token refresh; its refresh token
+    // is invalid for the new device as well.
+    if (vendorSessionReplaced) {
+      processQueue(error, null);
+      isRefreshing = false;
+      toast.error('Your account was logged in on another device. Please login again.', {
+        id: 'vendor-session-replaced'
+      });
+      handleLogout('vendor');
+      return Promise.reject(error);
+    }
 
     // If error is 401 and we haven't tried to refresh yet
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -142,6 +162,18 @@ api.interceptors.response.use(
         // Refresh failed, logout
         processQueue(refreshError, null);
         isRefreshing = false;
+        const vendorRefreshSessionReplaced =
+          role === 'vendor' &&
+          refreshError.response?.status === 401 &&
+          (
+            refreshError.response?.data?.code === 'VENDOR_SESSION_REPLACED' ||
+            /another device|no longer active/i.test(refreshError.response?.data?.message || '')
+          );
+        if (vendorRefreshSessionReplaced) {
+          toast.error('Your account was logged in on another device. Please login again.', {
+            id: 'vendor-session-replaced'
+          });
+        }
         if (role === 'admin' && refreshError.response?.data?.code === 'ADMIN_DELETED') {
           toast.error('Your profile was deleted by admin.', { id: 'admin-deleted' });
         } else if (role === 'admin' && refreshError.response?.data?.code === 'ADMIN_BLOCKED') {
@@ -211,6 +243,8 @@ export const handleLogout = (role = null) => {
   };
 
   if (role === 'vendor') {
+    window.dispatchEvent(new Event('vendor_session_invalidated'));
+
     clearTokens('vendor');
     dispatchRedirect('/vendor/login');
   } else if (role === 'worker') {

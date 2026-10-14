@@ -72,6 +72,7 @@ const SOCKET_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '') || '
 
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
+  const [authVersion, setAuthVersion] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -85,6 +86,14 @@ export const SocketProvider = ({ children }) => {
   };
 
   const userType = getUserType(location.pathname);
+
+  // Login happens in the same browser tab, so storage changes alone do not
+  // rerun the socket effect. Bump the connection version after authentication.
+  useEffect(() => {
+    const handleVendorAuthenticated = () => setAuthVersion(version => version + 1);
+    window.addEventListener('vendor_session_authenticated', handleVendorAuthenticated);
+    return () => window.removeEventListener('vendor_session_authenticated', handleVendorAuthenticated);
+  }, []);
 
   useEffect(() => {
     if (!userType) {
@@ -168,6 +177,21 @@ export const SocketProvider = ({ children }) => {
     };
     const handleBlockedAdmin = () => handleAdminForcedLogout('blocked');
     const handleDeletedAdmin = () => handleAdminForcedLogout('deleted');
+    let vendorForcedLogoutHandled = false;
+    const handleVendorForcedLogout = (message = 'Your account was logged in on another device. Please login again.') => {
+      if (vendorForcedLogoutHandled) return;
+      vendorForcedLogoutHandled = true;
+      toast.error(message, { id: 'vendor-session-replaced' });
+      handleLogout('vendor');
+      newSocket.disconnect();
+    };
+    const handleVendorSessionReplaced = (data = {}) => {
+      handleVendorForcedLogout(data.message);
+    };
+    const handleVendorSessionInvalidated = () => {
+      newSocket.disconnect();
+    };
+
 
     newSocket.on('connect', () => {
       // console.log(`✅ ${userType.toUpperCase()} App Socket connected`);
@@ -206,13 +230,15 @@ export const SocketProvider = ({ children }) => {
     });
 
     newSocket.on('connect_error', (err) => {
+      const errorMessage = err?.message || '';
       if (userType === 'admin') {
-        const errorMessage = err?.message || '';
         if (/ADMIN_DELETED|profile was deleted by admin/i.test(errorMessage)) {
           handleDeletedAdmin();
         } else if (/ADMIN_BLOCKED|blocked by admin/i.test(errorMessage)) {
           handleBlockedAdmin();
         }
+      } else if (userType === 'vendor' && /VENDOR_SESSION_REPLACED|another device|no longer active/i.test(errorMessage)) {
+        handleVendorForcedLogout('Your account was logged in on another device. Please login again.');
       }
     });
 
@@ -221,6 +247,10 @@ export const SocketProvider = ({ children }) => {
       newSocket.on('admin_profile_deleted', handleDeletedAdmin);
     }
 
+    if (userType === 'vendor') {
+      newSocket.on('vendor_session_replaced', handleVendorSessionReplaced);
+      window.addEventListener('vendor_session_invalidated', handleVendorSessionInvalidated);
+    }
     // Listen for Emergency SOS Alerts (Admin)
     newSocket.on('emergency_sos', (data) => {
       console.log('🚨 EMERGENCY SOS ALERT RECEIVED:', data);
@@ -467,9 +497,13 @@ export const SocketProvider = ({ children }) => {
     return () => {
       newSocket.off('admin_blocked', handleBlockedAdmin);
       newSocket.off('admin_profile_deleted', handleDeletedAdmin);
+      if (userType === 'vendor') {
+        newSocket.off('vendor_session_replaced', handleVendorSessionReplaced);
+        window.removeEventListener('vendor_session_invalidated', handleVendorSessionInvalidated);
+      }
       newSocket.disconnect();
     };
-  }, [userType]); // Only re-run if userType changes. Navigate is stable.
+  }, [userType, authVersion]);
 
   return (
     <SocketContext.Provider value={socket}>

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const Vendor = require('../../models/Vendor');
 const { generateOTP, hashOTP, storeOTP, verifyOTP, checkRateLimit } = require('../../utils/redisOtp.util');
 const { generateTokenPair, verifyRefreshToken, generateVerificationToken, verifyVerificationToken } = require('../../utils/tokenService');
@@ -6,6 +7,42 @@ const cloudinaryService = require('../../services/cloudinaryService');
 const { USER_ROLES, VENDOR_STATUS } = require('../../utils/constants');
 const { validationResult } = require('express-validator');
 const { setVendorPresence } = require('../../services/vendorPresenceService');
+const createVendorSessionId = () => crypto.randomBytes(32).toString('hex');
+
+const notifyPreviousVendorSession = (vendorId, loginSessionId) => {
+  try {
+    const { getIO } = require('../../sockets');
+    const io = getIO();
+    const vendorRoom = 'vendor_' + vendorId.toString();
+    io.to(vendorRoom).emit('vendor_session_replaced', {
+      code: 'VENDOR_SESSION_REPLACED',
+      message: 'Your account was logged in on another device.',
+      sessionId: loginSessionId
+    });
+
+    // Also close stale server-side sockets in case the browser misses the event.
+    void io.in(vendorRoom).fetchSockets()
+      .then(sockets => sockets.forEach(sessionSocket => {
+        if (sessionSocket.loginSessionId !== loginSessionId) {
+          sessionSocket.disconnect(true);
+        }
+      }))
+      .catch(error => console.error('[AUTH] Failed to close previous vendor socket:', error));
+  } catch (error) {
+    if (!/not initialized/i.test(error?.message || '')) {
+      console.error('[AUTH] Failed to notify previous vendor session:', error);
+    }
+  }
+};
+
+const createVendorLoginSession = async (vendorId) => {
+  const loginSessionId = createVendorSessionId();
+  await Vendor.findByIdAndUpdate(vendorId, {
+    $set: { loginSessionId, fcmTokens: [], fcmTokenMobile: [] }
+  });
+  notifyPreviousVendorSession(vendorId, loginSessionId);
+  return loginSessionId;
+};
 
 /**
  * Send OTP for vendor registration/login
@@ -112,16 +149,13 @@ const verifyLogin = async (req, res) => {
         return res.status(403).json({ success: false, message: 'Your vendor account has been deactivated. Please contact support.' });
       }
 
-      // SINGLE DEVICE LOGIN: Update Session ID & Clear OLD FCM tokens & Set Online
-      const loginSessionId = Date.now().toString();
-      await Vendor.findByIdAndUpdate(vendor._id, { 
-        loginSessionId,
-        $set: { fcmTokens: [], fcmTokenMobile: [] } // Clear all old tokens to prevent ghost notifications
-      });
+      const loginSessionId = await createVendorLoginSession(vendor._id);
+
       const presence = await setVendorPresence({
         vendorId: vendor._id,
         isOnline: true,
         source: 'login',
+        sessionId: loginSessionId,
         eventId: `login:${vendor._id}:${loginSessionId}`
       });
 
@@ -282,8 +316,8 @@ const register = async (req, res) => {
       }
     })();
 
-    const loginSessionId = Date.now().toString();
-    await Vendor.findByIdAndUpdate(vendor._id, { loginSessionId });
+    const loginSessionId = await createVendorLoginSession(vendor._id);
+
 
     const tokens = generateTokenPair({
       userId: vendor._id,
@@ -368,16 +402,12 @@ const login = async (req, res) => {
       });
     }
 
-    // SINGLE DEVICE LOGIN: Update Session ID & Clear OLD FCM tokens & Set Online
-    const loginSessionId = Date.now().toString();
-    await Vendor.findByIdAndUpdate(vendor._id, { 
-      loginSessionId,
-      $set: { fcmTokens: [], fcmTokenMobile: [] } // Clear all old tokens to prevent ghost notifications
-    });
+    const loginSessionId = await createVendorLoginSession(vendor._id);
     const presence = await setVendorPresence({
       vendorId: vendor._id,
       isOnline: true,
       source: 'login',
+      sessionId: loginSessionId,
       eventId: `login:${vendor._id}:${loginSessionId}`
     });
 
@@ -420,22 +450,49 @@ const logout = async (req, res) => {
   try {
     const { platform = 'web' } = req.body;
 
-    // Clear FCM tokens based on platform, reset Session ID and set OFFLINE
-    if (req.user && req.user.id) {
-      const updateQuery = platform === 'mobile'
-        ? { $set: { fcmTokenMobile: [], loginSessionId: null } }
-        : { $set: { fcmTokens: [], loginSessionId: null } };
-
-      await setVendorPresence({
-        vendorId: req.user.id,
-        isOnline: false,
-        source: 'logout',
-        eventId: req.headers['x-event-id'] || req.body.eventId || `logout:${req.user.id}:${req.user.loginSessionId || Date.now()}`
+    // Only the currently active session may log the vendor out.
+    if (!req.user?.id || !req.authSessionId) {
+      return res.status(401).json({
+        success: false,
+        code: 'VENDOR_SESSION_REPLACED',
+        message: 'Your vendor session is no longer active. Please login again.'
       });
-      await Vendor.findByIdAndUpdate(req.user.id, updateQuery);
-      console.log(`[AUTH] ✅ ${platform} session, tokens & status set to OFFLINE for vendor: ${req.user.id}`);
     }
 
+    const presence = await setVendorPresence({
+      vendorId: req.user.id,
+      isOnline: false,
+      source: 'logout',
+      sessionId: req.authSessionId,
+      eventId: req.headers['x-event-id'] || req.body.eventId || 'logout:' + req.user.id + ':' + req.authSessionId
+    });
+
+    if (presence.reason === 'STALE_SESSION') {
+      return res.status(401).json({
+        success: false,
+        code: 'VENDOR_SESSION_REPLACED',
+        message: 'Your vendor session is no longer active. Please login again.'
+      });
+    }
+
+    const updateFields = platform === 'mobile'
+      ? { fcmTokenMobile: [], loginSessionId: null }
+      : { fcmTokens: [], loginSessionId: null };
+    const clearedVendor = await Vendor.findOneAndUpdate(
+      { _id: req.user.id, loginSessionId: req.authSessionId },
+      { $set: updateFields },
+      { new: false }
+    ).select('_id');
+
+    if (!clearedVendor) {
+      return res.status(401).json({
+        success: false,
+        code: 'VENDOR_SESSION_REPLACED',
+        message: 'Your vendor session is no longer active. Please login again.'
+      });
+    }
+
+    console.log('[AUTH] ' + platform + ' session cleared and vendor set OFFLINE: ' + req.user.id);
     res.status(200).json({
       success: true,
       message: 'Logged out successfully'
@@ -489,14 +546,14 @@ const refreshToken = async (req, res) => {
       });
     }
 
-    // Verify Session ID for Vendor
-    if (decoded.loginSessionId !== vendor.loginSessionId) {
+    // A refresh token is valid only for the currently active vendor session.
+    if (!decoded.loginSessionId || !vendor.loginSessionId || decoded.loginSessionId !== vendor.loginSessionId) {
       return res.status(401).json({
         success: false,
-        message: 'Account logged in on a new device. Please login again.'
+        code: 'VENDOR_SESSION_REPLACED',
+        message: 'Your account was logged in on another device. Please login again.'
       });
     }
-
     // Generate new token pair with same session ID
     const tokens = generateTokenPair({
       userId: vendor._id,

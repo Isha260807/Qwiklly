@@ -120,7 +120,8 @@ const setVendorPresence = async ({
   isOnline,
   source,
   eventId,
-  socketId = null
+  socketId = null,
+  sessionId = null
 }) => {
   const now = new Date();
   const dateKey = getPresenceDateKey(now);
@@ -144,7 +145,7 @@ const setVendorPresence = async ({
   }
 
   const vendor = await Vendor.findById(vendorId)
-    .select('isOnline availability manualOffDateKey currentSocketId')
+    .select('isOnline availability manualOffDateKey currentSocketId loginSessionId')
     .lean();
   if (!vendor) {
     const error = new Error('Vendor not found');
@@ -152,6 +153,29 @@ const setVendorPresence = async ({
     throw error;
   }
 
+  // A stale token/session cannot change the current vendor presence.
+  if (sessionId && vendor.loginSessionId !== sessionId) {
+    const state = getVendorState(vendor);
+    await savePresenceEvent({
+      vendorId,
+      eventId: normalizedEventId,
+      source: normalizedSource,
+      requestedOnline,
+      accepted: false,
+      reason: 'STALE_SESSION',
+      effectiveOnline: state.isOnline,
+      dateKey,
+      occurredAt: now
+    });
+    return {
+      duplicate: false,
+      accepted: false,
+      ignored: true,
+      reason: 'STALE_SESSION',
+      eventId: normalizedEventId,
+      ...state
+    };
+  }
   // A stale socket cannot take a newer socket offline.
   if (
     normalizedSource === 'socket_disconnect' &&
@@ -228,11 +252,40 @@ const setVendorPresence = async ({
     update.manualOffDateKey = dateKey;
   }
 
-  const savedVendor = await Vendor.findByIdAndUpdate(
-    vendorId,
+  const presenceFilter = sessionId
+    ? { _id: vendorId, loginSessionId: sessionId }
+    : { _id: vendorId };
+  const savedVendor = await Vendor.findOneAndUpdate(
+    presenceFilter,
     { $set: update },
     { new: true }
   ).select('isOnline availability currentSocketId');
+
+  if (!savedVendor) {
+    const latestVendor = await Vendor.findById(vendorId)
+      .select('isOnline availability')
+      .lean();
+    const state = getVendorState(latestVendor);
+    await savePresenceEvent({
+      vendorId,
+      eventId: normalizedEventId,
+      source: normalizedSource,
+      requestedOnline,
+      accepted: false,
+      reason: 'STALE_SESSION',
+      effectiveOnline: state.isOnline,
+      dateKey,
+      occurredAt: now
+    });
+    return {
+      duplicate: false,
+      accepted: false,
+      ignored: true,
+      reason: 'STALE_SESSION',
+      eventId: normalizedEventId,
+      ...state
+    };
+  }
 
   const state = getVendorState(savedVendor);
   if (requestedOnline) {

@@ -75,11 +75,12 @@ const authenticate = async (req, res, next) => {
           });
         }
 
-        // SINGLE DEVICE LOGOUT Logic: Check if token's session ID matches DB
-        if (user && user.loginSessionId && decoded.loginSessionId && user.loginSessionId !== decoded.loginSessionId) {
+        // Every vendor token must match the one active session stored in the database.
+        if (!decoded.loginSessionId || !user.loginSessionId || user.loginSessionId !== decoded.loginSessionId) {
           return res.status(401).json({
             success: false,
-            message: 'Account logged in on another device. Please login again.'
+            code: 'VENDOR_SESSION_REPLACED',
+            message: 'Your account was logged in on another device. Please login again.'
           });
         }
         break;
@@ -126,6 +127,7 @@ const authenticate = async (req, res, next) => {
     req.user = { ...user, id: user._id.toString() };
     req.userId = decoded.userId;
     req.userRole = decoded.role;
+    req.authSessionId = decoded.loginSessionId || null;
 
     next();
   } catch (error) {
