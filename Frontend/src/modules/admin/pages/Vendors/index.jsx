@@ -5,6 +5,7 @@ import {
   FiUsers,
   FiBriefcase,
   FiActivity,
+  FiCalendar,
   FiChevronRight
 } from 'react-icons/fi';
 
@@ -13,12 +14,14 @@ import {
 import AllVendors from './AllVendors';
 import VendorBookings from './VendorBookings';
 import VendorAnalytics from './VendorAnalytics';
+import DailyAttendance from './DailyAttendance';
 
 const Vendors = () => {
   const location = useLocation();
 
   const navTabs = [
     { name: 'All Vendors', path: '/admin/vendors/all', icon: FiUsers },
+    { name: 'Daily Attendance', path: '/admin/vendors/attendance', icon: FiCalendar },
     { name: 'Vendor Bookings', path: '/admin/vendors/bookings', icon: FiBriefcase },
     { name: 'Vendor Analytics', path: '/admin/vendors/analytics', icon: FiActivity },
   ];
@@ -40,6 +43,7 @@ const Vendors = () => {
         <Routes>
           <Route path="/" element={<Navigate to="all" replace />} />
           <Route path="all" element={<AllVendors />} />
+          <Route path="attendance" element={<DailyAttendance />} />
           <Route path="bookings" element={<VendorBookings />} />
           <Route path="analytics" element={<VendorAnalytics />} />
           {/* Kept as a compatibility redirect; wallets now live under Settings. */}

@@ -18,6 +18,13 @@ const adminVendorService = {
   },
 
   /**
+   * Get the date-wise attendance overview for all vendors.
+   */
+  getVendorAttendanceOverview: async (params = {}) => {
+    const response = await api.get('/admin/vendors/attendance', { params });
+    return response.data;
+  },
+  /**
    * Get a vendor's daily attendance summary.
    */
   getVendorAttendance: async (id, date) => {

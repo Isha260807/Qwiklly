@@ -76,6 +76,108 @@ const getAllVendors = async (req, res) => {
 };
 
 /**
+ * Get a date-wise attendance overview for all vendors.
+ */
+const getVendorAttendanceOverview = async (req, res) => {
+  try {
+    const {
+      date: requestedDate,
+      search,
+      approvalStatus,
+      isActive,
+      page = 1,
+      limit = 25
+    } = req.query;
+    const dateKey = requestedDate || getPresenceDateKey();
+
+    if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(dateKey)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date must be in YYYY-MM-DD format'
+      });
+    }
+
+    const query = { ...getAdminVendorCityFilter(req) };
+    if (approvalStatus) query.approvalStatus = approvalStatus;
+    if (isActive !== undefined) query.isActive = isActive === 'true';
+    if (search?.trim()) {
+      query.$or = [
+        { name: { $regex: search.trim(), $options: 'i' } },
+        { email: { $regex: search.trim(), $options: 'i' } },
+        { phone: { $regex: search.trim(), $options: 'i' } },
+        { businessName: { $regex: search.trim(), $options: 'i' } }
+      ];
+    }
+
+    const currentPage = Math.max(1, parseInt(page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 25));
+    const skip = (currentPage - 1) * pageSize;
+
+    const [vendors, total, matchingVendorIds, currentlyOnline] = await Promise.all([
+      Vendor.find(query)
+        .select('_id name businessName phone email approvalStatus isActive isOnline availability lastSeenAt zoneIds')
+        .populate('zoneIds', 'name')
+        .sort({ name: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(pageSize)
+        .lean(),
+      Vendor.countDocuments(query),
+      Vendor.find(query).select('_id').lean(),
+      Vendor.countDocuments({ ...query, isOnline: true })
+    ]);
+
+    const vendorIds = matchingVendorIds.map(vendor => vendor._id);
+    const attendanceRecords = vendorIds.length
+      ? await VendorAttendance.find({ vendorId: { $in: vendorIds }, dateKey }).lean()
+      : [];
+    const attendanceByVendor = new Map(
+      attendanceRecords.map(record => [String(record.vendorId), record])
+    );
+
+    const rows = vendors.map(vendor => ({
+      vendor,
+      attendance: attendanceByVendor.get(String(vendor._id)) || null,
+      currentPresence: {
+        isOnline: Boolean(vendor.isOnline),
+        availability: vendor.availability || 'OFFLINE',
+        lastSeenAt: vendor.lastSeenAt || null
+      }
+    }));
+
+    const openCount = attendanceRecords.filter(record => record.dayStatus === 'OPEN').length;
+    const closedCount = attendanceRecords.filter(record => record.dayStatus === 'CLOSED').length;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        dateKey,
+        timezone: PRESENCE_TIME_ZONE,
+        rows,
+        summary: {
+          totalVendors: total,
+          withAttendance: attendanceRecords.length,
+          open: openCount,
+          closed: closedCount,
+          notStarted: Math.max(0, total - attendanceRecords.length),
+          currentlyOnline
+        },
+        pagination: {
+          page: currentPage,
+          limit: pageSize,
+          total,
+          pages: Math.ceil(total / pageSize)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get vendor attendance overview error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch vendor attendance overview'
+    });
+  }
+};
+/**
  * Get one vendor's daily attendance summary.
  * Attendance is deliberately separate from booking/job metrics.
  */
@@ -681,6 +783,7 @@ const assignVendorZones = async (req, res) => {
 
 module.exports = {
   getAllVendors,
+  getVendorAttendanceOverview,
   getVendorAttendance,
   getVendorDetails,
   approveVendor,

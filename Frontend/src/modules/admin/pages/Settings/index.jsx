@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiClock, FiCheck, FiSlash, FiCalendar, FiGift, FiCreditCard } from 'react-icons/fi';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus } from '../../services/settingsService';
@@ -8,7 +9,16 @@ import VendorSalaryWallets from '../Vendors/VendorSalaryWallets';
 import VendorSlotAvailabilityPanel from './VendorSlotAvailabilityPanel';
 import { toast } from 'react-hot-toast';
 
+const getLegalDocumentFromPath = (pathname = '') => {
+  if (pathname.endsWith('/legal/terms')) return 'terms';
+  if (pathname.endsWith('/legal/privacy')) return 'privacy';
+  return null;
+};
+
 const AdminSettings = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const legalDocumentFromPath = getLegalDocumentFromPath(location.pathname);
   const [financialSettings, setFinancialSettings] = useState({
     visitedCharges: 0,
     instantBookingCharges: 0,
@@ -90,7 +100,8 @@ const AdminSettings = () => {
 
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'referral', 'system', 'admins'
+  const [activeView, setActiveView] = useState(() => legalDocumentFromPath ? 'legal' : 'main'); // 'main', 'profile', 'legal', 'financial', 'referral', 'system', 'admins'
+  const [activeLegalDocument, setActiveLegalDocument] = useState(legalDocumentFromPath);
 
   const isSuperAdmin = profile.role === 'super_admin';
   const hasSettingsSection = (permission) => {
@@ -109,6 +120,19 @@ const AdminSettings = () => {
     return false;
   };
 
+  useEffect(() => {
+    const legalDocument = getLegalDocumentFromPath(location.pathname);
+    if (legalDocument) {
+      setActiveView('legal');
+      setActiveLegalDocument(legalDocument);
+      return;
+    }
+
+    if (location.pathname === '/admin/settings' || location.pathname === '/admin/settings/') {
+      setActiveView('main');
+      setActiveLegalDocument(null);
+    }
+  }, [location.pathname]);
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -591,16 +615,6 @@ const AdminSettings = () => {
         <p className="text-sm text-gray-500">Manage your personal account details and password</p>
       </div>}
 
-      {/* Legal Content Card */}
-      {hasSettingsSection('settings_legal') && <div onClick={() => setActiveView('legal')}
-        className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-        <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-100 transition-colors">
-          <FiFileText className="w-6 h-6 text-purple-600" />
-        </div>
-        <h3 className="text-lg font-bold text-gray-800 mb-2">Terms & Privacy Content</h3>
-        <p className="text-sm text-gray-500">Manage the legal content shown to users and vendors</p>
-      </div>}
-
       {/* Financial Settings Card - Super Admin Only */}
       {hasSettingsSection('settings_financial') && (
         <div onClick={() => setActiveView('financial')}
@@ -681,7 +695,7 @@ const AdminSettings = () => {
 
       {/* Header / Breadcrumb */}
       {activeView !== 'main' && (
-        <button onClick={() => setActiveView('main')}
+        <button onClick={() => { setActiveView('main'); setActiveLegalDocument(null); if (location.pathname !== '/admin/settings') navigate('/admin/settings'); }}
           className="flex items-center gap-2 text-gray-500 hover:text-gray-800 mb-4 transition-colors">
           <span className="text-lg">←</span> Back to Settings
         </button>
@@ -803,12 +817,13 @@ const AdminSettings = () => {
                   <FiFileText className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-800">Terms & Privacy Content</h2>
+                  <h2 className="text-lg font-bold text-gray-800">{activeLegalDocument === 'terms' ? 'Terms & Conditions' : activeLegalDocument === 'privacy' ? 'Privacy Policy' : 'Terms & Privacy Content'}</h2>
                   <p className="text-sm text-gray-500">This content will be visible on both user and vendor sides.</p>
                 </div>
               </div>
 
               <form onSubmit={handleLegalSave} className="space-y-6 mt-6">
+                {(!activeLegalDocument || activeLegalDocument === 'terms') && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Terms of Service</label>
                   <textarea
@@ -820,7 +835,9 @@ const AdminSettings = () => {
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all resize-y"
                   />
                 </div>
+                )}
 
+                {(!activeLegalDocument || activeLegalDocument === 'privacy') && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Privacy Policy</label>
                   <textarea
@@ -832,6 +849,7 @@ const AdminSettings = () => {
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all resize-y"
                   />
                 </div>
+                )}
 
                 <div className="flex justify-end">
                   <button type="submit" disabled={legalLoading}

@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import {
   FiCheck,
   FiX,
@@ -15,7 +14,6 @@ import {
   FiLoader,
   FiDownload
 } from 'react-icons/fi';
-import { FiCalendar, FiClock } from 'react-icons/fi';
 import { FaQrcode } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 import CardShell from '../UserCategories/components/CardShell';
@@ -36,16 +34,6 @@ const AllVendors = () => {
   const [selectedZoneIds, setSelectedZoneIds] = useState([]);
   const [savingZones, setSavingZones] = useState(false);
   const [canEditVendorZones, setCanEditVendorZones] = useState(false);
-  const [vendorAttendance, setVendorAttendance] = useState(null);
-  const [selectedAttendanceDate, setSelectedAttendanceDate] = useState(() => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  });
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
-
   useEffect(() => {
     try {
       const storedData = sessionStorage.getItem('adminData') || localStorage.getItem('adminData');
@@ -57,7 +45,7 @@ const AllVendors = () => {
         !Array.isArray(adminData.permissions) ||
         adminData.permissions?.includes('vendors')
       );
-    } catch (error) {
+    } catch {
       setCanEditVendorZones(false);
     }
   }, []);
@@ -100,7 +88,7 @@ const AllVendors = () => {
     try {
       const response = await zoneService.getAll();
       if (response.success) setZones(response.zones);
-    } catch (error) {
+    } catch {
       // silent - zone assignment section just stays empty
     }
   };
@@ -166,78 +154,6 @@ const AllVendors = () => {
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h ago`;
     return `${Math.floor(hrs / 24)}d ago`;
-  };
-
-  const formatAttendanceTime = (date) => {
-    if (!date) return 'Not recorded';
-    return new Date(date).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getTodayDateString = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const getYesterdayDateString = () => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const calculateWorkingDuration = (firstOnlineAt, lastOfflineAt, dayStatus, dateKey) => {
-    if (!firstOnlineAt) return null;
-    const start = new Date(firstOnlineAt).getTime();
-    if (isNaN(start)) return null;
-
-    let end = lastOfflineAt ? new Date(lastOfflineAt).getTime() : null;
-    const isToday = dateKey === getTodayDateString();
-
-    if (!end && dayStatus === 'OPEN' && isToday) {
-      end = Date.now();
-    }
-
-    if (!end || end < start) return null;
-
-    const diffMs = end - start;
-    const totalMins = Math.floor(diffMs / (1000 * 60));
-    const hrs = Math.floor(totalMins / 60);
-    const mins = totalMins % 60;
-
-    const ongoingLabel = (!lastOfflineAt && dayStatus === 'OPEN' && isToday) ? ' (Active)' : '';
-    if (hrs === 0) return `${mins}m${ongoingLabel}`;
-    return `${hrs}h ${mins}m${ongoingLabel}`;
-  };
-
-  const fetchAttendanceForDate = async (vendorId, date) => {
-    if (!vendorId) return;
-    try {
-      setAttendanceLoading(true);
-      const response = await adminVendorService.getVendorAttendance(vendorId, date);
-      if (response.success) {
-        setVendorAttendance(response.data);
-      }
-    } catch (error) {
-      console.error('Error loading vendor attendance:', error);
-    } finally {
-      setAttendanceLoading(false);
-    }
-  };
-
-  const handleAttendanceDateChange = async (newDate) => {
-    if (!newDate) return;
-    setSelectedAttendanceDate(newDate);
-    if (selectedVendor?.id) {
-      await fetchAttendanceForDate(selectedVendor.id, newDate);
-    }
   };
 
   // Live zone presence derived from the vendor's last GPS sync
@@ -370,15 +286,10 @@ const AllVendors = () => {
     }
   };
 
-  const handleViewDetails = async (vendor) => {
+  const handleViewDetails = (vendor) => {
     setSelectedVendor(vendor);
     setSelectedZoneIds(vendor.zoneIds || []);
-    setVendorAttendance(null);
-    const today = getTodayDateString();
-    setSelectedAttendanceDate(today);
     setIsViewModalOpen(true);
-
-    await fetchAttendanceForDate(vendor.id, today);
   };
 
   const toggleZoneSelection = (zoneId) => {
@@ -781,174 +692,6 @@ const AllVendors = () => {
               </div>
             </div>
 
-            <div className='bg-blue-50/70 rounded-xl p-4 border border-blue-100 space-y-3.5'>
-              {/* Header with Title and Date Picker */}
-              <div className='flex flex-wrap items-center justify-between gap-2.5 pb-2 border-b border-blue-100/80'>
-                <div className='flex items-center gap-2'>
-                  <div className='w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0'>
-                    <FiCalendar className='w-4 h-4' />
-                  </div>
-                  <div>
-                    <h4 className='text-xs font-bold text-gray-900'>Daily Attendance & Duty Hours</h4>
-                    <p className='text-[10px] text-gray-500'>Calculated date-wise for this vendor</p>
-                  </div>
-                </div>
-
-                {/* Date Controls */}
-                <div className='flex items-center gap-1.5 flex-wrap'>
-                  <button
-                    type='button'
-                    onClick={() => handleAttendanceDateChange(getTodayDateString())}
-                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition-colors cursor-pointer ${
-                      selectedAttendanceDate === getTodayDateString()
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    Today
-                  </button>
-                  <button
-                    type='button'
-                    onClick={() => handleAttendanceDateChange(getYesterdayDateString())}
-                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition-colors cursor-pointer ${
-                      selectedAttendanceDate === getYesterdayDateString()
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    Yesterday
-                  </button>
-                  <input
-                    type='date'
-                    value={selectedAttendanceDate}
-                    max={getTodayDateString()}
-                    onChange={(e) => handleAttendanceDateChange(e.target.value)}
-                    className='px-2.5 py-1 text-[11px] font-medium bg-white border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer'
-                  />
-                </div>
-              </div>
-
-              {/* Attendance Metric Cards */}
-              <div className='grid grid-cols-2 sm:grid-cols-4 gap-2.5'>
-                {/* Day Start */}
-                <div className='bg-white rounded-lg border border-blue-100 p-3'>
-                  <span className='text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1'>Day Start</span>
-                  <span className='text-sm font-bold text-gray-900'>
-                    {attendanceLoading ? '...' : formatAttendanceTime(vendorAttendance?.attendance?.firstOnlineAt)}
-                  </span>
-                </div>
-
-                {/* Day End */}
-                <div className='bg-white rounded-lg border border-blue-100 p-3'>
-                  <span className='text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1'>Day End</span>
-                  <span className='text-sm font-bold text-gray-900'>
-                    {attendanceLoading ? '...' : (
-                      vendorAttendance?.attendance?.lastOfflineAt
-                        ? formatAttendanceTime(vendorAttendance?.attendance?.lastOfflineAt)
-                        : (vendorAttendance?.attendance?.dayStatus === 'OPEN' ? 'Still Online' : 'Not recorded')
-                    )}
-                  </span>
-                </div>
-
-                {/* Total Duration / Working Hours */}
-                <div className='bg-white rounded-lg border border-blue-100 p-3'>
-                  <span className='text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1'>Working Hours</span>
-                  <span className='text-sm font-bold text-blue-700'>
-                    {attendanceLoading ? '...' : (
-                      calculateWorkingDuration(
-                        vendorAttendance?.attendance?.firstOnlineAt,
-                        vendorAttendance?.attendance?.lastOfflineAt,
-                        vendorAttendance?.attendance?.dayStatus,
-                        selectedAttendanceDate
-                      ) || '-'
-                    )}
-                  </span>
-                </div>
-
-                {/* Status */}
-                <div className='bg-white rounded-lg border border-blue-100 p-3'>
-                  <span className='text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1'>Day Status</span>
-                  <div className='mt-0.5'>
-                    {attendanceLoading ? (
-                      <span className='text-xs text-gray-400'>Loading...</span>
-                    ) : !vendorAttendance?.attendance ? (
-                      <span className='inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-600'>
-                        Absent / No Record
-                      </span>
-                    ) : vendorAttendance?.attendance?.dayStatus === 'OPEN' ? (
-                      <span className='inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-green-100 text-green-700'>
-                        ● OPEN
-                      </span>
-                    ) : (
-                      <span className='inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-700'>
-                        CLOSED
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Recent Attendance History Table */}
-              {vendorAttendance?.recentHistory && vendorAttendance.recentHistory.length > 0 && (
-                <div className='bg-white rounded-lg border border-blue-100 p-3 mt-2'>
-                  <div className='flex items-center justify-between mb-2'>
-                    <span className='text-[11px] font-bold text-gray-700 flex items-center gap-1.5'>
-                      <FiClock className='w-3.5 h-3.5 text-blue-600' />
-                      Recent Attendance Records ({vendorAttendance.recentHistory.length} Days)
-                    </span>
-                    <span className='text-[10px] text-gray-400'>Click any row to view date</span>
-                  </div>
-                  <div className='overflow-x-auto'>
-                    <table className='w-full text-left text-[11px] border-collapse'>
-                      <thead>
-                        <tr className='border-b border-gray-100 text-gray-400 font-semibold uppercase text-[9px]'>
-                          <th className='pb-1.5'>Date</th>
-                          <th className='pb-1.5'>Start</th>
-                          <th className='pb-1.5'>End</th>
-                          <th className='pb-1.5'>Duration</th>
-                          <th className='pb-1.5 text-right'>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className='divide-y divide-gray-50'>
-                        {vendorAttendance.recentHistory.map((item) => {
-                          const isSelected = item.dateKey === selectedAttendanceDate;
-                          const duration = calculateWorkingDuration(
-                            item.firstOnlineAt,
-                            item.lastOfflineAt,
-                            item.dayStatus,
-                            item.dateKey
-                          );
-                          return (
-                            <tr
-                              key={item._id || item.dateKey}
-                              onClick={() => handleAttendanceDateChange(item.dateKey)}
-                              className={`cursor-pointer hover:bg-blue-50/60 transition-colors ${
-                                isSelected ? 'bg-blue-50 font-semibold' : ''
-                              }`}
-                            >
-                              <td className='py-1.5 text-gray-800 flex items-center gap-1'>
-                                {isSelected && <span className='w-1.5 h-1.5 rounded-full bg-blue-600'></span>}
-                                {item.dateKey}
-                              </td>
-                              <td className='py-1.5 text-gray-600'>{formatAttendanceTime(item.firstOnlineAt)}</td>
-                              <td className='py-1.5 text-gray-600'>{formatAttendanceTime(item.lastOfflineAt)}</td>
-                              <td className='py-1.5 text-blue-700 font-medium'>{duration || '-'}</td>
-                              <td className='py-1.5 text-right'>
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                  item.dayStatus === 'OPEN' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                  {item.dayStatus}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
             {/* Zone Assignment - controls which zone this vendor receives bookings from */}
             <div className="bg-rose-50/60 rounded-xl p-4 border border-rose-100 space-y-3">
               <div className="flex items-center justify-between">
