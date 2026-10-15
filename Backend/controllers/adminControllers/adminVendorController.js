@@ -27,6 +27,18 @@ const getAllVendors = async (req, res) => {
 
     if (approvalStatus) {
       query.approvalStatus = approvalStatus;
+      if (approvalStatus === VENDOR_STATUS.PENDING) {
+        query.registrationCompleted = true;
+      }
+    } else {
+      // Do not expose incomplete pending registrations in the admin list.
+      // Approved/rejected vendors remain visible regardless of this flag.
+      query.$and = [{
+        $or: [
+          { approvalStatus: { $in: [VENDOR_STATUS.APPROVED, VENDOR_STATUS.REJECTED, VENDOR_STATUS.SUSPENDED] } },
+          { approvalStatus: VENDOR_STATUS.PENDING, registrationCompleted: true }
+        ]
+      }];
     }
     if (isActive !== undefined) {
       query.isActive = isActive === 'true';
@@ -34,12 +46,15 @@ const getAllVendors = async (req, res) => {
 
     // Search by name, email, phone, or business name
     if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { businessName: { $regex: search, $options: 'i' } }
-      ];
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+          { phone: { $regex: search, $options: 'i' } },
+          { businessName: { $regex: search, $options: 'i' } }
+        ]
+      });
     }
 
     // Pagination
@@ -316,6 +331,13 @@ const approveVendor = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Vendor not found'
+      });
+    }
+
+    if (!vendor.registrationCompleted) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vendor has not completed the registration details yet.'
       });
     }
 

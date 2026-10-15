@@ -17,7 +17,6 @@ import { toast } from 'react-hot-toast';
 import { io } from 'socket.io-client';
 
 import { registerFCMToken } from '../../../../services/pushNotificationService';
-import LogoLoader from '../../../../components/common/LogoLoader';
 import StatsCards from './components/StatsCards';
 import PendingBookings from './components/PendingBookings';
 
@@ -80,7 +79,7 @@ const Dashboard = memo(() => {
   const [vendorProfile, setVendorProfile] = useState(getInitialVendorProfile);
   const [recentJobs, setRecentJobs] = useState([]);
   const [pendingBookings, setPendingBookings] = useState([]);
-  const [loading, setLoading] = useState(() => !vendorDashboardService.getCachedDashboardStats());
+
   const [error, setError] = useState('');
   const [globalConfig, setGlobalConfig] = useState({ maxSearchTime: 5 });
 
@@ -305,9 +304,6 @@ const Dashboard = memo(() => {
   // Main data loader - useCallback to prevent recreation
   const loadDashboardData = useCallback(async (showSpinner = true) => {
     try {
-      const cachedDashboard = vendorDashboardService.getCachedDashboardStats();
-      if (showSpinner && !cachedDashboard) setLoading(true);
-      if (cachedDashboard) setLoading(false);
       setError(null);
 
       const response = await vendorDashboardService.getDashboardStats({ forceRefresh: !showSpinner });
@@ -315,8 +311,6 @@ const Dashboard = memo(() => {
     } catch (err) {
       console.error('Error loading dashboard data:', err);
       setError(String(err.message || 'Failed to load dashboard data'));
-    } finally {
-      setLoading(false);
     }
   }, [processApiResponse]);
 
@@ -513,12 +507,6 @@ const Dashboard = memo(() => {
     };
     return labels[s] || status;
   };
-
-  // Show loading state
-  if (loading) {
-    return <LogoLoader />;
-  }
-
   // Show error state
   if (error) {
     return (

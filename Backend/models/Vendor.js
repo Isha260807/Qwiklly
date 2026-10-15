@@ -204,6 +204,13 @@ const vendorSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Set only after the vendor submits the complete registration form.
+  // Pending vendors without this flag must not enter the approval queue.
+  registrationCompleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   isEmailVerified: {
     type: Boolean,
     default: false

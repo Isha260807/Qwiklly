@@ -75,7 +75,7 @@ const getDashboardStats = async (req, res) => {
     const revenue = revenueResult[0] || { totalRevenue: 0, totalBookings: 0 };
 
     // Vendor approval stats
-    const pendingVendors = await Vendor.countDocuments({ ...vendorScope, approvalStatus: VENDOR_STATUS.PENDING, ...dateFilter });
+    const pendingVendors = await Vendor.countDocuments({ ...vendorScope, approvalStatus: VENDOR_STATUS.PENDING, registrationCompleted: true, ...dateFilter });
     const approvedVendors = await Vendor.countDocuments({ ...vendorScope, approvalStatus: VENDOR_STATUS.APPROVED, ...dateFilter });
 
     // Recent activities (filtered by period)

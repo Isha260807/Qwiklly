@@ -28,14 +28,40 @@ const VendorUnderReviewModal = () => {
   const prevStatus = useRef(getInitialStatus());
   const pollRef = useRef(null);
 
-  // Lock body scroll when modal is open
+  // Lock the entire document while the review modal is open. Body-only
+  // overflow locking is not enough inside the mobile viewport/WebView.
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => { document.body.style.overflow = ''; };
+    if (!isOpen) return undefined;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+    const scrollY = window.scrollY;
+    const previous = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyWidth: body.style.width,
+      rootOverflow: root?.style.overflow || ''
+    };
+
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+    if (root) root.style.overflow = 'hidden';
+
+    return () => {
+      html.style.overflow = previous.htmlOverflow;
+      body.style.overflow = previous.bodyOverflow;
+      body.style.position = previous.bodyPosition;
+      body.style.top = previous.bodyTop;
+      body.style.width = previous.bodyWidth;
+      if (root) root.style.overflow = previous.rootOverflow;
+      window.scrollTo(0, scrollY);
+    };
   }, [isOpen]);
 
   useEffect(() => {
@@ -62,6 +88,12 @@ const VendorUnderReviewModal = () => {
         const s = (res.vendor.approvalStatus || 'pending').toLowerCase();
         setVendorData(res.vendor);
         setStatus(s);
+        if (res.vendor.registrationCompleted !== true) {
+          // OTP verification alone is not an approval submission.
+          setIsOpen(false);
+          prevStatus.current = s;
+          return;
+        }
         if (s === 'approved') {
           if (prevStatus.current === 'pending' && isOpen) {
             toast.success('Your vendor profile is approved! Dashboard unlocked.', { duration: 6000, id: 'v-approved' });
@@ -82,8 +114,9 @@ const VendorUnderReviewModal = () => {
       const d = JSON.parse(localStorage.getItem('vendorData') || '{}');
       const ls = (d.approvalStatus || 'pending').toLowerCase();
       setVendorData(d); setStatus(ls);
-      if (ls === 'pending' || ls === 'rejected') setIsOpen(true);
+      if (d.registrationCompleted === true && (ls === 'pending' || ls === 'rejected')) setIsOpen(true);
       else setIsOpen(false);
+
     } finally { if (manual) setIsChecking(false); }
   }, []);
 
@@ -94,7 +127,7 @@ const VendorUnderReviewModal = () => {
     if (tok) {
       setVendorData(d);
       setStatus(ls);
-      if (d && d.approvalStatus && (ls === 'pending' || ls === 'rejected')) {
+      if (d && d.registrationCompleted === true && d.approvalStatus && (ls === 'pending' || ls === 'rejected')) {
         setIsOpen(true);
         check(false);
       } else {
@@ -116,7 +149,7 @@ const VendorUnderReviewModal = () => {
       if (s) { setStatus(s); if (s === 'approved') { setIsOpen(false); toast.success('Account approved! Dashboard unlocked.', { duration: 6000 }); } else if (s === 'rejected') setIsOpen(true); }
       check(false);
     };
-    const onData = () => { const d = JSON.parse(localStorage.getItem('vendorData') || '{}'); if (d?.approvalStatus) { const s = d.approvalStatus.toLowerCase(); setStatus(s); if (s === 'approved') setIsOpen(false); } };
+    const onData = () => { const d = JSON.parse(localStorage.getItem('vendorData') || '{}'); if (d?.registrationCompleted !== true) { setIsOpen(false); return; } if (d?.approvalStatus) { const s = d.approvalStatus.toLowerCase(); setStatus(s); if (s === 'approved') setIsOpen(false); } };
     window.addEventListener('vendorStatusUpdated', onStatus);
     window.addEventListener('vendorDataUpdated', onData);
     return () => { window.removeEventListener('vendorStatusUpdated', onStatus); window.removeEventListener('vendorDataUpdated', onData); };
@@ -136,7 +169,7 @@ const VendorUnderReviewModal = () => {
       {/* Backdrop */}
       <div
         className='fixed inset-0 z-[9999] flex items-center justify-center p-4'
-        style={{ background: 'rgba(77,8,42,0.7)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+        style={{ background: BG }}
       >
         {/* Card */}
         <div

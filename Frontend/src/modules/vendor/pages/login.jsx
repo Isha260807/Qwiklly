@@ -40,7 +40,7 @@ const VendorLogin = () => {
   // Auto-focus logic
   useEffect(() => {
     // Redirect if already logged in
-    if (localStorage.getItem('vendorAccessToken')) {
+    if (localStorage.getItem('vendorAccessToken') || sessionStorage.getItem('vendorAccessToken')) {
       navigate('/vendor', { replace: true });
       return;
     }

@@ -56,6 +56,7 @@ const notificationSchema = new mongoose.Schema({
       'review_submitted',
       'vendor_approved',
       'vendor_rejected',
+      'vendor_approval_request',
       'wallet_topup',
       'salary_payment_received',
       'payout_requested',

@@ -90,17 +90,24 @@ const sendOTP = async (req, res) => {
     // 3. Store OTP (Redis primary, MongoDB fallback)
     await storeOTP(phone, otpHash);
 
-    // 4. Send OTP via SMS
-    const smsResult = await sendSMSOTP(phone, otp);
+    // 4. Trigger SMS delivery without blocking the API response.
+    // OTP is already stored, so the vendor can open the OTP screen immediately
+    // even if the SMS gateway is slow or temporarily unavailable.
+    void sendSMSOTP(phone, otp)
+      .then((smsResult) => {
+        if (!smsResult.success) {
+          console.warn(`[OTP] SMS failed for vendor ${phone}, but OTP stored`);
+        }
+      })
+      .catch((smsError) => {
+        console.error(`[OTP] SMS delivery error for vendor ${phone}:`, smsError.message);
+      });
 
     // Log OTP in development mode
     if (process.env.NODE_ENV === 'development' || process.env.USE_DEFAULT_OTP === 'true') {
       console.log(`[DEV] Vendor OTP for ${phone}: ${otp}`);
     }
 
-    if (!smsResult.success) {
-      console.warn(`[OTP] SMS failed for vendor ${phone}, but OTP stored`);
-    }
 
     res.status(200).json({
       success: true,
@@ -177,6 +184,7 @@ const verifyLogin = async (req, res) => {
           businessName: vendor.businessName,
           service: vendor.service,
           approvalStatus: vendor.approvalStatus,
+          registrationCompleted: vendor.registrationCompleted === true,
           isOnline: presence.isOnline,
           availability: presence.availability
         },
@@ -267,6 +275,7 @@ const register = async (req, res) => {
       pan: { number: pan, document: panUrl },
       otherDocuments: otherUrls,
       approvalStatus: VENDOR_STATUS.PENDING,
+      registrationCompleted: true,
       isPhoneVerified: true
     });
 
@@ -333,7 +342,8 @@ const register = async (req, res) => {
         name: vendor.name,
         email: vendor.email,
         phone: vendor.phone,
-        approvalStatus: vendor.approvalStatus
+        approvalStatus: vendor.approvalStatus,
+        registrationCompleted: vendor.registrationCompleted === true,
       },
       ...tokens
     });
@@ -429,6 +439,7 @@ const login = async (req, res) => {
         businessName: vendor.businessName,
         service: vendor.service,
         approvalStatus: vendor.approvalStatus,
+        registrationCompleted: vendor.registrationCompleted === true,
         isOnline: presence.isOnline,
         availability: presence.availability
       },

@@ -45,7 +45,10 @@ const sendSMS = async (phone, message) => {
     console.log('[SMS] Sending request to (HTTPS):', baseUrl);
     console.log('[SMS] Params (masked):', { ...params, password: '***', apikey: '***' });
 
-    const response = await axios.get(baseUrl, { params });
+    // SMS gateways can leave a request open for minutes when unavailable.
+    // Keep the provider call bounded so it can never block OTP delivery flow.
+    const timeoutMs = Number.parseInt(process.env.SMS_TIMEOUT_MS, 10) || 10000;
+    const response = await axios.get(baseUrl, { params, timeout: timeoutMs });
 
     console.log('[SMS] Response status:', response.status);
     console.log('[SMS] Response data:', response.data);

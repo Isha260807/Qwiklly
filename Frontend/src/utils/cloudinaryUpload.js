@@ -18,7 +18,7 @@ export const uploadToCloudinary = async (file, folder = 'appzeto', onProgress) =
   try {
     // 1. Get signature from our backend
     // Use the generic /upload/sign-signature instead of /admin prefix to ensure User access
-    const signResponse = await api.get(`/upload/sign-signature?folder=${folder}`);
+    const signResponse = await api.get(`/upload/sign-signature?folder=${folder}`, { timeout: 15000 });
 
     if (!signResponse.data.success) {
       throw new Error('Failed to get upload signature');
@@ -38,6 +38,7 @@ export const uploadToCloudinary = async (file, folder = 'appzeto', onProgress) =
     const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
 
     const response = await axios.post(cloudinaryUrl, formData, {
+      timeout: 30000,
       onUploadProgress: (progressEvent) => {
         if (onProgress) {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
