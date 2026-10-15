@@ -110,8 +110,23 @@ const Login = () => {
       return;
     }
 
+    const normalizedReferralCode = hasReferral ? referralCode.trim().toUpperCase() : '';
+    if (hasReferral && !normalizedReferralCode) {
+      toast.error('Please enter a referral code.');
+      return;
+    }
+
     setIsLoading(true);
     try {
+      if (normalizedReferralCode) {
+        const referralResponse = await userAuthService.validateReferralCode(normalizedReferralCode);
+        if (!referralResponse.success || !referralResponse.valid) {
+          setIsLoading(false);
+          toast.error(referralResponse.message || 'Invalid referral code.');
+          return;
+        }
+      }
+
       const response = await userAuthService.sendOTP(cleanPhone);
 
       if (response.success) {

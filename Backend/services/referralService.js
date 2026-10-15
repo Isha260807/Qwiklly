@@ -15,6 +15,27 @@ const REWARDABLE_PAYMENT_STATUSES = new Set([
 
 const normalizeCode = (value) => String(value || '').trim().toUpperCase();
 
+const validateReferralCode = async (referralCode) => {
+  const code = normalizeCode(referralCode);
+  if (!code) return { valid: false, reason: 'NO_CODE' };
+
+  const settings = await Settings.findOne({ type: 'global' })
+    .select('referralEnabled')
+    .lean();
+
+  if (settings?.referralEnabled === false) {
+    return { valid: false, reason: 'DISABLED' };
+  }
+
+  const referrer = await User.findOne({ referralCode: code })
+    .select('_id')
+    .lean();
+
+  return referrer
+    ? { valid: true, code, referrerId: referrer._id }
+    : { valid: false, reason: 'INVALID_CODE' };
+};
+
 const isStandaloneTransactionError = (error) => {
   const message = String(error?.message || '').toLowerCase();
   return message.includes('transaction numbers are only allowed')
@@ -256,6 +277,7 @@ const rewardReferralForCompletedBooking = async (bookingOrId) => {
   return executeWithOptionalTransaction(work);
 };
 module.exports = {
+  validateReferralCode,
   ensureReferralCode,
   captureReferralForNewUser,
   getReferralSummary,

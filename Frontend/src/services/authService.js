@@ -37,6 +37,12 @@ export const userAuthService = {
     return response.data;
   },
 
+  // Validate an optional referral code before requesting OTP
+  validateReferralCode: async (referralCode) => {
+    const response = await api.post('/users/auth/validate-referral', { referralCode });
+    return response.data;
+  },
+
   // Verify Login (Unified Flow)
   verifyLogin: async (data) => {
     const response = await api.post('/users/auth/verify-login', data);

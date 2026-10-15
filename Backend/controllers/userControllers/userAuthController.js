@@ -5,7 +5,37 @@ const { sendOTP: sendSMSOTP } = require('../../services/smsService');
 const { sendOTPEmail, sendWelcomeEmail } = require('../../services/emailService');
 const { USER_ROLES } = require('../../utils/constants');
 const { validationResult } = require('express-validator');
-const { ensureReferralCode, captureReferralForNewUser } = require('../../services/referralService');
+const {
+  validateReferralCode,
+  ensureReferralCode,
+  captureReferralForNewUser
+} = require('../../services/referralService');
+
+const validateReferralCodeRequest = async (req, res) => {
+  try {
+    const result = await validateReferralCode(req.body.referralCode);
+    if (!result.valid) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        message: result.reason === 'DISABLED'
+          ? 'Referral program is currently unavailable.'
+          : 'Invalid referral code. Please check the code and try again.'
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      valid: true,
+      message: 'Referral code is valid.'
+    });
+  } catch (error) {
+    console.error('Referral code validation error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to validate referral code. Please try again.'
+    });
+  }
+};
 
 /**
  * Send OTP for user registration/login
@@ -163,7 +193,23 @@ const register = async (req, res) => {
     }
 
     const { name, email, verificationToken, referralCode } = req.body;
+    const normalizedReferralCode = String(referralCode || '').trim().toUpperCase();
     let phone = req.body.phone;
+
+    // Referral codes are optional, but a supplied code must be valid before
+    // creating the account. Previously invalid codes were silently ignored by
+    // captureReferralForNewUser, so signup still completed successfully.
+    if (normalizedReferralCode) {
+      const referralValidation = await validateReferralCode(normalizedReferralCode);
+      if (!referralValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: referralValidation.reason === 'DISABLED'
+            ? 'Referral program is currently unavailable.'
+            : 'Invalid referral code. Please check the code and try again.'
+        });
+      }
+    }
 
     // Verify token if provided (New Flow)
     if (verificationToken) {
@@ -209,10 +255,25 @@ const register = async (req, res) => {
     try {
       referral = await captureReferralForNewUser({
         referredUserId: user._id,
-        referralCode
+        referralCode: normalizedReferralCode
       });
     } catch (referralError) {
       console.error('[Referral] Failed to capture signup referral:', referralError);
+      if (normalizedReferralCode) {
+        await User.deleteOne({ _id: user._id });
+        return res.status(500).json({
+          success: false,
+          message: 'Unable to apply referral code. Please try again.'
+        });
+      }
+    }
+
+    if (normalizedReferralCode && !referral.applied) {
+      await User.deleteOne({ _id: user._id });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid referral code. Please check the code and try again.'
+      });
     }
 
     // Send Welcome Email
@@ -427,6 +488,7 @@ const refreshToken = async (req, res) => {
 };
 
 module.exports = {
+  validateReferralCodeRequest,
   sendOTP,
   verifyLogin,
   register,
