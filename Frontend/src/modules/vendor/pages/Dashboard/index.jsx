@@ -537,17 +537,13 @@ const Dashboard = memo(() => {
           const noServices = !vendorProfile.service || vendorProfile.service.length === 0;
           const noPayout = !vendorProfile.payoutAdded;
           
-          let title = "Profile Incomplete";
-          let message = "Add services to start receiving bookings and also add bank details.";
+          let title = "QR Code Required";
+          let message = "Add your UPI QR code to receive payments.";
           let targetPath = '/vendor/profile';
 
           if (noServices && !noPayout) {
-            title = "Profile Incomplete";
-            message = "Add services to start receiving bookings.";
             targetPath = '/vendor/profile';
           } else if (!noServices && noPayout) {
-            title = "Profile Incomplete";
-            message = "Add bank details to receive payouts.";
             targetPath = '/vendor/profile/payout';
           }
 

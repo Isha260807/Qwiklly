@@ -6,7 +6,9 @@ const {
   register,
   login,
   logout,
-  verifyLogin
+  verifyLogin,
+  sendPhoneChangeOTP,
+  verifyPhoneChangeOTP
 } = require('../../controllers/vendorControllers/vendorAuthController');
 const { authenticate } = require('../../middleware/authMiddleware');
 const { isVendor } = require('../../middleware/roleMiddleware');
@@ -37,7 +39,24 @@ const loginValidation = [
   body('token').trim().notEmpty().withMessage('Verification token is required')
 ];
 
+const phoneChangeValidation = [
+  body('phone')
+    .trim()
+    .matches(/^[6-9]\d{9}$/)
+    .withMessage('Phone number must be a valid 10-digit Indian mobile number')
+];
+
+const phoneChangeVerifyValidation = [
+  ...phoneChangeValidation,
+  body('otp')
+    .trim()
+    .isLength({ min: 6, max: 6 })
+    .isNumeric()
+    .withMessage('OTP must be 6 digits')
+];
 // Routes
+router.post('/change-phone/send-otp', authenticate, isVendor, phoneChangeValidation, sendPhoneChangeOTP);
+router.post('/change-phone/verify-otp', authenticate, isVendor, phoneChangeVerifyValidation, verifyPhoneChangeOTP);
 router.post('/send-otp', sendOTPValidation, sendOTP);
 router.post('/verify-login', verifyLoginValidation, verifyLogin); // New Unified Entry
 router.post('/register', registerValidation, register);

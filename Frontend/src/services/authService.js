@@ -125,6 +125,16 @@ export const vendorAuthService = {
     return response.data;
   },
 
+  // Change mobile number (OTP protected)
+  sendPhoneChangeOTP: async (phone) => {
+    const response = await api.post('/vendors/auth/change-phone/send-otp', { phone });
+    return response.data;
+  },
+
+  verifyPhoneChangeOTP: async (phone, otp) => {
+    const response = await api.post('/vendors/auth/change-phone/verify-otp', { phone, otp });
+    return response.data;
+  },
   // Verify Login (Unified Flow)
   verifyLogin: async (data) => {
     const response = await api.post('/vendors/auth/verify-login', data);

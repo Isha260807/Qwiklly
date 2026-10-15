@@ -126,6 +126,184 @@ const sendOTP = async (req, res) => {
 /**
  * Verify OTP and Check Vendor Status (Unified Login/Signup Entry)
  */
+const normalizePhoneNumber = (value) => String(value || '').replace(/\D/g, '');
+
+const isValidIndianMobile = (phone) => /^[6-9]\d{9}$/.test(phone);
+
+/**
+ * Send OTP before changing a vendor's login mobile number.
+ */
+const sendPhoneChangeOTP = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const phone = normalizePhoneNumber(req.body.phone);
+    if (!isValidIndianMobile(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid 10-digit mobile number'
+      });
+    }
+
+    const vendor = await Vendor.findById(req.user.id).select('_id phone');
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+
+    if (vendor.phone === phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'This is already your current mobile number'
+      });
+    }
+
+    const existingVendor = await Vendor.findOne({ phone }).select('_id');
+    if (existingVendor && existingVendor._id.toString() !== vendor._id.toString()) {
+      return res.status(409).json({
+        success: false,
+        message: 'This mobile number is already registered with another vendor'
+      });
+    }
+
+    if (!(await checkRateLimit(phone))) {
+      return res.status(429).json({
+        success: false,
+        message: 'Too many OTP requests. Please try again later.'
+      });
+    }
+
+    const otp = generateOTP(phone);
+    await storeOTP(phone, hashOTP(otp));
+
+    void sendSMSOTP(phone, otp)
+      .then((smsResult) => {
+        if (!smsResult.success) {
+          console.warn('[OTP] Phone change SMS failed for ' + phone);
+        }
+      })
+      .catch((smsError) => {
+        console.error('[OTP] Phone change SMS error for ' + phone + ':', smsError.message);
+      });
+
+    if (process.env.NODE_ENV === 'development' || process.env.USE_DEFAULT_OTP === 'true') {
+      console.log('[DEV] Phone change OTP for ' + phone + ': ' + otp);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP sent to your new mobile number'
+    });
+  } catch (error) {
+    console.error('Send phone change OTP error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to send OTP. Please try again.'
+    });
+  }
+};
+
+/**
+ * Verify the new mobile number and update the vendor login number.
+ */
+const verifyPhoneChangeOTP = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const phone = normalizePhoneNumber(req.body.phone);
+    if (!isValidIndianMobile(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid 10-digit mobile number'
+      });
+    }
+
+    const vendor = await Vendor.findById(req.user.id).select('_id phone name email businessName');
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+
+    if (vendor.phone === phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'This is already your current mobile number'
+      });
+    }
+
+    const existingVendor = await Vendor.findOne({ phone }).select('_id');
+    if (existingVendor && existingVendor._id.toString() !== vendor._id.toString()) {
+      return res.status(409).json({
+        success: false,
+        message: 'This mobile number is already registered with another vendor'
+      });
+    }
+
+    const verification = await verifyOTP(phone, req.body.otp);
+    if (!verification.success) {
+      return res.status(400).json({
+        success: false,
+        message: verification.message || 'Invalid OTP'
+      });
+    }
+
+    const updatedVendor = await Vendor.findOneAndUpdate(
+      { _id: vendor._id, phone: vendor.phone },
+      {
+        $set: {
+          phone,
+          isPhoneVerified: true
+        }
+      },
+      { new: true, runValidators: true }
+    ).select('_id name email phone businessName');
+
+    if (!updatedVendor) {
+      return res.status(409).json({
+        success: false,
+        message: 'Profile changed while verifying. Please try again.'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Mobile number updated successfully',
+      vendor: {
+        id: updatedVendor._id,
+        name: updatedVendor.name,
+        email: updatedVendor.email,
+        phone: updatedVendor.phone,
+        businessName: updatedVendor.businessName
+      }
+    });
+  } catch (error) {
+    console.error('Verify phone change OTP error:', error);
+
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'This mobile number is already registered with another vendor'
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update mobile number. Please try again.'
+    });
+  }
+};
 const verifyLogin = async (req, res) => {
   try {
     const { phone, otp } = req.body;
@@ -588,6 +766,8 @@ const refreshToken = async (req, res) => {
 
 module.exports = {
   sendOTP,
+  sendPhoneChangeOTP,
+  verifyPhoneChangeOTP,
   verifyLogin,
   register,
   login,

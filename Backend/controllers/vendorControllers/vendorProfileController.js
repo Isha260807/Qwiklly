@@ -7,6 +7,7 @@ const {
   checkCanGoOnline
 } = require('../../services/vendorZonePresenceService');
 const { setVendorPresence } = require('../../services/vendorPresenceService');
+const { validationResult } = require('express-validator');
 
 const PRESENCE_MESSAGES = {
   [PRESENCE_REASONS.NO_ZONE_ASSIGNED]: 'No service zone is assigned to you yet. Please contact admin.',
@@ -236,7 +237,7 @@ const updateProfile = async (req, res) => {
 
     // Update profile photo - upload to Cloudinary if it's a base64 string
     if (profilePhoto !== undefined) {
-      if (profilePhoto && profilePhoto.startsWith('data:')) {
+      if (typeof profilePhoto === 'string' && profilePhoto.startsWith('data:')) {
         const uploadRes = await cloudinaryService.uploadFile(profilePhoto, { folder: 'vendors/profiles' });
         if (uploadRes.success) {
           vendor.profilePhoto = uploadRes.url;
@@ -271,7 +272,7 @@ const updateProfile = async (req, res) => {
     // If aadharDocument exists and is not empty, update it
     if (aadharDocument || aadharNumber) {
       let aadharUrl = aadharDocument || vendor.aadhar?.document;
-      if (aadharUrl && aadharUrl.startsWith('data:')) {
+      if (typeof aadharUrl === 'string' && aadharUrl.startsWith('data:')) {
         const uploadRes = await cloudinaryService.uploadFile(aadharUrl, { folder: 'vendors/documents' });
         if (uploadRes.success) aadharUrl = uploadRes.url;
       }
@@ -290,7 +291,7 @@ const updateProfile = async (req, res) => {
     // If panDocument exists and is not empty, update it
     if (panDocument || panNumber) {
       let panUrl = panDocument || vendor.pan?.document;
-      if (panUrl && panUrl.startsWith('data:')) {
+      if (typeof panUrl === 'string' && panUrl.startsWith('data:')) {
         const uploadRes = await cloudinaryService.uploadFile(panUrl, { folder: 'vendors/documents' });
         if (uploadRes.success) panUrl = uploadRes.url;
       }
@@ -311,7 +312,7 @@ const updateProfile = async (req, res) => {
       const incomingBank = bankDetails || {};
       let qrCodeUrl = incomingBank.upiQrCode || req.body.upiQrCode || vendor.bankDetails?.upiQrCode || '';
       
-      if (qrCodeUrl && qrCodeUrl.startsWith('data:')) {
+      if (typeof qrCodeUrl === 'string' && qrCodeUrl.startsWith('data:')) {
         const uploadRes = await cloudinaryService.uploadFile(qrCodeUrl, { folder: 'vendors/qr_codes' });
         if (uploadRes.success) qrCodeUrl = uploadRes.url;
       }
@@ -319,15 +320,15 @@ const updateProfile = async (req, res) => {
       vendor.bankDetails = {
         accountHolderName: incomingBank.accountHolderName ?? accountHolderName ?? vendor.bankDetails?.accountHolderName ?? '',
         accountNumber: incomingBank.accountNumber ?? accountNumber ?? vendor.bankDetails?.accountNumber ?? '',
-        ifscCode: (incomingBank.ifscCode ?? ifscCode ?? vendor.bankDetails?.ifscCode ?? '').toUpperCase().trim(),
+        ifscCode: String(incomingBank.ifscCode ?? ifscCode ?? vendor.bankDetails?.ifscCode ?? '').toUpperCase().trim(),
         bankName: incomingBank.bankName ?? bankName ?? vendor.bankDetails?.bankName ?? '',
-        upiId: (incomingBank.upiId ?? upiId ?? vendor.bankDetails?.upiId ?? '').toLowerCase().trim(),
+        upiId: String(incomingBank.upiId ?? upiId ?? vendor.bankDetails?.upiId ?? '').toLowerCase().trim(),
         upiQrCode: qrCodeUrl
       };
       vendor.markModified('bankDetails');
     }
 
-    await vendor.save();
+    await vendor.save({ validateModifiedOnly: true });
 
     res.status(200).json({
       success: true,
@@ -353,13 +354,37 @@ const updateProfile = async (req, res) => {
     });
   } catch (error) {
     console.error('Update vendor profile error:', error);
-    res.status(500).json({
+
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Profile validation failed',
+        errors: Object.values(error.errors || {}).map((item) => ({
+          field: item.path,
+          message: item.message
+        }))
+      });
+    }
+
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'A profile value already exists',
+        errors: error.keyValue || {}
+      });
+    }
+
+    const safeMessage = process.env.NODE_ENV === 'production'
+      ? 'Failed to update profile. Please try again.'
+      : (error?.message || 'Failed to update profile. Please try again.');
+
+    res.status(error?.name === 'CastError' ? 400 : 500).json({
       success: false,
-      message: 'Failed to update profile. Please try again.'
+      message: safeMessage,
+      ...(error?.name === 'CastError' ? { field: error.path } : {})
     });
   }
 };
-
 /**
  * Update vendor address
  */

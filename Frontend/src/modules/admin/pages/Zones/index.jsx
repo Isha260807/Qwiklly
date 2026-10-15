@@ -587,7 +587,7 @@ const ZoneManagement = () => {
 
             {/* Location Search Bar in Map */}
             {isLoaded && (
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 w-[calc(100%-2rem)] max-w-md">
+              <div className="absolute top-14 left-3 right-3 translate-x-0 z-10 w-auto max-w-none sm:top-3 sm:left-auto sm:right-3 sm:w-[calc(100%-7rem)] sm:max-w-md">
                 <Autocomplete onLoad={setAutocomplete} onPlaceChanged={onPlaceChanged}>
                   <div className="relative">
                     <HiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />

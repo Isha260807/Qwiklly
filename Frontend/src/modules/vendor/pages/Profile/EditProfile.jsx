@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiBriefcase, FiPhone, FiMail, FiMapPin, FiCamera, FiUpload, FiCreditCard } from 'react-icons/fi';
+import { FiUser, FiBriefcase, FiPhone, FiMail, FiMapPin, FiCamera, FiUpload, FiCreditCard, FiX, FiShield } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
-import BottomNav from '../../components/layout/BottomNav';
 
 import { vendorAuthService } from '../../../../services/authService';
 import AddressSelectionModal from '../../../user/pages/Checkout/components/AddressSelectionModal';
@@ -13,16 +12,27 @@ import flutterBridge from '../../../../utils/flutterBridge';
 
 // Zod schema
 const vendorProfileSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  businessName: z.string().optional(),
-  phone: z.string().regex(/^\+?[0-9]{10,13}$/, "Invalid phone number"),
-  email: z.string().email("Invalid email address").optional().or(z.literal('')),
+  name: z.string().trim().min(2, "Name must be at least 2 characters"),
+  businessName: z.string().trim().optional(),
+  // Phone is already verified and is not editable by this update endpoint.
+  // Accept existing formatted values so profile edits are not blocked.
+  phone: z.string().optional(),
+  email: z.string().trim().email("Invalid email address").optional().or(z.literal('')),
+  // Address can be missing for older vendors; the backend preserves the
+  // existing address and supports partial profile updates.
   address: z.custom((val) => {
+    if (
+      val === undefined ||
+      val === null ||
+      val === '' ||
+      (typeof val === 'object' && !val.fullAddress && !val.addressLine1)
+    ) {
+      return true;
+    }
     return (typeof val === 'string' && val.trim().length > 0) ||
       (typeof val === 'object' && val !== null && (val.fullAddress || val.addressLine1));
-  }, "Address is required"),
+  }, "Address is invalid").optional(),
 });
-
 const EditProfile = () => {
   const navigate = useNavigate();
 
@@ -60,6 +70,11 @@ const EditProfile = () => {
 
   const [errors, setErrors] = useState({});
   const [isFlutter, setIsFlutter] = useState(flutterBridge.isFlutter);
+  const [isPhoneChangeOpen, setIsPhoneChangeOpen] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
+  const [phoneOtp, setPhoneOtp] = useState('');
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneChangeLoading, setPhoneChangeLoading] = useState(false);
 
   // Sync flutter bridge state
   useEffect(() => {
@@ -298,23 +313,114 @@ const EditProfile = () => {
   };
 
 
+  const openPhoneChangeModal = () => {
+    setNewPhone(formData.phone || '');
+    setPhoneOtp('');
+    setPhoneOtpSent(false);
+    setIsPhoneChangeOpen(true);
+  };
+
+  const closePhoneChangeModal = () => {
+    if (!phoneChangeLoading) {
+      setIsPhoneChangeOpen(false);
+      setPhoneOtp('');
+      setPhoneOtpSent(false);
+    }
+  };
+
+  const handleSendPhoneChangeOtp = async () => {
+    const cleanPhone = newPhone.replace(/\D/g, '');
+
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      toast.error('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    if (cleanPhone === String(formData.phone || '').replace(/\D/g, '')) {
+      toast.error('Please enter a new mobile number');
+      return;
+    }
+
+    try {
+      setPhoneChangeLoading(true);
+      const response = await vendorAuthService.sendPhoneChangeOTP(cleanPhone);
+
+      if (!response.success) {
+        throw new Error(response.message || 'Unable to send OTP');
+      }
+
+      setNewPhone(cleanPhone);
+      setPhoneOtpSent(true);
+      toast.success('OTP sent to your new mobile number');
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || 'Unable to send OTP');
+    } finally {
+      setPhoneChangeLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneChangeOtp = async () => {
+    const cleanPhone = newPhone.replace(/\D/g, '');
+
+    if (!/^\d{6}$/.test(phoneOtp)) {
+      toast.error('Please enter the 6-digit OTP');
+      return;
+    }
+
+    try {
+      setPhoneChangeLoading(true);
+      const response = await vendorAuthService.verifyPhoneChangeOTP(cleanPhone, phoneOtp);
+
+      if (!response.success) {
+        throw new Error(response.message || 'Invalid OTP');
+      }
+
+      const updatedPhone = response.vendor?.phone || cleanPhone;
+      setFormData((prev) => ({ ...prev, phone: updatedPhone }));
+
+      ['vendorData', 'vendorProfile'].forEach((storageKey) => {
+        try {
+          const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+          localStorage.setItem(storageKey, JSON.stringify({ ...stored, phone: updatedPhone }));
+        } catch (storageError) {
+          console.warn('Unable to update stored vendor phone:', storageError);
+        }
+      });
+
+      setIsPhoneChangeOpen(false);
+      setPhoneOtp('');
+      setPhoneOtpSent(false);
+      toast.success('Mobile number updated successfully');
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || 'Unable to verify OTP');
+    } finally {
+      setPhoneChangeLoading(false);
+    }
+  };
   const handleSubmit = async () => {
     // Zod Validation
     const validationResult = vendorProfileSchema.safeParse({
-      name: formData.name,
-      businessName: formData.businessName,
-      phone: formData.phone,
-      email: formData.email,
+      name: String(formData.name || '').trim(),
+      businessName: String(formData.businessName || '').trim(),
+      phone: String(formData.phone || '').trim(),
+      email: String(formData.email || '').trim(),
       address: formData.address,
     });
 
     if (!validationResult.success) {
       console.log('Validation failed:', validationResult.error);
-      const errorMessage = validationResult.error?.errors?.[0]?.message || 'Validation failed';
-      toast.error(errorMessage);
+      const issues = validationResult.error?.issues || validationResult.error?.errors || [];
+      const fieldErrors = issues.reduce((result, issue) => {
+        const field = issue.path?.[0];
+        if (field && !result[field]) result[field] = issue.message;
+        return result;
+      }, {});
+      setErrors(fieldErrors);
+      toast.error(issues[0]?.message || 'Please check the entered details');
       return;
     }
 
+    setErrors({});
     try {
       setUploading(true);
       let photoUrl = formData.profilePhoto;
@@ -346,11 +452,12 @@ const EditProfile = () => {
 
       // Prepare payload to match backend structure
       const payload = {
-        name: formData.name,
-        businessName: formData.businessName,
+        name: validationResult.data.name,
+        businessName: validationResult.data.businessName,
         address: formData.address,
         profilePhoto: photoUrl,
-        aadharDocument: aadharUrl,
+        // Only send Aadhar when a new file was selected; existing documents must not be revalidated on every profile save.
+        aadharDocument: aadharFile ? aadharUrl : undefined,
         serviceRange: formData.serviceRange,
         bankDetails: formData.bankDetails
       };
@@ -375,9 +482,16 @@ const EditProfile = () => {
         }
       } catch (apiError) {
         console.error('API update failed:', apiError);
-        alert(apiError.message || 'Failed to save profile on server.');
+        const serverErrors = apiError.response?.data?.errors;
+        const errorDetails = Array.isArray(serverErrors)
+          ? serverErrors.map((item) => item.message || item.msg || (item.field || 'Profile') + ' is invalid').join(', ')
+          : '';
+        const errorMessage = [
+          apiError.response?.data?.message,
+          errorDetails
+        ].filter(Boolean).join(': ') || apiError.message || 'Failed to save profile on server.';
+        toast.error(errorMessage);
       }
-
     } catch (error) {
       console.error('Error saving profile:', error);
       alert('Failed to save profile. Please try again.');
@@ -494,15 +608,23 @@ const EditProfile = () => {
               </div>
               <span>Phone Number <span className="text-red-500">*</span></span>
             </label>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => handleInputChange('phone', e.target.value)}
-              placeholder="Enter phone number"
-              className={`w-full px-4 py-3 bg-white rounded-xl border focus:outline-none focus:ring-2 ${errors.phone ? 'border-red-500' : 'border-gray-200'
-                }`}
-              style={{ focusRingColor: themeColors.button }}
-            />
+            <div className="flex gap-2">
+              <input
+                type="tel"
+                value={formData.phone}
+                readOnly
+                placeholder="Enter phone number"
+                className="min-w-0 flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 cursor-not-allowed"
+              />
+              <button
+                type="button"
+                onClick={openPhoneChangeModal}
+                className="shrink-0 px-4 py-3 rounded-xl font-semibold text-white whitespace-nowrap"
+                style={{ background: themeColors.button }}
+              >
+                Change
+              </button>
+            </div>
             {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
           </div>
 
@@ -542,7 +664,7 @@ const EditProfile = () => {
               >
                 <FiMapPin className="w-4 h-4" style={{ color: themeColors.icon }} />
               </div>
-              <span>Address <span className="text-red-500">*</span></span>
+              <span>Address</span>
             </label>
 
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 mb-2">
@@ -717,8 +839,96 @@ const EditProfile = () => {
         }}
         onSave={handleAddressSave}
       />
+      {isPhoneChangeOpen && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-11 h-11 rounded-2xl flex items-center justify-center"
+                  style={{ background: themeColors.primaryLight, color: themeColors.icon }}
+                >
+                  <FiShield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Change Mobile Number</h2>
+                  <p className="text-xs text-gray-500">OTP verification required</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closePhoneChangeModal}
+                disabled={phoneChangeLoading}
+                className="p-2 rounded-full text-gray-500 hover:bg-gray-100"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
 
-      <BottomNav />
+            {!phoneOtpSent ? (
+              <>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  New mobile number
+                </label>
+                <input
+                  type="tel"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="Enter 10-digit mobile number"
+                  maxLength={10}
+                  autoFocus
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2"
+                />
+                <button
+                  type="button"
+                  onClick={handleSendPhoneChangeOtp}
+                  disabled={phoneChangeLoading}
+                  className="w-full mt-4 py-3 rounded-xl font-bold text-white disabled:opacity-60"
+                  style={{ background: themeColors.button }}
+                >
+                  {phoneChangeLoading ? 'Sending OTP...' : 'Send OTP'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 mb-3">
+                  Enter the 6-digit OTP sent to <strong>{newPhone}</strong>.
+                </p>
+                <input
+                  type="tel"
+                  value={phoneOtp}
+                  onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Enter 6-digit OTP"
+                  maxLength={6}
+                  autoFocus
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-center tracking-[0.35em] text-lg focus:outline-none focus:ring-2"
+                />
+                <button
+                  type="button"
+                  onClick={handleVerifyPhoneChangeOtp}
+                  disabled={phoneChangeLoading}
+                  className="w-full mt-4 py-3 rounded-xl font-bold text-white disabled:opacity-60"
+                  style={{ background: themeColors.button }}
+                >
+                  {phoneChangeLoading ? 'Verifying...' : 'Verify & Update'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhoneOtpSent(false);
+                    setPhoneOtp('');
+                  }}
+                  disabled={phoneChangeLoading}
+                  className="w-full mt-2 py-2 text-sm font-semibold"
+                  style={{ color: themeColors.button }}
+                >
+                  Change number / Resend OTP
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
