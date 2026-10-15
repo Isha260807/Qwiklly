@@ -411,7 +411,7 @@ const calculateBookingPrice = async ({
   // 6. Taxable Subtotal & GST Calculation
   const totalDiscount = Math.min(basePrice, planDiscount + couponDiscount);
   const taxableAmount = Math.max(0, basePrice - totalDiscount);
-  const tax = isFreeUnderPlan ? 0 : Math.round((taxableAmount * gstPercentage) / 100);
+  const tax = isFreeUnderPlan ? 0 : Math.round((basePrice * gstPercentage) / 100);
 
   // 7. Visiting Charges / Convenience Fee
   let visitingCharges = 0;

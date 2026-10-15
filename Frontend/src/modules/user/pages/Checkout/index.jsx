@@ -1068,7 +1068,7 @@ const Checkout = () => {
 
   const planSavings = totalOriginalPrice - itemTotal;
   const taxableAmount = Math.max(0, itemTotal - couponDiscount);
-  const taxesAndFee = itemTotal === 0 ? 0 : Math.round((taxableAmount * gstPercentage) / 100);
+  const taxesAndFee = itemTotal === 0 ? 0 : Math.round((itemTotal * gstPercentage) / 100);
   const finalVisitedFee = itemTotal === 0 ? 0 : visitedFee;
   const finalInstantFee = (bookingType === 'instant' && itemTotal > 0) ? instantBookingCharges : 0;
 

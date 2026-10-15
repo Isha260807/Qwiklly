@@ -1,49 +1,17 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { HiChevronDown } from 'react-icons/hi';
-import { FiSearch, FiShoppingCart, FiSend } from 'react-icons/fi';
-import { toast } from 'react-hot-toast';
+import { FiSearch, FiShoppingCart } from 'react-icons/fi';
 import NotificationBell from '../common/NotificationBell';
 import { useCart } from '../../../../context/CartContext';
-import { testPushNotification } from '../../../../services/pushNotificationService';
 
 const Header = ({ location, onLocationClick, onSearchClick }) => {
   const { cartCount } = useCart();
-  const [isTestingPush, setIsTestingPush] = useState(false);
-
   // Parse location into title and detailed subtitle
   const cleanLocation = location && location !== '...' ? location : 'Select Location';
   const locationParts = cleanLocation.split(/[,-]/);
   const primaryTitle = locationParts[0]?.trim() || 'Select Location';
   const subtitle = cleanLocation;
-
-  const handleTestPush = async (e) => {
-    e.stopPropagation();
-    if (isTestingPush) return;
-
-    setIsTestingPush(true);
-    const toastId = toast.loading('Sending test push notification...');
-
-    try {
-      const result = await testPushNotification('user');
-      if (result.success) {
-        toast.success('Test notification sent! Check your notification tray.', {
-          id: toastId,
-          duration: 4000
-        });
-      } else {
-        toast.error(result.error || 'Failed to send test push notification', {
-          id: toastId,
-          duration: 5000
-        });
-      }
-    } catch (err) {
-      toast.error(err.message || 'Error sending test notification', { id: toastId });
-    } finally {
-      setIsTestingPush(false);
-    }
-  };
-
   return (
     <header 
       className="text-white shadow-md select-none sticky top-0 z-50 transition-all duration-300"
@@ -68,24 +36,8 @@ const Header = ({ location, onLocationClick, onSearchClick }) => {
           </span>
         </div>
 
-        {/* Right Side: Test Push, Search, Notification & Cart Button */}
+        {/* Right Side: Search, Notification & Cart Button */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {/* Test Push Button */}
-          <button
-            type="button"
-            onClick={handleTestPush}
-            disabled={isTestingPush}
-            className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center gap-1.5 transition-all duration-200 backdrop-blur-sm border border-white/25 shadow-xs cursor-pointer disabled:opacity-50 text-[11px] sm:text-xs font-bold"
-            title="Tap to test push notifications"
-          >
-            {isTestingPush ? (
-              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <FiSend className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" />
-            )}
-            <span>{isTestingPush ? 'Testing...' : 'Test Push'}</span>
-          </button>
-
           {/* Search Trigger Button */}
           <button
             type="button"
