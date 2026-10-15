@@ -656,8 +656,8 @@ const Home = () => {
           hours: isDurationBased ? durationMinutes / 60 : null,
           serviceCount: 1,
           quantity: 1,
-          rating: service.rating || "4.8",
-          reviews: service.reviews || "10k+",
+          rating: service.rating ?? null,
+          reviews: service.reviews ?? null,
           vendorId: service.vendorId || null,
           sectionId: service.sectionId || null, // VITAL: Added for plan benefits
           ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {})
@@ -1031,8 +1031,8 @@ const Home = () => {
                         return {
                           id: card._id || cIdx,
                           title: card.title,
-                          rating: card.rating || "4.8",
-                          reviews: card.reviews || "10k+",
+                          rating: card.rating ?? null,
+                          reviews: card.reviews ?? null,
                           price: card.price,
                           originalPrice: card.originalPrice,
                           discount: card.discount,

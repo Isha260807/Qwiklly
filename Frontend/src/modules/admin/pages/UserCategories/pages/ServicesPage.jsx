@@ -50,9 +50,8 @@ const initialServiceForm = {
   allowCustomHours: false,
   allowExtraHours: true,
   allowExtraParts: true,
-  gstPercentage: 18,
-  rating: 4.9,
-  ratingCount: "237.6k",
+  rating: "",
+  ratingCount: "",
   status: "active",
   zoneIds: []
 };
@@ -194,9 +193,8 @@ const ServicesPage = () => {
       allowCustomHours: service.allowCustomHours ?? false,
       allowExtraHours: service.allowExtraHours ?? true,
       allowExtraParts: service.allowExtraParts ?? true,
-      gstPercentage: service.gstPercentage ?? 18,
-      rating: service.rating ?? 4.9,
-      ratingCount: service.ratingCount || "237.6k",
+      rating: service.adminRating ?? "",
+      ratingCount: "",
       status: service.status || "active",
       zoneIds: (service.zoneIds || []).map(z => (typeof z === "object" ? z._id : z))
     });
@@ -308,9 +306,7 @@ const ServicesPage = () => {
         allowCustomHours: !!formData.allowCustomHours,
         allowExtraHours: !!formData.allowExtraHours,
         allowExtraParts: !!formData.allowExtraParts,
-        gstPercentage: Number(formData.gstPercentage) || 18,
-        rating: Number(formData.rating) || 4.9,
-        ratingCount: formData.ratingCount || "237.6k",
+        adminRating: formData.rating === "" || formData.rating === null ? null : Number(formData.rating),
         status: formData.status || "active",
         zoneIds: formData.zoneIds || []
       };
@@ -615,7 +611,7 @@ const ServicesPage = () => {
                       <span className="text-[10px] text-slate-400 font-medium">
                         {service.pricingType === "DURATION" || service.pricingType === "HOURLY"
                           ? `Range: ${service.minDurationMinutes ?? 30}m – ${service.maxDurationMinutes ?? 240}m`
-                          : `GST: ${service.gstPercentage ?? 18}%`}
+                          : "GST: Global platform setting"}
                       </span>
                     </div>
 
@@ -672,7 +668,7 @@ const ServicesPage = () => {
         title={editingServiceId ? "Edit Service Info" : "Add New Service"}
         maxWidth="max-w-2xl"
       >
-        <form onSubmit={handleSaveService} className="space-y-4">
+        <form onSubmit={handleSaveService} className="admin-service-form-fields space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Service Title <span className="text-red-500">*</span>
@@ -896,22 +892,10 @@ const ServicesPage = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                GST (%)
-              </label>
-              <input
-                type="number"
-                value={formData.gstPercentage}
-                onChange={(e) => setFormData({ ...formData, gstPercentage: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Rating
+                Admin Rating (Optional)
               </label>
               <input
                 type="number"
@@ -920,6 +904,7 @@ const ServicesPage = () => {
                 max="5"
                 value={formData.rating}
                 onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                placeholder="Leave empty to use real customer rating"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
               />
             </div>

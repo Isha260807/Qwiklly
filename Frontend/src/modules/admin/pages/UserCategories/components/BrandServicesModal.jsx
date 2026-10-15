@@ -8,7 +8,6 @@ import { z } from 'zod';
 const serviceSchema = z.object({
   title: z.string().min(2, "Title is required"),
   basePrice: z.number().min(0, "Price must be non-negative"),
-  gstPercentage: z.number().min(0).max(100).default(18),
   discountPrice: z.number().optional()
 });
 
@@ -19,7 +18,6 @@ const BrandServicesModal = ({ isOpen, onClose, brand }) => {
   const [form, setForm] = useState({
     title: '',
     basePrice: '',
-    gstPercentage: 18,
     discountPrice: ''
   });
 
@@ -52,7 +50,6 @@ const BrandServicesModal = ({ isOpen, onClose, brand }) => {
     setForm({
       title: '',
       basePrice: '',
-      gstPercentage: 18,
       discountPrice: ''
     });
   };
@@ -64,7 +61,6 @@ const BrandServicesModal = ({ isOpen, onClose, brand }) => {
     const data = {
       title: form.title,
       basePrice: Number(form.basePrice),
-      gstPercentage: Number(form.gstPercentage),
       discountPrice: form.discountPrice ? Number(form.discountPrice) : undefined
     };
 
@@ -121,7 +117,6 @@ const BrandServicesModal = ({ isOpen, onClose, brand }) => {
     setForm({
       title: service.title,
       basePrice: service.basePrice,
-      gstPercentage: service.gstPercentage || 18,
       discountPrice: service.discountPrice || ''
     });
   };
@@ -156,16 +151,6 @@ const BrandServicesModal = ({ isOpen, onClose, brand }) => {
                 className="w-full px-3 py-2 border rounded-lg text-sm"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">GST %</label>
-              <input
-                type="number"
-                value={form.gstPercentage}
-                onChange={e => setForm(p => ({ ...p, gstPercentage: e.target.value }))}
-                placeholder="18"
-                className="w-full px-3 py-2 border rounded-lg text-sm"
-              />
-            </div>
             <div className="sm:col-start-4">
               <button
                 type="submit"
@@ -196,7 +181,6 @@ const BrandServicesModal = ({ isOpen, onClose, brand }) => {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Title</th>
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Price</th>
-                <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">GST</th>
                 <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
@@ -205,7 +189,6 @@ const BrandServicesModal = ({ isOpen, onClose, brand }) => {
                 <tr key={service.id || service._id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{service.title}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">₹{service.basePrice}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{service.gstPercentage}%</td>
                   <td className="px-4 py-3 text-right flex justify-end gap-2">
                     <button
                       onClick={() => handleEdit(service)}
@@ -226,7 +209,7 @@ const BrandServicesModal = ({ isOpen, onClose, brand }) => {
               ))}
               {services.length === 0 && (
                 <tr>
-                  <td colSpan="4" className="px-4 py-8 text-center text-sm text-gray-500">
+                  <td colSpan="3" className="px-4 py-8 text-center text-sm text-gray-500">
                     No services found for this brand. Add one above.
                   </td>
                 </tr>

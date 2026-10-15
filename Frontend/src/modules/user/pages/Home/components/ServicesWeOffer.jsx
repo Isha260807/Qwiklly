@@ -12,7 +12,9 @@ const toAssetUrl = (url) => {
 };
 
 const formatRatingDisplay = (rating, ratingCount) => {
-  const r = rating || '4.9';
+  const numericRating = Number(rating);
+  if (!Number.isFinite(numericRating) || numericRating <= 0) return '';
+  const r = String(rating);
   if (!ratingCount) return `${r}`;
   const countStr = String(ratingCount).trim();
   if (countStr.includes('(')) return countStr;
@@ -152,7 +154,7 @@ const ServicesWeOffer = ({ services = [], onServiceClick, onAddClick, cartItems 
                 )}
 
                 {/* Rating Badge (e.g. ★ 4.9 (237.6k)) on Top-Right */}
-                {!badge && (
+                {!badge && ratingDisplay && (
                   <div className="absolute top-1.5 right-1.5 bg-white/95 backdrop-blur-xs px-1.5 py-0.5 rounded-[4px] flex items-center gap-0.5 shadow-xs border border-slate-200/80 leading-none z-10">
                     <span className="text-[#F59E0B] text-[8px] sm:text-[9px] leading-none">★</span>
                     <span className="text-[7.5px] sm:text-[8.5px] font-bold text-slate-700 leading-none">

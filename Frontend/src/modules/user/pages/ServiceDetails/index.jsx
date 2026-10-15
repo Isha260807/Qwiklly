@@ -31,6 +31,8 @@ const toAssetUrl = (url) => {
   return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
 };
 
+const hasServiceRating = (rating) => Number(rating) > 0;
+
 const defaultInclusions = [
   { title: 'Bathroom Cleaning', duration: '40 mins', iconUrl: '' },
   { title: 'Utensils', duration: '20 mins', iconUrl: '' },
@@ -380,8 +382,8 @@ const ServiceDetails = () => {
       estimatedDurationMinutes: itemIsDuration ? null : Number(serviceItem.estimatedDurationMinutes || 45),
       serviceCount: itemQuantity,
       quantity: itemQuantity,
-      rating: serviceItem.rating || '4.9',
-      reviews: serviceItem.ratingCount || '237.6k',
+      rating: serviceItem.rating ?? null,
+      reviews: serviceItem.ratingCount ?? null,
       inclusions: serviceItem.inclusions || [],
       ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {}),
       ...(itemIsDuration ? {
@@ -897,15 +899,19 @@ const ServiceDetails = () => {
                   </div>
 
                   {/* Rating in same line */}
-                  <div className="flex items-center gap-1 text-xs pl-1">
+                  {hasServiceRating(service.rating) && (
+                    <div className="flex items-center gap-1 text-xs pl-1">
                     <span className="text-[#F59E0B]">★</span>
                     <span className="font-bold text-slate-800">
-                      {service.rating || '4.9'}
+                      {service.rating ?? ''}
                     </span>
-                    <span className="text-[11px] text-slate-500 font-normal">
-                      ({service.ratingCount ? String(service.ratingCount).replace(/ratings?|\(|\)/gi, '').trim() : '237.6k'} ratings)
-                    </span>
-                  </div>
+                    {service.ratingCount && (
+                      <span className="text-[11px] text-slate-500 font-normal">
+                        ({String(service.ratingCount).replace(/ratings?|\(|\)/gi, '').trim()} ratings)
+                      </span>
+                    )}
+                    </div>
+                  )}
                 </div>
                 {/* Compact duration selector, matching the service card pattern */}
                 {showBookingOptions && isDurationBased ? (
@@ -1433,11 +1439,15 @@ const ServiceDetails = () => {
                       <span className="px-2.5 py-0.5 bg-[#FFF7FA] text-[#720C3E] border border-[#E8D9DF] rounded-md text-[10px] font-black uppercase tracking-wider">
                         {service.category?.title || service.category || 'Home Service'}
                       </span>
-                      <div className="flex items-center gap-1 text-xs bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md">
+                      {hasServiceRating(service.rating) && (
+                        <div className="flex items-center gap-1 text-xs bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md">
                         <span className="text-[#F59E0B]">★</span>
-                        <span className="font-bold text-slate-800">{service.rating || '4.9'}</span>
-                        <span className="text-[10px] text-slate-400">({service.ratingCount ? String(service.ratingCount).replace(/ratings?|\(|\)/gi, '').trim() : '237.6k'})</span>
-                      </div>
+                        <span className="font-bold text-slate-800">{service.rating ?? ''}</span>
+                        {service.ratingCount && (
+                          <span className="text-[10px] text-slate-400">({String(service.ratingCount).replace(/ratings?|\(|\)/gi, '').trim()})</span>
+                        )}
+                        </div>
+                      )}
                     </div>
 
                     <h2 className="text-xl font-black text-slate-900 tracking-tight leading-tight">

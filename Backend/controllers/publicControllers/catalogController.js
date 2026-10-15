@@ -1,8 +1,82 @@
+const mongoose = require('mongoose');
 const Category = require('../../models/Category');
 const Brand = require('../../models/Brand');
 const Service = require('../../models/UserService');
 const HomeContent = require('../../models/HomeContent');
 const Banner = require('../../models/Banner');
+const Review = require('../../models/Review');
+const Settings = require('../../models/Settings');
+const formatReviewCount = (count) => {
+  const total = Number(count) || 0;
+  if (!total) return '';
+  if (total < 1000) return String(total);
+  if (total < 1000000) {
+    const value = total / 1000;
+    return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)}k`;
+  }
+  const value = total / 1000000;
+  return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)}M`;
+};
+
+const getGlobalServiceGstPercentage = async () => {
+  const settings = await Settings.findOne({ type: 'global' })
+    .select('serviceGstPercentage')
+    .lean();
+
+  const percentage = Number(settings?.serviceGstPercentage);
+  return Number.isFinite(percentage) && percentage >= 0 ? percentage : 0;
+};
+const getServiceRatingStats = async (services = []) => {
+  const serviceIds = [...new Set(
+    services
+      .map(service => service?._id || service?.id)
+      .filter(id => id && mongoose.Types.ObjectId.isValid(id))
+      .map(id => String(id))
+  )];
+
+  if (!serviceIds.length) return new Map();
+
+  const stats = await Review.aggregate([
+    {
+      $match: {
+        serviceId: { $in: serviceIds.map(id => new mongoose.Types.ObjectId(id)) },
+        status: 'active',
+        rating: { $gte: 1, $lte: 5 }
+      }
+    },
+    {
+      $group: {
+        _id: '$serviceId',
+        averageRating: { $avg: '$rating' },
+        totalReviews: { $sum: 1 }
+      }
+    }
+  ]);
+
+  return new Map(stats.map(stat => [String(stat._id), {
+    averageRating: Number(Number(stat.averageRating || 0).toFixed(1)),
+    totalReviews: Number(stat.totalReviews || 0)
+  }]));
+};
+
+const getServiceRatingPayload = (service, ratingStatsByServiceId) => {
+  const stats = ratingStatsByServiceId.get(String(service?._id || service?.id)) || {};
+  const adminRating = Number(service?.adminRating);
+  const hasAdminRating = Number.isFinite(adminRating) && adminRating >= 1 && adminRating <= 5;
+  const liveRating = Number(stats.averageRating);
+  const rating = hasAdminRating
+    ? adminRating
+    : (Number.isFinite(liveRating) && liveRating > 0 ? liveRating : null);
+  const reviewCount = Number(stats.totalReviews || 0);
+  const ratingCount = formatReviewCount(reviewCount);
+
+  return {
+    rating,
+    reviews: ratingCount,
+    ratingCount,
+    reviewCount
+  };
+};
 
 /**
  * Public Catalog Controllers
@@ -164,6 +238,8 @@ const getPublicBrandBySlug = async (req, res) => {
 
     // Fetch services associated with this brand
     const brandServices = await Service.find({ brandId: brand._id, status: 'active' }).lean();
+    const brandRatingStats = await getServiceRatingStats(brandServices);
+    const globalServiceGstPercentage = await getGlobalServiceGstPercentage();
 
     // Map services to a default section structure for the frontend
     const servicesSection = {
@@ -174,8 +250,9 @@ const getPublicBrandBySlug = async (req, res) => {
         title: svc.title,
         subtitle: svc.description || '',
         price: svc.basePrice,
-        rating: "4.8", // Default rating
-        reviews: "1k+", // Default reviews
+        gstPercentage: globalServiceGstPercentage,
+        ...getServiceRatingPayload(svc, brandRatingStats),
+
         imageUrl: svc.iconUrl || brand.iconUrl || '',
         features: svc.description ? [svc.description] : [],
         duration: "60 min" // Default duration
@@ -253,11 +330,21 @@ const getPublicServices = async (req, res) => {
 
     const services = await Service.find(query)
       .populate('brandId', 'title iconUrl')
-      .populate('frequentlyAddedTogether', 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours rating ratingCount status zoneIds')
+      .populate('frequentlyAddedTogether', 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours adminRating rating ratingCount status zoneIds')
       .populate('frequentlyAddedTogetherByZone.zoneId', 'name')
-      .populate('frequentlyAddedTogetherByZone.serviceIds', 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours rating ratingCount status zoneIds')
+      .populate('frequentlyAddedTogetherByZone.serviceIds', 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours adminRating rating ratingCount status zoneIds')
       .sort({ displayOrder: 1, createdAt: -1 })
       .lean();
+
+    const globalServiceGstPercentage = await getGlobalServiceGstPercentage();
+
+    const ratingStatsByServiceId = await getServiceRatingStats([
+      ...services,
+      ...services.flatMap(service => [
+        ...(service.frequentlyAddedTogether || []),
+        ...((service.frequentlyAddedTogetherByZone || []).flatMap(entry => entry.serviceIds || []))
+      ])
+    ]);
 
     res.status(200).json({
       success: true,
@@ -286,7 +373,7 @@ const getPublicServices = async (req, res) => {
         basePrice: svc.basePrice,
         originalPrice: svc.originalPrice || 0,
         discountPrice: svc.discountPrice || null,
-        gstPercentage: svc.gstPercentage ?? 18,
+        gstPercentage: globalServiceGstPercentage,
         pricingType: svc.pricingType || 'FIXED',
         estimatedDurationMinutes: svc.estimatedDurationMinutes ?? 45,
         pricePerUnit: svc.pricePerUnit ?? svc.durationPricing?.pricePerUnit ?? svc.pricePer30Minutes ?? (svc.hourlyRate ? svc.hourlyRate / 2 : null),
@@ -305,9 +392,7 @@ const getPublicServices = async (req, res) => {
         // Keep the service visible in every city/zone catalog. The client
         // uses this list only to label area availability; it is not a filter.
         zoneIds: (svc.zoneIds || []).map(zoneId => zoneId.toString()),
-        rating: svc.rating || 4.9,
-        reviews: svc.ratingCount || '4.9 (237.6k)',
-        ratingCount: svc.ratingCount || '4.9 (237.6k)',
+        ...getServiceRatingPayload(svc, ratingStatsByServiceId),
         badge: svc.badge || null,
         inclusions: svc.inclusions || [],
         whyLoveTitle: svc.whyLoveTitle || `Why Customers Love ${svc.title}`,
@@ -336,6 +421,7 @@ const getPublicServices = async (req, res) => {
             basePrice: recommended.basePrice || 0,
             originalPrice: recommended.originalPrice || 0,
             discountPrice: recommended.discountPrice || null,
+            gstPercentage: globalServiceGstPercentage,
             pricingType: recommended.pricingType || 'FIXED',
             estimatedDurationMinutes: recommended.estimatedDurationMinutes ?? 45,
             pricePerUnit: recommended.pricePerUnit ?? recommended.durationPricing?.pricePerUnit ?? recommended.pricePer30Minutes ?? null,
@@ -347,8 +433,7 @@ const getPublicServices = async (req, res) => {
             hourlyRate: recommended.hourlyRate ?? null,
             minHours: recommended.minHours ?? 1,
             maxHours: recommended.maxHours ?? 8,
-            rating: recommended.rating || 4.9,
-            ratingCount: recommended.ratingCount || '4.9 (237.6k)'
+            ...getServiceRatingPayload(recommended, ratingStatsByServiceId)
           })),
         brandId: svc.brandId?._id,
         brandName: svc.brandId?.title,
@@ -494,6 +579,10 @@ const getPublicHomeData = async (req, res) => {
         .lean()
     ]);
 
+    const globalServiceGstPercentage = await getGlobalServiceGstPercentage();
+
+    const ratingStatsByServiceId = await getServiceRatingStats(servicesRes);
+
     const formattedCategories = categoriesRes.map(cat => ({
       id: cat._id.toString(),
       title: cat.title,
@@ -517,7 +606,7 @@ const getPublicHomeData = async (req, res) => {
       basePrice: svc.basePrice,
       originalPrice: svc.originalPrice || 0,
       discountPrice: svc.discountPrice || null,
-      gstPercentage: svc.gstPercentage ?? 18,
+      gstPercentage: globalServiceGstPercentage,
       pricingType: svc.pricingType || 'FIXED',
       estimatedDurationMinutes: svc.estimatedDurationMinutes ?? 45,
       pricePerUnit: svc.pricePerUnit ?? svc.durationPricing?.pricePerUnit ?? svc.pricePer30Minutes ?? (svc.hourlyRate ? svc.hourlyRate / 2 : null),
@@ -537,9 +626,7 @@ const getPublicHomeData = async (req, res) => {
       // Empty means available in every active zone. Non-empty is used by the
       // client to show an unavailable badge without hiding the service.
       zoneIds: (svc.zoneIds || []).map(zoneId => zoneId.toString()),
-      rating: svc.rating || 4.9,
-      reviews: svc.ratingCount || '4.9 (237.6k)',
-      ratingCount: svc.ratingCount || '4.9 (237.6k)',
+      ...getServiceRatingPayload(svc, ratingStatsByServiceId),
       badge: svc.badge || null,
       inclusions: svc.inclusions || []
     }));

@@ -48,6 +48,11 @@ const getAdminServiceScopeQuery = (req) => {
   };
 };
 
+const normalizeAdminRating = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
 const normalizeFrequentlyAddedTogether = (ids, selfId = null) => [...new Set(
   (Array.isArray(ids) ? ids : [])
     .filter(id => mongoose.Types.ObjectId.isValid(id))
@@ -55,7 +60,7 @@ const normalizeFrequentlyAddedTogether = (ids, selfId = null) => [...new Set(
     .filter(id => !selfId || id !== String(selfId))
 )];
 
-const frequentlyAddedTogetherFields = 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours rating ratingCount status zoneIds';
+const frequentlyAddedTogetherFields = 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours adminRating rating ratingCount status zoneIds';
 
 const normalizeFrequentlyAddedTogetherByZone = (entries, selfId = null) => (Array.isArray(entries) ? entries : [])
   .map(entry => ({
@@ -190,7 +195,7 @@ const createService = async (req, res) => {
       allowCustomHours,
       allowExtraHours,
       allowExtraParts,
-      gstPercentage,
+      adminRating,
       rating,
       ratingCount,
       badge,
@@ -306,7 +311,9 @@ const createService = async (req, res) => {
       allowCustomHours: !!allowCustomHours,
       allowExtraHours: allowExtraHours !== undefined ? !!allowExtraHours : true,
       allowExtraParts: allowExtraParts !== undefined ? !!allowExtraParts : true,
-      gstPercentage: gstPercentage !== undefined ? Number(gstPercentage) : 18,
+      adminRating: normalizeAdminRating(adminRating !== undefined ? adminRating : rating),
+      // Keep legacy fields for older admin clients; public responses resolve
+      // the actual display rating separately.
       rating: rating !== undefined ? Number(rating) : 4.9,
       ratingCount: ratingCount || '4.9 (237.6k)',
       badge: badge ? badge.trim() : null,
@@ -460,8 +467,12 @@ const updateService = async (req, res) => {
       }
     }
 
-    if (updates.gstPercentage !== undefined) service.gstPercentage = Number(updates.gstPercentage);
-    if (updates.rating !== undefined) service.rating = Number(updates.rating);
+    if (updates.adminRating !== undefined) {
+      service.adminRating = normalizeAdminRating(updates.adminRating);
+    } else if (updates.rating !== undefined) {
+      // Backward compatibility for older admin clients.
+      service.adminRating = normalizeAdminRating(updates.rating);
+    }
     if (updates.ratingCount !== undefined) service.ratingCount = updates.ratingCount;
     if (updates.badge !== undefined) service.badge = updates.badge;
     if (updates.tagline !== undefined) service.tagline = updates.tagline;

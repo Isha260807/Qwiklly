@@ -139,6 +139,15 @@ const userServiceSchema = new mongoose.Schema({
     default: 18,
     min: 0
   },
+  // Optional rating override configured by an admin. When empty, public
+  // catalog responses use the average of active customer reviews.
+  adminRating: {
+    type: Number,
+    default: null,
+    min: 1,
+    max: 5
+  },
+  // Legacy fields kept for older records and clients.
   rating: {
     type: Number,
     default: 4.9,

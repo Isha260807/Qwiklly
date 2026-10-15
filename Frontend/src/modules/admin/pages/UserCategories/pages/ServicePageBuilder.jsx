@@ -494,7 +494,7 @@ const ServicePageBuilder = ({ selectedCity }) => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="admin-service-page-builder-form space-y-6">
       {/* Top Header Card */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

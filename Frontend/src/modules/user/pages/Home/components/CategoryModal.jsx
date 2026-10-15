@@ -155,8 +155,8 @@ const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCou
         originalPrice: service.discountPrice ? service.basePrice : null,
         unitPrice: service.discountPrice || service.basePrice,
         serviceCount: 1,
-        rating: "4.8",
-        reviews: "1k+",
+        rating: service.rating ?? null,
+        reviews: service.ratingCount ?? null,
         vendorId: service.vendorId || selectedBrand?.vendorId || null,
         ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {}),
         card: {

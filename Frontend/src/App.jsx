@@ -54,6 +54,7 @@ function App() {
               <Toaster
                 position="top-center"
                 reverseOrder={false}
+                containerStyle={{ zIndex: 10000000 }}
                 toastOptions={{
                   duration: 2000, // Global default (reduced from 3000)
                   style: {

@@ -69,6 +69,7 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
   const displayPrice = service.price || service.basePrice || 0;
   const hasDiscount = service.originalPrice && service.originalPrice > displayPrice;
   const inclusions = service.inclusions || [];
+  const hasRating = Number(service.rating) > 0;
 
   const handleBookNow = async () => {
     if (!canBook) {
@@ -99,8 +100,8 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
         originalPrice: service.originalPrice || null,
         unitPrice: displayPrice,
         serviceCount: 1,
-        rating: service.rating || '4.9',
-        reviews: service.ratingCount || '237.6k',
+        rating: service.rating ?? null,
+        reviews: service.ratingCount ?? null,
         inclusions: inclusions,
         ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {})
       };
@@ -222,13 +223,17 @@ const DirectServiceDetailModal = ({ isOpen, onClose, service }) => {
                 </div>
                 
                 {/* Rating */}
-                <div className="flex items-center gap-1 mt-2 text-xs font-bold text-slate-700">
+                {hasRating && (
+                  <div className="flex items-center gap-1 mt-2 text-xs font-bold text-slate-700">
                   <FiStar className="text-amber-500 fill-amber-500 text-xs" />
-                  <span>{service.rating || '4.9'}</span>
-                  <span className="text-slate-400 font-normal">
-                    ({service.ratingCount || service.reviews || '237.6k ratings'})
-                  </span>
-                </div>
+                  <span>{service.rating ?? ''}</span>
+                  {(service.ratingCount || service.reviews) && (
+                    <span className="text-slate-400 font-normal">
+                      ({service.ratingCount || service.reviews})
+                    </span>
+                  )}
+                  </div>
+                )}
               </div>
 
               {/* Quick Book Button - hidden when this service isn't

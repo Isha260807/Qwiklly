@@ -566,3 +566,27 @@ html {
 .pac-container {
   z-index: 9999999 !important;
 }
+/* Admin service forms: keep entered values and placeholders readable. */
+.admin-service-form-fields input,
+.admin-service-form-fields textarea,
+.admin-service-form-fields select {
+  color: #334155;
+}
+
+.admin-service-page-builder-form input,
+.admin-service-page-builder-form textarea,
+.admin-service-page-builder-form select {
+  color: #334155;
+}
+
+.admin-service-form-fields input::placeholder,
+.admin-service-form-fields textarea::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.admin-service-page-builder-form input::placeholder,
+.admin-service-page-builder-form textarea::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}

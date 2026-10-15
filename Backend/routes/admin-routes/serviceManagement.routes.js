@@ -15,7 +15,6 @@ const {
 const serviceValidation = [
   body('title').notEmpty().withMessage('Title is required'),
   body('basePrice').isNumeric().withMessage('Base Price must be a number'),
-  body('gstPercentage').optional().isNumeric().withMessage('GST Percentage must be a number'),
   body('pricingType').optional().isIn(['FIXED', 'DURATION', 'HOURLY']).withMessage('Pricing type must be FIXED, DURATION, or HOURLY'),
   body('hourlyRate')
     .if(body('pricingType').equals('HOURLY'))

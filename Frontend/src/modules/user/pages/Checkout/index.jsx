@@ -1267,7 +1267,7 @@ const Checkout = () => {
     return (
       <div className="min-h-screen bg-transparent pb-32">
         <header 
-          className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+          className="fixed top-0 inset-x-0 z-50 h-16 sm:h-[68px] text-white shadow-md select-none px-4 flex items-center justify-between"
           style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
         >
           <div className="flex items-center gap-3">
@@ -1281,6 +1281,7 @@ const Checkout = () => {
             <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">Your cart</h1>
           </div>
         </header>
+        <div className="h-16 sm:h-[68px]" aria-hidden="true" />
         <main className="px-4 py-4">
           <div className="flex flex-col items-center justify-center py-20">
             <FiShoppingCart className="w-16 h-16 text-gray-300 mb-4" />
@@ -1296,7 +1297,7 @@ const Checkout = () => {
     <div className="min-h-screen bg-transparent pb-80">
       {/* Theme Gradient Header */}
       <header 
-        className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+        className="fixed top-0 inset-x-0 z-50 h-16 sm:h-[68px] text-white shadow-md select-none px-4 flex items-center justify-between"
         style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
       >
         <div className="flex items-center gap-3">
@@ -1312,6 +1313,7 @@ const Checkout = () => {
           </h1>
         </div>
       </header>
+        <div className="h-16 sm:h-[68px]" aria-hidden="true" />
 
       <main className="px-4 py-4">
         {/* Savings Banner */}
