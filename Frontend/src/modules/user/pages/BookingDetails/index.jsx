@@ -653,7 +653,7 @@ const BookingDetails = () => {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => navigate('/user/my-bookings')}
+                onClick={() => navigate(-1)}
                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm cursor-pointer"
                 title="Go Back"
               >

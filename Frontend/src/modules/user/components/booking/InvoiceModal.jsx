@@ -1,11 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { FiDownload, FiX, FiCheckCircle, FiFileText, FiShield } from 'react-icons/fi';
-import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { toast } from 'react-hot-toast';
 
 const InvoiceModal = ({ isOpen, onClose, booking, companySettings }) => {
-  const invoiceRef = useRef(null);
+
   const [isDownloading, setIsDownloading] = useState(false);
 
   if (!isOpen || !booking) return null;
@@ -78,49 +77,140 @@ const InvoiceModal = ({ isOpen, onClose, booking, companySettings }) => {
   const grandTotal = Number(booking.finalAmount || booking.userPayableAmount || (basePrice + tax + visitingCharges + instantCharges - discount));
 
   const handleDownloadPdf = async () => {
-    if (!invoiceRef.current || isDownloading) return;
+    if (isDownloading) return;
 
-    let captureElement = null;
     try {
       setIsDownloading(true);
-      const sourceElement = invoiceRef.current;
-      captureElement = sourceElement.cloneNode(true);
-      const sourceWidth = sourceElement.getBoundingClientRect().width;
-
-      Object.assign(captureElement.style, {
-        position: 'fixed',
-        left: '-100000px',
-        top: '0',
-        width: `${sourceWidth}px`,
-        height: 'auto',
-        maxHeight: 'none',
-        overflow: 'visible',
-        background: '#f8fafc'
-      });
-      document.body.appendChild(captureElement);
-      await new Promise(resolve => requestAnimationFrame(resolve));
-
-      const canvas = await html2canvas(captureElement, {
-        scale: Math.min(window.devicePixelRatio || 1, 2),
-        useCORS: true,
-        backgroundColor: '#f8fafc',
-        logging: false
-      });
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 8;
+      const margin = 15;
       const contentWidth = pageWidth - (margin * 2);
-      const imageHeight = (canvas.height * contentWidth) / canvas.width;
-      const pageContentHeight = pageHeight - (margin * 2);
-      const imageData = canvas.toDataURL('image/jpeg', 0.95);
+      const right = pageWidth - margin;
+      let y = 18;
 
-      let offset = 0;
-      while (offset < imageHeight) {
-        if (offset > 0) pdf.addPage();
-        pdf.addImage(imageData, 'JPEG', margin, margin - offset, contentWidth, imageHeight);
-        offset += pageContentHeight;
-      }
+      const ensureSpace = (requiredHeight = 10) => {
+        if (y + requiredHeight > pageHeight - 15) {
+          pdf.addPage();
+          y = 18;
+        }
+      };
+      const formatAmount = value => `INR ${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+      const addWrappedText = (text, x, width, options = {}) => {
+        const lines = pdf.splitTextToSize(String(text || ''), width);
+        const lineHeight = options.lineHeight || 5;
+        ensureSpace(lines.length * lineHeight + 2);
+        pdf.setFont('helvetica', options.bold ? 'bold' : 'normal');
+        pdf.setFontSize(options.size || 9);
+        pdf.setTextColor(...(options.color || [71, 85, 105]));
+        pdf.text(lines, x, y);
+        y += lines.length * lineHeight + (options.gap ?? 2);
+      };
+      const addSectionTitle = title => {
+        ensureSpace(13);
+        pdf.setFillColor(252, 231, 243);
+        pdf.roundedRect(margin, y - 5, contentWidth, 8, 2, 2, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.setTextColor(114, 12, 62);
+        pdf.text(title.toUpperCase(), margin + 3, y);
+        y += 11;
+      };
+      const addAmountRow = (label, value, color = [71, 85, 105]) => {
+        ensureSpace(8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.setTextColor(...color);
+        pdf.text(label, margin, y);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(formatAmount(value), right, y, { align: 'right' });
+        y += 6;
+      };
+
+      pdf.setTextColor(114, 12, 62);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(21);
+      pdf.text('Qwiklly', margin, y);
+      pdf.setFontSize(9);
+      pdf.setTextColor(100, 116, 139);
+      pdf.text('TAX INVOICE', margin + 31, y - 1);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.text(`${companyName}`, margin, y + 7);
+      pdf.text(`${companyAddress}, ${companyCity}, ${companyState} - ${companyPincode}`, margin, y + 12);
+      pdf.text(`GSTIN: ${companyGSTIN} | PAN: ${companyPAN}`, margin, y + 17);
+      pdf.text(`Support: ${companyPhone} | ${companyEmail}`, margin, y + 22);
+      pdf.setTextColor(15, 23, 42);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.text(`Invoice No: ${invoiceNumber}`, right, 18, { align: 'right' });
+      pdf.text(`Invoice Date: ${invoiceDate}`, right, 23, { align: 'right' });
+      pdf.text(`Booking ID: ${booking.bookingNumber || 'N/A'}`, right, 28, { align: 'right' });
+      y = 48;
+      pdf.setDrawColor(226, 232, 240);
+      pdf.line(margin, y - 4, right, y - 4);
+
+      addSectionTitle('Billed To (Customer)');
+      addWrappedText(customerName, margin, contentWidth, { bold: true, size: 11, color: [15, 23, 42], gap: 1 });
+      if (customerPhone) addWrappedText(`Phone: +91 ${customerPhone.replace('+91', '').trim()}`, margin, contentWidth, { size: 8, gap: 1 });
+      if (customerAddress) addWrappedText(customerAddress, margin, contentWidth, { size: 8, gap: 2 });
+
+      addSectionTitle('Service Schedule');
+      addWrappedText(`Date: ${bookingDate}`, margin, contentWidth, { bold: true, size: 10, color: [15, 23, 42], gap: 1 });
+      addWrappedText(`Slot: ${bookingTime}`, margin, contentWidth, { size: 8, gap: 1 });
+      addWrappedText(`Vendor: ${vendorName}`, margin, contentWidth, { size: 8, bold: true, color: [30, 41, 59], gap: 1 });
+      if (vendorAddress) addWrappedText(`Address: ${vendorAddress}`, margin, contentWidth, { size: 8, gap: 1 });
+      if (professionalName) addWrappedText(`Professional: ${professionalName}`, margin, contentWidth, { size: 8, gap: 2 });
+
+      addSectionTitle('Service Breakdown');
+      bookedItems.forEach((item) => {
+        const card = item.card || item;
+        const itemName = card.title || item.serviceName || booking.serviceName || 'Home Service';
+        const itemType = card.pricingType === 'DURATION' || card.durationMinutes
+          ? `Duration: ${card.durationMinutes ? `${card.durationMinutes} mins` : `${card.hours || 0} hrs`}`
+          : 'Fixed Price';
+        const itemPrice = card.price ?? item.price ?? basePrice;
+        ensureSpace(14);
+        pdf.setFillColor(248, 250, 252);
+        pdf.roundedRect(margin, y - 5, contentWidth, 10, 2, 2, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.setTextColor(15, 23, 42);
+        pdf.text(pdf.splitTextToSize(itemName, contentWidth - 45), margin + 3, y);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(100, 116, 139);
+        pdf.text(itemType, margin + 3, y + 5);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(15, 23, 42);
+        pdf.text(formatAmount(itemPrice), right - 3, y, { align: 'right' });
+        y += 15;
+      });
+
+      addSectionTitle('Payment Summary');
+      addAmountRow('Taxable Base Amount', basePrice);
+      if (tax > 0) addAmountRow(`GST (${booking.gstPercentage || 18}%)`, tax);
+      if (visitingCharges > 0) addAmountRow('Visiting / Convenience Fee', visitingCharges);
+      if (instantCharges > 0) addAmountRow('Instant Booking Fee', instantCharges);
+      if (discount > 0) addAmountRow('Discount / Coupon', -discount, [5, 150, 105]);
+      ensureSpace(14);
+      pdf.setDrawColor(203, 213, 225);
+      pdf.line(margin, y - 2, right, y - 2);
+      y += 5;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(12);
+      pdf.setTextColor(15, 23, 42);
+      pdf.text('Grand Total Paid', margin, y);
+      pdf.setTextColor(114, 12, 62);
+      pdf.text(formatAmount(grandTotal), right, y, { align: 'right' });
+      y += 12;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(5, 150, 105);
+      pdf.text('Payment Completed & Verified', margin, y);
+      pdf.setTextColor(100, 116, 139);
+      pdf.text(`Mode: ${booking.paymentMethod?.toUpperCase() || 'ONLINE PAID'}`, margin + 42, y);
+      pdf.text('Computer-generated official tax invoice', right, y, { align: 'right' });
 
       pdf.save(`${invoiceNumber}.pdf`);
       toast.success('Invoice PDF downloaded successfully');
@@ -128,7 +218,6 @@ const InvoiceModal = ({ isOpen, onClose, booking, companySettings }) => {
       console.error('Invoice PDF download failed:', error);
       toast.error('Unable to download invoice PDF. Please try again.');
     } finally {
-      if (captureElement?.parentNode) captureElement.parentNode.removeChild(captureElement);
       setIsDownloading(false);
     }
   };
@@ -163,7 +252,7 @@ const InvoiceModal = ({ isOpen, onClose, booking, companySettings }) => {
         </div>
 
         {/* Invoice Scrollable Content */}
-        <div ref={invoiceRef} className="p-3.5 sm:p-5 overflow-y-auto overscroll-contain bg-slate-50/50 text-slate-800 text-xs sm:text-sm space-y-3.5">
+        <div className="p-3.5 sm:p-5 overflow-y-auto overscroll-contain bg-slate-50/50 text-slate-800 text-xs sm:text-sm space-y-3.5">
           
           {/* Company Brand & Status Header Card */}
           <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">

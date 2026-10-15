@@ -17,7 +17,6 @@
     "firebase": "^12.7.0",
     "framer-motion": "^12.23.26",
     "gsap": "^3.13.0",
-    "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "razorpay": "^2.9.6",
