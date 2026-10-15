@@ -6,7 +6,7 @@ import Button from '../Button';
 import NotificationWindow from './NotificationWindow';
 import { adminAuthService } from '../../../../services/authService';
 
-const AdminHeader = ({ onMenuClick }) => {
+const AdminHeader = ({ onMenuClick, sidebarCollapsed = false }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -154,7 +154,7 @@ const AdminHeader = ({ onMenuClick }) => {
 
   return (
     <header
-      className="bg-white fixed top-0 left-0 right-0 z-30 transition-all duration-300 lg:left-[315px] border-b border-gray-100 shadow-sm"
+      className={`bg-white fixed top-0 left-0 right-0 z-30 transition-all duration-300 border-b border-gray-100 shadow-sm ${sidebarCollapsed ? "lg:left-[104px]" : "lg:left-[315px]"}`}
       style={{
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}

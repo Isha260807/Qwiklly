@@ -162,7 +162,7 @@ const VendorLogin = () => {
   const brandColor = themeColors.brand?.teal || '#347989';
 
   return (
-    <div className="min-h-[100dvh] bg-gray-50 flex flex-col justify-start sm:justify-center py-12 sm:px-6 lg:px-8 relative overflow-x-hidden">
+    <div className="h-[100dvh] bg-gray-50 flex flex-col justify-start sm:justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Decorative Background Elements */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#347989] opacity-[0.03] rounded-full blur-3xl animate-floating" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#D68F35] opacity-[0.03] rounded-full blur-3xl animate-floating" style={{ animationDelay: '2s' }} />
@@ -325,11 +325,11 @@ const VendorLogin = () => {
         </p>
         <p className="mt-3 text-center text-xs text-gray-500">
           By continuing, you agree to our{' '}
-          <Link to="/login/terms" className="underline font-semibold text-[#347989] hover:text-[#D68F35]">
+          <Link to="/login/terms?source=vendor" className="underline font-semibold text-[#347989] hover:text-[#D68F35]">
             Terms of Service
           </Link>{' '}
           &{' '}
-          <Link to="/login/privacy" className="underline font-semibold text-[#347989] hover:text-[#D68F35]">
+          <Link to="/login/privacy?source=vendor" className="underline font-semibold text-[#347989] hover:text-[#D68F35]">
             Privacy Policy
           </Link>
           {' '}|{' '}

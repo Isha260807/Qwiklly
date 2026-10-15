@@ -80,7 +80,7 @@ const Dashboard = memo(() => {
   const [vendorProfile, setVendorProfile] = useState(getInitialVendorProfile);
   const [recentJobs, setRecentJobs] = useState([]);
   const [pendingBookings, setPendingBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !vendorDashboardService.getCachedDashboardStats());
   const [error, setError] = useState('');
   const [globalConfig, setGlobalConfig] = useState({ maxSearchTime: 5 });
 
@@ -305,10 +305,12 @@ const Dashboard = memo(() => {
   // Main data loader - useCallback to prevent recreation
   const loadDashboardData = useCallback(async (showSpinner = true) => {
     try {
-      if (showSpinner) setLoading(true);
+      const cachedDashboard = vendorDashboardService.getCachedDashboardStats();
+      if (showSpinner && !cachedDashboard) setLoading(true);
+      if (cachedDashboard) setLoading(false);
       setError(null);
 
-      const response = await vendorDashboardService.getDashboardStats();
+      const response = await vendorDashboardService.getDashboardStats({ forceRefresh: !showSpinner });
       processApiResponse(response);
     } catch (err) {
       console.error('Error loading dashboard data:', err);

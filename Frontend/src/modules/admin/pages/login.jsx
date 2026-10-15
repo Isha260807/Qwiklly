@@ -67,23 +67,19 @@ const AdminLogin = () => {
     <div
       className="min-h-screen flex items-center justify-center px-4"
       style={{
-        background: 'linear-gradient(135deg, #00a6a6 0%, #008a8a 50%, #006b6b 100%)'
+        background: themeColors.backgroundGradient
       }}
     >
       <div className="w-full max-w-md">
         {/* White Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          {/* Icon */}
+          {/* Brand Logo */}
           <div className="flex justify-center mb-6">
-            <div
-              className="w-16 h-16 rounded-xl flex items-center justify-center"
-              style={{
-                background: `linear-gradient(135deg, ${themeColors.button} 0%, #008a8a 100%)`,
-                boxShadow: `0 4px 12px rgba(0, 166, 166, 0.3)`
-              }}
-            >
-              <FiLock className="w-8 h-8 text-white" />
-            </div>
+            <img
+              src="/cleaning-expert-logo.png"
+              alt="Qwiklly"
+              className="w-16 h-16 rounded-full object-cover shadow-lg border border-gray-100"
+            />
           </div>
 
           {/* Title */}
@@ -117,7 +113,7 @@ const AdminLogin = () => {
                   }}
                   onFocus={(e) => {
                     e.target.style.borderColor = themeColors.button;
-                    e.target.style.boxShadow = `0 0 0 3px rgba(0, 166, 166, 0.1)`;
+                    e.target.style.boxShadow = `0 0 0 3px rgba(114, 12, 62, 0.1)`;
                   }}
                   onBlur={(e) => {
                     e.target.style.borderColor = '#d1d5db';
@@ -146,7 +142,7 @@ const AdminLogin = () => {
                   className="w-full pl-12 pr-12 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent text-gray-900"
                   onFocus={(e) => {
                     e.target.style.borderColor = themeColors.button;
-                    e.target.style.boxShadow = `0 0 0 3px rgba(0, 166, 166, 0.1)`;
+                    e.target.style.boxShadow = `0 0 0 3px rgba(114, 12, 62, 0.1)`;
                   }}
                   onBlur={(e) => {
                     e.target.style.borderColor = '#d1d5db';
@@ -187,20 +183,20 @@ const AdminLogin = () => {
               disabled={isLoading}
               className="w-full py-3 rounded-xl text-white font-semibold text-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
-                background: `linear-gradient(135deg, ${themeColors.button} 0%, #008a8a 100%)`,
-                boxShadow: '0 4px 12px rgba(0, 166, 166, 0.3)'
+                background: `linear-gradient(135deg, ${themeColors.button} 0%, ${themeColors.primaryLight} 100%)`,
+                boxShadow: '0 4px 12px rgba(114, 12, 62, 0.18)'
               }}
               onMouseEnter={(e) => {
                 if (!e.currentTarget.disabled) {
                   e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 166, 166, 0.4)';
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #008a8a 0%, #006b6b 100%)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(114, 12, 62, 0.28)';
+                  e.currentTarget.style.background = `linear-gradient(135deg, ${themeColors.primaryDark} 0%, ${themeColors.button} 100%)`;
                 }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 166, 166, 0.3)';
-                e.currentTarget.style.background = `linear-gradient(135deg, ${themeColors.button} 0%, #008a8a 100%)`;
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(114, 12, 62, 0.18)';
+                e.currentTarget.style.background = `linear-gradient(135deg, ${themeColors.button} 0%, ${themeColors.primaryLight} 100%)`;
               }}
             >
               {isLoading ? 'Logging in...' : 'Login'}
@@ -211,8 +207,8 @@ const AdminLogin = () => {
           <div
             className="mt-8 p-4 rounded-xl"
             style={{
-              background: 'linear-gradient(135deg, rgba(0, 166, 166, 0.1) 0%, rgba(0, 138, 138, 0.05) 100%)',
-              border: '1px solid rgba(0, 166, 166, 0.2)'
+              background: 'linear-gradient(135deg, rgba(114, 12, 62, 0.08) 0%, rgba(232, 160, 184, 0.12) 100%)',
+              border: '1px solid rgba(114, 12, 62, 0.2)'
             }}
           >
             <h3 className="text-sm font-semibold mb-2" style={{ color: themeColors.button }}>Demo Credentials:</h3>

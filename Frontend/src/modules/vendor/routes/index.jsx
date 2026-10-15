@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { isChunkLoadError, reloadOnceForNewVersion, hardReload } from '../../../utils/chunkReload';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/common/PageTransition';
@@ -10,11 +10,12 @@ import CashLimitModal from '../components/common/CashLimitModal'; // Import
 import GlobalBookingAlert from '../components/common/GlobalBookingAlert';
 import VendorUnderReviewModal from '../components/common/VendorUnderReviewModal';
 import { useVendorZonePresenceTracker } from '../hooks/useVendorZonePresence';
+import { initTranslator, stopTranslator } from '../../../i18n/translator';
 // import useAppNotifications from '../../../hooks/useAppNotifications.jsx'; // Handled globally
 
 // Lazy load wrapper with error handling (same as user app)
 const lazyLoad = (importFunc) => {
-  return lazy(() => {
+  const load = () => {
     return Promise.resolve(importFunc()).catch((error) => {
       // Stale chunk after a new deploy: reload once to pick up the new build.
       if (isChunkLoadError(error) && reloadOnceForNewVersion()) {
@@ -40,7 +41,10 @@ const lazyLoad = (importFunc) => {
         ),
       });
     });
-  });
+  };
+  const LazyComponent = lazy(load);
+  LazyComponent.preload = load;
+  return LazyComponent;
 };
 
 // Lazy load vendor pages for code splitting
@@ -77,6 +81,14 @@ const LoadingFallback = () => (
 const VendorRoutes = () => {
   const location = useLocation();
 
+  // Translation is deliberately mounted only for the Vendor application.
+  // Cleanup restores the DOM and disables the observer before User/Admin
+  // routes can render, keeping their language permanently independent.
+  useEffect(() => {
+    initTranslator();
+    return stopTranslator;
+  }, []);
+
   // Check if current route should hide bottom nav (auth routes or map)
   // Check if current route should hide bottom nav (auth routes or map or booking alert)
   const shouldHideBottomNav = location.pathname === '/vendor/login' ||
@@ -88,6 +100,16 @@ const VendorRoutes = () => {
 
   // Live GPS + zone presence tracking for authenticated vendor screens
   const isAuthRoute = location.pathname === '/vendor/login' || location.pathname === '/vendor/signup';
+
+  // Preload the two primary bottom-navigation pages so tab changes do not
+  // show the full Suspense loader while their chunks are fetched.
+  useEffect(() => {
+    if (!isAuthRoute) {
+      Dashboard.preload?.();
+      ActiveJobs.preload?.();
+      Wallet.preload?.();
+    }
+  }, [isAuthRoute]);
   useVendorZonePresenceTracker(!isAuthRoute);
 
   // Only show booking alerts for fully approved vendors

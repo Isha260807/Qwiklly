@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { FiArrowLeft } from 'react-icons/fi';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { configService } from '../../../services/configService';
-import { translateText } from '../../../i18n/translator';
+import { getLanguage, translateText } from '../../../i18n/translator';
 
 const LoginLegalPage = ({ type }) => {
   const isTerms = type === 'terms';
   const navigate = useNavigate();
+  const location = useLocation();
+  const isVendor = new URLSearchParams(location.search).get('source') === 'vendor';
+  const isHindiVendor = isVendor && getLanguage() === 'hi';
   const [content, setContent] = useState('');
 
   useEffect(() => {
@@ -16,7 +19,9 @@ const LoginLegalPage = ({ type }) => {
       const response = await configService.getSettings(true);
       const settingKey = isTerms ? 'termsOfService' : 'privacyPolicy';
       const legalContent = response?.settings?.[settingKey] || '';
-      const translatedContent = await translateText(legalContent, 'hi');
+      const translatedContent = isVendor && getLanguage() === 'hi'
+        ? await translateText(legalContent, 'hi')
+        : legalContent;
 
       if (isMounted) setContent(translatedContent);
     };
@@ -28,9 +33,11 @@ const LoginLegalPage = ({ type }) => {
     return () => {
       isMounted = false;
     };
-  }, [isTerms]);
+  }, [isTerms, isVendor]);
 
-  const title = isTerms ? 'सेवा की शर्तें' : 'गोपनीयता नीति';
+  const title = isTerms
+    ? (isHindiVendor ? 'सेवा की शर्तें' : 'Terms & Conditions')
+    : (isHindiVendor ? 'गोपनीयता नीति' : 'Privacy Policy');
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
@@ -41,7 +48,7 @@ const LoginLegalPage = ({ type }) => {
           className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-8"
         >
           <FiArrowLeft className="w-4 h-4" />
-          वापस
+          {isHindiVendor ? 'वापस' : 'Back'}
         </button>
         <h1 className="text-2xl sm:text-3xl font-semibold mb-6">{title}</h1>
         {content.trim() ? (
@@ -50,7 +57,7 @@ const LoginLegalPage = ({ type }) => {
           </div>
         ) : (
           <p className="text-sm sm:text-base leading-7 text-gray-700">
-            एडमिन ने अभी तक यह सामग्री नहीं जोड़ी है।
+            {isHindiVendor ? 'व्यवस्थापक ने अभी तक यह सामग्री नहीं जोड़ी है।' : 'The administrator has not added this content yet.'}
           </p>
         )}
       </main>

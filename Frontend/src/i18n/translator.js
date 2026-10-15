@@ -1,4 +1,4 @@
-// Runtime page translator (English <-> Hindi) for the whole app.
+// Runtime page translator (English <-> Hindi) for the Vendor application.
 //
 // Instead of wrapping every string in t(), we translate the rendered DOM:
 //   1. text nodes + placeholder/title/aria-label/alt attributes are collected,
@@ -12,7 +12,8 @@ import { fallbackDictionaries } from './fallbackDictionary';
 
 const API_URL = 'https://translation.googleapis.com/language/translate/v2';
 const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-const LANG_KEY = 'appLanguage';
+// Language is intentionally vendor-scoped. User and Admin must remain English.
+const LANG_KEY = 'vendorLanguage';
 const SETTINGS_KEY = 'vendorSettings'; // vendor Settings page also stores language here
 const CACHE_PREFIX = 'qwiklly:tr:';
 const CACHE_MAX = 4000;
@@ -45,7 +46,7 @@ let cacheDirty = false;
 const hasLatin = (s) => /[A-Za-z]/.test(s);
 
 // ---------- persistence ----------
-export const getLanguage = () => lang;
+export const getLanguage = () => (lang === 'en' ? readSavedLanguage() : lang);
 
 const readSavedLanguage = () => {
   try {
@@ -312,6 +313,19 @@ const stopObserver = () => {
   observer = null;
 };
 
+// The translator is mounted only while the Vendor shell is active. Restore any
+// DOM mutations before leaving that shell so User/Admin pages cannot inherit
+// translated nodes or an active MutationObserver.
+export const stopTranslator = () => {
+  flushToken += 1;
+  stopObserver();
+  dirty.clear();
+  restoreEnglish();
+  scheduled = false;
+  lang = 'en';
+  document.documentElement.lang = 'en';
+};
+
 // ---------- public API ----------
 export const subscribe = (fn) => {
   listeners.add(fn);
@@ -365,7 +379,7 @@ const saveDirectTranslationCache = (target, cache) => {
   }
 };
 
-// Translate page content directly without changing the app-wide language.
+// Translate a specific content value without changing the Vendor app language.
 export const translateText = async (text, target = 'hi') => {
   const original = String(text ?? '');
   const key = original.trim();
@@ -402,7 +416,9 @@ export const translateText = async (text, target = 'hi') => {
   }
 };
 export const initTranslator = () => {
+  stopTranslator();
   lang = readSavedLanguage();
+  listeners.forEach((fn) => fn());
   document.documentElement.lang = lang;
   if (lang === 'en') return;
   loadCache(lang);

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { FiCreditCard, FiDollarSign, FiFilter, FiChevronDown } from 'react-icons/fi';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
@@ -13,6 +13,31 @@ const durationText = (v) => {
   return h ? h + 'h' + (m ? ' ' + m + 'm' : '') : (m ? m + 'm' : '');
 };
 const labelFor = (v) => ({ booking_earning: 'Booking earning', salary: 'Salary', bonus: 'Performance bonus', incentive: 'Incentive', adjustment: 'Adjustment', custom: 'Custom earning' }[v] || 'Earning');
+const WALLET_CACHE_TTL = 30000;
+const walletPageCache = new Map();
+
+const getWalletVendorScope = () => {
+  try {
+    const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+    return String(profile._id || profile.id || profile.phone || 'anonymous');
+  } catch {
+    return 'anonymous';
+  }
+};
+
+const getWalletCacheKey = (params = {}) => JSON.stringify({
+  scope: getWalletVendorScope(),
+  startDate: params.startDate || '',
+  endDate: params.endDate || ''
+});
+
+const getCachedWallet = (params = {}) => {
+  const entry = walletPageCache.get(getWalletCacheKey(params));
+  if (entry && Date.now() - entry.fetchedAt < WALLET_CACHE_TTL) {
+    return entry.data;
+  }
+  return null;
+};
 const paymentBreakdown = (payment) => {
   const items = [];
   const add = (label, amount) => {
@@ -53,23 +78,44 @@ function PaymentHistory({ payments = [] }) {
 }
 
 export default function Wallet() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const initialWallet = getCachedWallet();
+  const [data, setData] = useState(initialWallet);
+  const [loading, setLoading] = useState(() => !initialWallet);
   const [filters, setFilters] = useState({ startDate: '', endDate: '' });
   const [historyTab, setHistoryTab] = useState('earnings');
   const [adminSalaryOpen, setAdminSalaryOpen] = useState(false);
-  const load = async (params = {}) => {
+
+  const load = useCallback(async (params = {}, forceRefresh = false) => {
+    const cacheKey = getWalletCacheKey(params);
+    const cachedEntry = walletPageCache.get(cacheKey);
+    const cachedWallet = getCachedWallet(params);
+
+    if (!forceRefresh && cachedWallet) {
+      setData(cachedWallet);
+      setLoading(false);
+      return;
+    }
+
     try {
-      setLoading(true);
+      // Keep existing data visible while refreshing filters or new earnings.
+      if (!cachedEntry) setLoading(true);
       const res = await vendorSalaryService.getWallet(params);
       if (!res.success) throw new Error(res.message || 'Failed to load earnings');
+      walletPageCache.set(cacheKey, { data: res.data, fetchedAt: Date.now() });
       setData(res.data);
     } catch (e) {
       console.error(e);
       toast.error(e.message || 'Failed to load earnings');
     } finally { setLoading(false); }
-  };
-  useEffect(() => { load(); }, []);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const handleWalletUpdate = () => load({}, true);
+    window.addEventListener('vendorJobsUpdated', handleWalletUpdate);
+    return () => window.removeEventListener('vendorJobsUpdated', handleWalletUpdate);
+  }, [load]);
   if (loading && !data) return <LogoLoader />;
   const summary = data?.summary || {};
   const config = data?.salaryConfig || {};

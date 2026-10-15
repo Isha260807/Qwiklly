@@ -9,11 +9,24 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 
 import { getBookings, assignWorker as assignWorkerApi } from '../../services/bookingService';
 import { ConfirmDialog } from '../../components/common';
+const JOBS_CACHE_TTL = 30000;
+const jobsPageCache = new Map();
+
+const getJobsCacheKey = (filter, searchQuery) => `${filter}::${searchQuery}`;
+
+const getCachedJobs = (filter, searchQuery) => {
+  const entry = jobsPageCache.get(getJobsCacheKey(filter, searchQuery));
+  if (entry && Date.now() - entry.fetchedAt < JOBS_CACHE_TTL) {
+    return entry.jobs;
+  }
+  return null;
+};
 
 const ActiveJobs = memo(() => {
   const navigate = useNavigate();
-  const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const initialJobs = getCachedJobs('in_progress', '');
+  const [jobs, setJobs] = useState(initialJobs || []);
+  const [loading, setLoading] = useState(() => !initialJobs);
   const [filter, setFilter] = useState('in_progress'); // Default to showing active jobs
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDialog, setConfirmDialog] = useState({
@@ -41,9 +54,19 @@ const ActiveJobs = memo(() => {
   }, []);
 
   // Memoize loadJobs to prevent recreation
-  const loadJobs = useCallback(async (currentFilter, currentSearch) => {
+  const loadJobs = useCallback(async (currentFilter, currentSearch, forceRefresh = false) => {
+    const cacheKey = getJobsCacheKey(currentFilter, currentSearch);
+    const cachedEntry = jobsPageCache.get(cacheKey);
+    const cachedJobs = getCachedJobs(currentFilter, currentSearch);
+
+    if (!forceRefresh && cachedJobs) {
+      setJobs(cachedJobs);
+      setLoading(false);
+      return;
+    }
+
     try {
-      setLoading(true);
+      if (!cachedEntry) setLoading(true);
       const response = await getBookings({
         status: currentFilter,
         q: currentSearch,
@@ -69,6 +92,7 @@ const ActiveJobs = memo(() => {
           time: job.scheduledTime || 'Time'
         }
       }));
+      jobsPageCache.set(cacheKey, { jobs: mappedJobs, fetchedAt: Date.now() });
       setJobs(mappedJobs);
     } catch (error) {
       console.error('Error loading jobs:', error);
@@ -88,9 +112,10 @@ const ActiveJobs = memo(() => {
   }, [filter, searchQuery, loadJobs]);
 
   useEffect(() => {
-    window.addEventListener('vendorJobsUpdated', () => loadJobs(filter, searchQuery));
+    const handleJobsUpdated = () => loadJobs(filter, searchQuery, true);
+    window.addEventListener('vendorJobsUpdated', handleJobsUpdated);
     return () => {
-      window.removeEventListener('vendorJobsUpdated', () => loadJobs(filter, searchQuery));
+      window.removeEventListener('vendorJobsUpdated', handleJobsUpdated);
     };
   }, [loadJobs, filter, searchQuery]);
 
@@ -108,7 +133,7 @@ const ActiveJobs = memo(() => {
           if (response && response.success) {
             toast.success("Assigned to yourself!");
             // Refresh jobs list instead of full page reload
-            loadJobs(filter, searchQuery);
+            loadJobs(filter, searchQuery, true);
           }
         } catch (error) {
           console.error("Error assigning to self:", error);
