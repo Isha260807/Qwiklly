@@ -49,9 +49,16 @@ const couponSchema = new mongoose.Schema({
   },
   usageLimit: {
     type: Number,
-    default: null // null means unlimited global usage
+    default: null, // null means unlimited global usage
+    min: [1, 'Usage limit must be at least 1']
   },
   usedCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  // Pending bookings reserve capacity until payment succeeds or the booking is cancelled.
+  reservedCount: {
     type: Number,
     default: 0,
     min: 0

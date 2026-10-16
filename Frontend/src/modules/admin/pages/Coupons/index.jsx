@@ -763,6 +763,8 @@ const Coupons = () => {
                       name="usageLimit"
                       value={formData.usageLimit}
                       onChange={handleFormChange}
+                      min="1"
+                      step="1"
                       placeholder="Leave empty for unlimited"
                       className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:border-indigo-500"
                     />

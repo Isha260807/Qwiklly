@@ -69,9 +69,11 @@ const validateCouponApplicability = async ({
     return { valid: false, code: 'COUPON_EXPIRED', error: 'This coupon has expired' };
   }
 
-  // 1. Check Global Usage Limit
+  // 1. Check Global Usage Limit (consumed + pending reservations)
   if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usageLimit > 0) {
-    if (coupon.usedCount >= coupon.usageLimit) {
+    const consumedCount = Number(coupon.usedCount) || 0;
+    const reservedCount = Number(coupon.reservedCount) || 0;
+    if (consumedCount + reservedCount >= coupon.usageLimit) {
       return { valid: false, code: 'COUPON_USAGE_LIMIT_REACHED', error: 'Coupon usage limit has been exhausted' };
     }
   }

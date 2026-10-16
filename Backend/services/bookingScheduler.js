@@ -12,6 +12,7 @@ const Booking = require('../models/Booking');
 const Vendor = require('../models/Vendor');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { createNotification } = require('../controllers/notificationControllers/notificationController');
+const { cancelCouponUsage } = require('./couponUsageService');
 
 const Settings = require('../models/Settings');
 
@@ -219,6 +220,12 @@ class BookingScheduler {
 
           if (!cancelled) return;
 
+          try {
+            await cancelCouponUsage(cancelled._id);
+          } catch (couponRestoreErr) {
+            console.error('[BookingScheduler] Error restoring coupon usage:', couponRestoreErr);
+          }
+
           const BookingRequest = require('../models/BookingRequest');
           await BookingRequest.deleteMany({ bookingId: cancelled._id });
 
@@ -311,6 +318,12 @@ class BookingScheduler {
           ).lean();
 
           if (!cancelled) return;
+
+          try {
+            await cancelCouponUsage(cancelled._id);
+          } catch (couponRestoreErr) {
+            console.error('[BookingScheduler] Error restoring coupon usage:', couponRestoreErr);
+          }
 
           await createNotification({
             userId: cancelled.userId,

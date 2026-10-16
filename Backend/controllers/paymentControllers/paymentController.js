@@ -8,6 +8,7 @@ const { createOrder, verifyPayment, verifyWebhookSignature, refundPayment } = re
 const { createNotification } = require('../notificationControllers/notificationController');
 const { recordBookingEarning } = require('../../services/earningTrackerService');
 const { creditSalaryEarningForBooking } = require('../../services/salaryEarningService');
+const { settleCouponUsage } = require('../../services/couponUsageService');
 
 /**
  * Create Razorpay order for booking payment
@@ -286,19 +287,10 @@ const finalizePaymentSuccess = async (booking, paymentId) => {
   await booking.save();
 
   // ── Atomic Coupon Consumption on Payment Success ──
+  // Settle the reserved coupon usage exactly once after online payment succeeds.
   if (booking.coupon && booking.coupon.couponId) {
     try {
-      const Coupon = require('../../models/Coupon');
-      const CouponUsage = require('../../models/CouponUsage');
-      const usage = await CouponUsage.findOne({ bookingId: booking._id });
-      if (usage && usage.status !== 'CONSUMED') {
-        usage.status = 'CONSUMED';
-        usage.paymentId = paymentId;
-        await usage.save();
-
-        // Increment global coupon used count atomically
-        await Coupon.findByIdAndUpdate(booking.coupon.couponId, { $inc: { usedCount: 1 } });
-      }
+      await settleCouponUsage({ bookingId: booking._id, paymentId });
     } catch (couponUsageErr) {
       console.error('[PaymentVerification] Error finalizing coupon usage:', couponUsageErr);
     }
@@ -609,6 +601,15 @@ const processWalletPayment = async (req, res) => {
     await booking.save();
 
     // ── Credit Vendor Wallet from VendorBill (single source of truth) ──
+
+    // Wallet payment also consumes the reserved coupon usage.
+    if (booking.coupon && booking.coupon.couponId) {
+      try {
+        await settleCouponUsage({ bookingId: booking._id, paymentId: booking.paymentId });
+      } catch (couponUsageErr) {
+        console.error('[WalletPayment] Error finalizing coupon usage:', couponUsageErr);
+      }
+    }
     const Vendor = require('../../models/Vendor');
     const VendorBill = require('../../models/VendorBill');
 

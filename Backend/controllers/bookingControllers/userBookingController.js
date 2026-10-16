@@ -16,6 +16,7 @@ const { sendNotificationToUser, sendNotificationToVendor } = require('../../serv
 const { findAvailableVendorForSlot, findSlotCandidateVendors } = require('../../services/vendorMatchService');
 const { CANCELLATION_WINDOW_MS, USER_CANCELLABLE_STATUSES, getCancellationState } = require('../../utils/cancellationWindow');
 const { getSlotRules, isDateWithinWindow, isSlotStartAllowed } = require('../../services/slotSettingsService');
+const { reserveCouponUsage, releaseCouponReservation, consumeCouponReservation, cancelCouponUsage } = require('../../services/couponUsageService');
 
 const NORMAL_SLOT_BLOCKING_STATUSES = [
   BOOKING_STATUS.PENDING,
@@ -579,12 +580,25 @@ const createBooking = async (req, res) => {
       } : {})
     };
 
+    let couponReservation = null;
+    if (!matchFailureReason && pricing.couponInfo?.couponId) {
+      couponReservation = await reserveCouponUsage(pricing.couponInfo.couponId);
+      if (!couponReservation) {
+        return res.status(400).json({
+          success: false,
+          code: 'COUPON_USAGE_LIMIT_REACHED',
+          message: 'This coupon has reached its usage limit. Please choose another coupon.'
+        });
+      }
+    }
+
     // The unique vendor/date/start index is the atomic reservation gate. If a
     // concurrent request wins the first candidate, re-read availability and
     // try the next eligible vendor before reporting that the slot is gone.
     let booking;
     const maxSlotAttempts = isNormalSlotBooking ? Math.max(1, nearbyVendors.length) : 1;
-    for (let attempt = 0; attempt < maxSlotAttempts; attempt += 1) {
+    try {
+      for (let attempt = 0; attempt < maxSlotAttempts; attempt += 1) {
       try {
         booking = await Booking.create(bookingData);
         break;
@@ -621,10 +635,18 @@ const createBooking = async (req, res) => {
       }
     }
 
+    } catch (bookingCreateError) {
+      if (couponReservation) {
+        await releaseCouponReservation(pricing.couponInfo.couponId);
+      }
+      throw bookingCreateError;
+    }
+
     // Create Audit / Coupon Usage Record if a coupon was used - skipped when
     // the booking was immediately auto-cancelled (no vendor available), so
     // the coupon isn't burned on a booking that never happened.
     if (!matchFailureReason && pricing.couponInfo && pricing.couponInfo.couponId) {
+      const shouldConsumeImmediately = pricing.isFreeUnderPlan || paymentMethod === 'cash';
       try {
         await CouponUsage.create({
           couponId: pricing.couponInfo.couponId,
@@ -634,18 +656,19 @@ const createBooking = async (req, res) => {
           discountAmount: pricing.couponDiscount,
           orderAmount: pricing.basePrice,
           finalAmount: pricing.finalAmount,
-          status: (pricing.isFreeUnderPlan || paymentMethod === 'cash') ? 'CONSUMED' : 'APPLIED'
+          status: shouldConsumeImmediately ? 'CONSUMED' : 'APPLIED'
         });
 
-        // If free or COD cash, increment coupon usage count immediately
-        if (pricing.isFreeUnderPlan || paymentMethod === 'cash') {
-          await Coupon.findByIdAndUpdate(pricing.couponInfo.couponId, { $inc: { usedCount: 1 } });
+        // Cash/free bookings are settled immediately. Online and wallet
+        // bookings keep the reservation until payment succeeds.
+        if (shouldConsumeImmediately) {
+          await consumeCouponReservation(pricing.couponInfo.couponId);
         }
       } catch (usageErr) {
+        await releaseCouponReservation(pricing.couponInfo.couponId);
         console.error('[CreateBooking] CouponUsage logging error:', usageErr);
       }
     }
-
     // --- IMMEDIATE RESPONSE ---
     // Send immediate response to the client. All subsequent operations will run in the background.
     res.status(201).json({
@@ -1042,20 +1065,15 @@ const cancelBooking = async (req, res) => {
     }
 
     // ── Restore Coupon if Applicable ──
+    // Restore the reservation/usage exactly once when a booking is cancelled.
     if (previous.coupon && previous.coupon.couponId) {
       try {
-        const usage = await CouponUsage.findOne({ bookingId: previous._id });
-        if (usage) {
-          if (usage.status === 'CONSUMED') {
-            await Coupon.findByIdAndUpdate(usage.couponId, { $inc: { usedCount: -1 } });
-          }
-          usage.status = 'CANCELLED';
-          await usage.save();
-        }
+        await cancelCouponUsage(previous._id);
       } catch (couponRestoreErr) {
         console.error('[CancelBooking] Error restoring coupon usage:', couponRestoreErr);
       }
     }
+
 
     // ── Real-time updates ──
     try {

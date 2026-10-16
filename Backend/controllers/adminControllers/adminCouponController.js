@@ -200,6 +200,13 @@ const createCoupon = async (req, res) => {
       });
     }
 
+    if (usageLimit !== undefined && usageLimit !== null && usageLimit !== '' && (!Number.isInteger(Number(usageLimit)) || Number(usageLimit) < 1)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Global usage limit must be a whole number greater than 0'
+      });
+    }
+
     if (startAt && expiresAt && new Date(startAt) >= new Date(expiresAt)) {
       return res.status(400).json({
         success: false,
@@ -306,7 +313,18 @@ const updateCoupon = async (req, res) => {
     if (discountValue !== undefined) coupon.discountValue = Number(discountValue);
     if (maxDiscount !== undefined) coupon.maxDiscount = maxDiscount ? Number(maxDiscount) : null;
     if (minOrderAmount !== undefined) coupon.minOrderAmount = minOrderAmount ? Number(minOrderAmount) : 0;
-    if (usageLimit !== undefined) coupon.usageLimit = usageLimit ? Number(usageLimit) : null;
+    if (usageLimit !== undefined) {
+      if (usageLimit === null || usageLimit === '') {
+        coupon.usageLimit = null;
+      } else if (!Number.isInteger(Number(usageLimit)) || Number(usageLimit) < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Global usage limit must be a whole number greater than 0'
+        });
+      } else {
+        coupon.usageLimit = Number(usageLimit);
+      }
+    }
     if (perUserLimit !== undefined) coupon.perUserLimit = perUserLimit ? Number(perUserLimit) : 1;
     if (startAt !== undefined) coupon.startAt = new Date(startAt);
     if (expiresAt !== undefined) coupon.expiresAt = new Date(expiresAt);
