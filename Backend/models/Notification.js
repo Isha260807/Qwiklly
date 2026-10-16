@@ -31,6 +31,7 @@ const notificationSchema = new mongoose.Schema({
     enum: [
       'booking_created',
       'booking_request',      // New booking request to vendor
+      'scheduled_booking_assigned', // Slot booking assigned to vendor
       'booking_requested',    // New booking created confirmation to user
       'booking_accepted',     // Vendor accepted booking
       'booking_confirmed',

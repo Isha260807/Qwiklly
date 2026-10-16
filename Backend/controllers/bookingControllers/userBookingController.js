@@ -788,7 +788,7 @@ const notifyAssignedSlotVendor = async (booking) => {
 
     await createNotification({
       vendorId,
-      type: 'booking_request',
+      type: 'scheduled_booking_assigned',
       title: 'Scheduled Booking Assigned',
       message: `A scheduled booking for ${booking.serviceName} has been assigned to you.`,
       relatedId: booking._id,
@@ -803,7 +803,8 @@ const notifyAssignedSlotVendor = async (booking) => {
         paymentStatus: booking.paymentStatus
       },
       pushData: {
-        type: 'booking_request',
+        type: 'scheduled_booking_assigned',
+        bookingType: 'scheduled',
         link: `/vendor/booking/${booking._id}`
       }
     });
