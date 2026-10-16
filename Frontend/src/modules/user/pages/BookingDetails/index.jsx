@@ -561,6 +561,14 @@ const BookingDetails = () => {
 
   // Booking paid upfront online (100% pre-paid architecture) — no on-site OTP/cash flow applies.
   const isPrepaidOnline = booking.paymentMethod === 'online' && booking.paymentStatus === 'success';
+  const normalizedPaymentStatus = String(booking.paymentStatus || '').toLowerCase();
+  const normalizedBookingStatus = String(booking.status || '').toLowerCase();
+  const paymentSettled = ['success', 'plan_covered', 'collected_by_vendor', 'paid', 'paid_online'].includes(normalizedPaymentStatus);
+  const requiresInitialPayment = Boolean(
+    booking.vendorId
+    && !paymentSettled
+    && ['pending', 'awaiting_payment', 'confirmed', 'assigned'].includes(normalizedBookingStatus)
+  );
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -813,7 +821,7 @@ const BookingDetails = () => {
               )}
 
               {/* Service Partner Card */}
-              {(booking.workerId || booking.assignedTo || booking.vendorId) && ['confirmed', 'assigned', 'journey_started', 'visited', 'in_progress', 'work_done'].includes(booking.status?.toLowerCase()) && (
+              {(booking.workerId || booking.assignedTo || booking.vendorId) && ['awaiting_payment', 'confirmed', 'assigned', 'journey_started', 'visited', 'in_progress', 'work_done'].includes(booking.status?.toLowerCase()) && (
                 <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-gray-100">
                   <div className="flex justify-between items-center mb-2.5">
                     {['journey_started', 'visited', 'in_progress'].includes(booking.status?.toLowerCase()) ? (
@@ -1112,6 +1120,29 @@ const BookingDetails = () => {
                   </div>
                 </div>
               </section>
+
+              {/* Initial payment is required after a vendor is assigned and before the journey can start. */}
+              {requiresInitialPayment && (
+                <div className="rounded-2xl p-4 shadow-md text-white bg-gradient-to-br from-[#720C3E] via-[#8D1452] to-[#B01E63]">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                      <FiDollarSign className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Payment Required</h3>
+                      <p className="text-[10px] text-pink-100">Complete payment before the service can start.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleOnlinePayment}
+                    disabled={paying}
+                    className="w-full py-2.5 bg-white text-[#720C3E] rounded-xl font-bold text-xs shadow-md disabled:opacity-60 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <FiDollarSign className="w-3.5 h-3.5" />
+                    {paying ? 'Processing...' : `Pay Online - INR ${(booking.finalAmount || booking.totalAmount || 0).toLocaleString('en-IN')}`}
+                  </button>
+                </div>
+              )}
 
               {/* Payment Card */}
               {!isPrepaidOnline && (booking.customerConfirmationOTP || booking.paymentStatus === 'success') && ['work_done'].includes(booking.status?.toLowerCase()) && !booking.cashCollected && (

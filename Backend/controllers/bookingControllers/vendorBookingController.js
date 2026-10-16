@@ -347,10 +347,17 @@ const acceptBooking = async (req, res) => {
       console.log('[AcceptBooking] No other vendors to notify or io not available');
     }
 
+    const paymentRequired = ![
+      PAYMENT_STATUS.SUCCESS,
+      PAYMENT_STATUS.PLAN_COVERED
+    ].includes(booking.paymentStatus);
+    const vendorDisplayName = req.user.businessName || req.user.name || 'your service provider';
+    const userAcceptanceMessage = paymentRequired
+      ? `Your booking ${booking.bookingNumber} has been accepted by ${vendorDisplayName}. Please complete payment before the service can start.`
+      : `Your booking ${booking.bookingNumber} is confirmed! ${vendorDisplayName} will arrive at the scheduled time.`;
+
     // Emit real-time updates to USER
     if (io) {
-      const message = 'Vendor has accepted your request. Your booking is confirmed!';
-
       io.to(`user_${booking.userId}`).emit('booking_accepted', {
         bookingId: booking._id,
         bookingNumber: booking.bookingNumber,
@@ -359,32 +366,45 @@ const acceptBooking = async (req, res) => {
           name: req.user.name,
           businessName: req.user.businessName
         },
-        message
+        message: userAcceptanceMessage,
+        paymentRequired,
+        action: paymentRequired ? 'pay_booking' : 'view_booking'
       });
 
       io.to(`user_${booking.userId}`).emit('booking_updated', {
         bookingId: booking._id,
         status: booking.status,
-        message: 'Vendor has accepted your request'
+        message: userAcceptanceMessage,
+        paymentRequired,
+        action: paymentRequired ? 'pay_booking' : 'view_booking'
       });
     }
 
     // Send notification to user
-    const notificationMessage = `Your booking ${booking.bookingNumber} is confirmed! ${req.user.businessName || req.user.name} will arrive at scheduled time.`;
-
     await createNotification({
       userId: booking.userId,
       type: 'booking_accepted',
-      title: 'Booking Confirmed!',
-      message: notificationMessage,
+      title: paymentRequired ? 'Vendor Accepted - Payment Required' : 'Booking Confirmed!',
+      message: userAcceptanceMessage,
       relatedId: booking._id,
       relatedType: 'booking',
+      data: {
+        bookingId: booking._id.toString(),
+        bookingType: booking.bookingType,
+        paymentRequired,
+        action: paymentRequired ? 'pay_booking' : 'view_booking'
+      },
       pushData: {
         type: 'booking_accepted',
         bookingId: booking._id.toString(),
-        link: `/user/booking/${booking._id}`
+        bookingType: booking.bookingType,
+        paymentRequired,
+        action: paymentRequired ? 'pay_booking' : 'view_booking',
+        link: `/user/booking/${booking._id}`,
+        priority: paymentRequired ? 'high' : 'normal'
         // dataOnly: true // Ensure user sees this
-      }
+      },
+      priority: paymentRequired ? 'high' : 'normal'
     });
 
     // Send Push Notification to user (handled by createNotification)

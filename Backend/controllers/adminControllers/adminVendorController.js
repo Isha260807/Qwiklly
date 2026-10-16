@@ -101,7 +101,7 @@ const getVendorAttendanceOverview = async (req, res) => {
       approvalStatus,
       isActive,
       page = 1,
-      limit = 25
+      limit = 20
     } = req.query;
     const dateKey = requestedDate || getPresenceDateKey();
 
@@ -125,7 +125,7 @@ const getVendorAttendanceOverview = async (req, res) => {
     }
 
     const currentPage = Math.max(1, parseInt(page, 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 25));
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
     const skip = (currentPage - 1) * pageSize;
 
     const [vendors, total, matchingVendorIds, currentlyOnline] = await Promise.all([

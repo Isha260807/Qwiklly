@@ -16,7 +16,7 @@ import { toast } from 'react-hot-toast';
 import CardShell from '../UserCategories/components/CardShell';
 import adminVendorService from '../../../../services/adminVendorService';
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 20;
 
 const getDateKey = (offset = 0) => {
   const date = new Date();

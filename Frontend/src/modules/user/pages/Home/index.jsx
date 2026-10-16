@@ -1076,7 +1076,7 @@ const Home = () => {
                           }
                         }
                       }}
-                      className="cursor-pointer overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all mb-4 h-[130px] sm:h-[160px] md:h-[190px] lg:h-[220px] w-full bg-gray-100"
+                       className="relative cursor-pointer overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all mb-4 h-[130px] sm:h-[160px] md:h-[190px] lg:h-[220px] w-full bg-gray-100"
                     >
                       <img
                         src={toAssetUrl(fb.imageUrl)}
@@ -1084,6 +1084,34 @@ const Home = () => {
                         className="w-full h-full object-cover object-center rounded-2xl"
                         loading="lazy"
                       />
+                       {fb.badgeText && (
+                         <div
+                           className="absolute left-3 top-3 rounded-full border border-white/30 bg-[#720C3E]/95 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-lg backdrop-blur-sm sm:left-4 sm:top-4 sm:text-xs"
+                         >
+                           {fb.badgeText}
+                         </div>
+                       )}
+                       {(fb.title || fb.subtitle || fb.tagline || (fb.buttonText && fb.targetType !== 'none')) && (
+                         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-3 pt-12 text-white sm:px-5 sm:pb-5 sm:pt-16">
+                           <div className="min-w-0">
+                             {fb.title && (
+                               <h2 className="truncate text-sm font-black drop-shadow-md sm:text-xl md:text-2xl">
+                                 {fb.title}
+                               </h2>
+                             )}
+                             {(fb.subtitle || fb.tagline) && (
+                               <p className="mt-0.5 truncate text-[10px] font-semibold text-white/90 drop-shadow sm:text-xs md:text-sm">
+                                 {fb.subtitle || fb.tagline}
+                               </p>
+                             )}
+                           </div>
+                           {fb.buttonText && fb.targetType !== 'none' && (
+                             <span className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#720C3E] shadow-md sm:px-4 sm:py-2 sm:text-xs">
+                               {fb.buttonText}
+                             </span>
+                           )}
+                         </div>
+                       )}
                     </div>
                   ))}
                 </motion.section>

@@ -23,9 +23,55 @@ import { toast } from 'react-hot-toast';
 import couponService from '../../services/couponService';
 import { serviceService } from '../../../../services/catalogService';
 
+const COUPON_TIME_ZONE = 'Asia/Kolkata';
+const COUPON_TIME_ZONE_OFFSET = '+05:30';
+
 const getServiceId = (service) => (
   typeof service === 'string' ? service : service?._id || service?.id
 );
+
+const formatCouponDateTimeLocal = (value) => {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: COUPON_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(date).reduce((result, part) => {
+    if (part.type !== 'literal') result[part.type] = part.value;
+    return result;
+  }, {});
+
+  return parts.year + '-' + parts.month + '-' + parts.day + 'T' + parts.hour + ':' + parts.minute;
+};
+
+const toCouponDateTimeIso = (value) => {
+  const input = String(value || '').trim();
+  if (!input) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(input)) {
+    return input + ':00' + COUPON_TIME_ZONE_OFFSET;
+  }
+
+  const date = new Date(input);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const formatCouponDateTime = (value) => {
+  const localValue = formatCouponDateTimeLocal(value);
+  if (!localValue) return 'Not set';
+
+  const [date, time] = localValue.split('T');
+  const [year, month, day] = date.split('-');
+  return day + '/' + month + '/' + year + ', ' + time;
+};
 
 const Coupons = () => {
   const [coupons, setCoupons] = useState([]);
@@ -74,8 +120,8 @@ const Coupons = () => {
     minOrderAmount: '',
     usageLimit: '',
     perUserLimit: '1',
-    startAt: new Date().toISOString().split('T')[0],
-    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    startAt: formatCouponDateTimeLocal(new Date()),
+    expiresAt: formatCouponDateTimeLocal(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
     firstOrderOnly: false,
     newUserOnly: false,
     isActive: true,
@@ -167,8 +213,8 @@ const Coupons = () => {
       minOrderAmount: coupon.minOrderAmount || '',
       usageLimit: coupon.usageLimit || '',
       perUserLimit: coupon.perUserLimit || '1',
-      startAt: coupon.startAt ? new Date(coupon.startAt).toISOString().split('T')[0] : '',
-      expiresAt: coupon.expiresAt ? new Date(coupon.expiresAt).toISOString().split('T')[0] : '',
+      startAt: formatCouponDateTimeLocal(coupon.startAt),
+      expiresAt: formatCouponDateTimeLocal(coupon.expiresAt),
       firstOrderOnly: Boolean(coupon.firstOrderOnly),
       newUserOnly: Boolean(coupon.newUserOnly),
       isActive: coupon.isActive,
@@ -192,12 +238,22 @@ const Coupons = () => {
     if (!formData.code.trim()) return toast.error('Coupon code is required');
     if (!formData.title.trim()) return toast.error('Coupon title is required');
     if (!formData.discountValue || Number(formData.discountValue) <= 0) return toast.error('Valid discount value is required');
+    if (!formData.startAt) return toast.error('Start date and time is required');
     if (!formData.expiresAt) return toast.error('Expiry date is required');
+
+    const startAt = toCouponDateTimeIso(formData.startAt);
+    const expiresAt = toCouponDateTimeIso(formData.expiresAt);
+    if (!startAt || !expiresAt) return toast.error('Please enter valid coupon date and time');
+    if (new Date(startAt) >= new Date(expiresAt)) {
+      return toast.error('Expiry date and time must be after start date and time');
+    }
 
     setFormSubmitting(true);
     try {
       const payload = {
         ...formData,
+        startAt,
+        expiresAt,
         code: formData.code.trim().toUpperCase(),
         discountValue: Number(formData.discountValue),
         maxDiscount: formData.maxDiscount ? Number(formData.maxDiscount) : null,
@@ -438,6 +494,7 @@ const Coupons = () => {
               ) : (
                 coupons.map((coupon) => {
                   const isExpired = new Date(coupon.expiresAt) < new Date();
+                  const isNotStarted = coupon.startAt && new Date(coupon.startAt) > new Date();
                   return (
                     <tr key={coupon._id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-6 py-4">
@@ -473,10 +530,11 @@ const Coupons = () => {
 
                       <td className="px-6 py-4">
                         <div className="text-[11px] text-gray-600 space-y-0.5">
-                          <p>Start: {new Date(coupon.startAt).toLocaleDateString()}</p>
+                          <p>Start: {formatCouponDateTime(coupon.startAt)}</p>
                           <p className={isExpired ? 'text-red-500 font-bold' : 'text-gray-500'}>
-                            Ends: {new Date(coupon.expiresAt).toLocaleDateString()} {isExpired && '(Expired)'}
+                            Ends: {formatCouponDateTime(coupon.expiresAt)} {isExpired && '(Expired)'}
                           </p>
+                          {isNotStarted && <p className="text-amber-600 font-bold">Not started</p>}
                         </div>
                       </td>
 
@@ -784,27 +842,29 @@ const Coupons = () => {
                   </div>
                 </div>
 
-                {/* Validity Dates */}
+                {/* Validity */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
                   <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Start Date *</label>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Start Date &amp; Time *</label>
                     <input
-                      type="date"
+                      type="datetime-local"
                       name="startAt"
                       value={formData.startAt}
                       onChange={handleFormChange}
+                      step="60"
                       className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:border-indigo-500"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Expiry Date *</label>
+                    <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">Expiry Date &amp; Time *</label>
                     <input
-                      type="date"
+                      type="datetime-local"
                       name="expiresAt"
                       value={formData.expiresAt}
                       onChange={handleFormChange}
+                      step="60"
                       className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:border-indigo-500"
                       required
                     />

@@ -843,6 +843,43 @@ const notifyAssignedSlotVendor = async (booking) => {
         link: `/vendor/booking/${booking._id}`
       }
     });
+    // A scheduled vendor is selected before payment is completed. Notify the
+    // customer at that point so they know payment is required before service
+    // execution can begin. The committed-after-payment call will not send a
+    // second payment prompt because paymentStatus is no longer pending.
+    const paymentRequired = ![
+      PAYMENT_STATUS.SUCCESS,
+      PAYMENT_STATUS.PLAN_COVERED
+    ].includes(booking.paymentStatus);
+    const userId = booking.userId?._id || booking.userId;
+
+    if (paymentRequired && userId) {
+      const userMessage = `Your scheduled booking ${booking.bookingNumber || ''} has been assigned to a service provider. Please complete payment before the service can start.`;
+
+      await createNotification({
+        userId,
+        type: 'booking_accepted',
+        title: 'Vendor Assigned - Payment Required',
+        message: userMessage,
+        relatedId: booking._id,
+        relatedType: 'booking',
+        data: {
+          bookingId: booking._id.toString(),
+          bookingType: 'scheduled',
+          paymentRequired: true,
+          action: 'pay_booking'
+        },
+        pushData: {
+          type: 'booking_accepted',
+          bookingType: 'scheduled',
+          paymentRequired: true,
+          action: 'pay_booking',
+          link: `/user/booking/${booking._id}`,
+          priority: 'high'
+        },
+        priority: 'high'
+      });
+    }
   } catch (error) {
     console.error('[CreateBooking] SLOT vendor notification failed:', error);
   }
