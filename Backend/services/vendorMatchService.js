@@ -79,7 +79,15 @@ const filterByAvailability = (vendors) => {
  * @param {string} params.serviceTitle - retained for API compatibility
  * @returns {Promise<{vendors: Array, reason: string|null, debug: Object}>}
  */
-const findQualifiedVendors = async ({ zone, serviceTitle }) => {
+const findQualifiedVendors = async ({
+  zone,
+  serviceTitle,
+  bookingType = null,
+  serviceDurationMins = 0,
+  bookedItems = [],
+  fixedDurationMins = 45,
+  now = new Date()
+}) => {
   const debug = {
     zoneId: zone?._id || null,
     zoneName: zone?.name || null,
@@ -116,7 +124,22 @@ const findQualifiedVendors = async ({ zone, serviceTitle }) => {
   }
 
   // Preserve database order. There is deliberately no nearest-first sort.
-  return { vendors: availableVendors, reason: null, debug };
+  const eligibleVendors = String(bookingType).toLowerCase() === 'instant'
+    ? await filterInstantVendorsBeforeScheduledBooking({
+      vendors: availableVendors,
+      serviceDurationMins,
+      bookedItems,
+      fixedDurationMins,
+      now
+    })
+    : availableVendors;
+
+  debug.availableAfterScheduledCheck = eligibleVendors.length;
+  if (eligibleVendors.length === 0) {
+    return { vendors: [], reason: MATCH_FAILURE_REASONS.NO_AVAILABLE_VENDOR, debug };
+  }
+
+  return { vendors: eligibleVendors, reason: null, debug };
 };
 
 const SLOT_BLOCKING_STATUSES = [
@@ -271,6 +294,136 @@ const resolveSlotUnit = (doc, markedStarts, fallbackMins) => {
   const starts = [...markedStarts];
   if (starts.length > 0 && starts.every(start => start % 60 === 0)) return 60;
   return fallbackMins || 60;
+};
+
+const getIndiaDateKey = (dateValue) => {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = Object.fromEntries(
+    slotDateTimeFormatter.formatToParts(date)
+      .filter(part => part.type !== 'literal')
+      .map(part => [part.type, part.value])
+  );
+
+  return [parts.year, parts.month, parts.day].join('-');
+};
+
+/**
+ * Convert the stored scheduled date key plus its local India slot start into
+ * an absolute Date. Scheduled dates are stored at UTC midnight, while the
+ * displayed slot time is an Asia/Kolkata wall-clock time.
+ */
+const getScheduledStartDate = (scheduledDate, slotStart) => {
+  const date = new Date(scheduledDate);
+  const startMinutes = parseSlotTime(slotStart);
+  if (Number.isNaN(date.getTime()) || startMinutes === null) return null;
+
+  const dateKey = date.toISOString().slice(0, 10);
+  const scheduledStart = new Date(dateKey + 'T' + minutesToHHMM(startMinutes) + ':00+05:30');
+  return Number.isNaN(scheduledStart.getTime()) ? null : scheduledStart;
+};
+const resolveInstantServiceDuration = ({
+  booking,
+  serviceDurationMins = 0,
+  bookedItems = [],
+  fixedDurationMins = 45
+}) => {
+  const explicitDuration = Number(serviceDurationMins);
+  if (Number.isFinite(explicitDuration) && explicitDuration > 0) return explicitDuration;
+
+  const trackedDuration = Number(booking?.hourlyTracking?.bookedMinutes);
+  if (Number.isFinite(trackedDuration) && trackedDuration > 0) return trackedDuration;
+
+  const calculatedDuration = getBookedServiceDuration(
+    booking || { bookedItems },
+    fixedDurationMins
+  );
+  return calculatedDuration > 0 ? calculatedDuration : (Number(fixedDurationMins) || 45);
+};
+
+/**
+ * Find each vendor's next active scheduled booking after now.
+ * Only the next booking matters because the instant service must finish before
+ * that booking starts. Cancelled/rejected bookings do not reserve the vendor.
+ */
+const getNextScheduledStartByVendor = async (vendorIds, now = new Date()) => {
+  const ids = (vendorIds || []).filter(Boolean);
+  if (ids.length === 0) return new Map();
+
+  const todayKey = getIndiaDateKey(now);
+  const todayStart = todayKey ? new Date(todayKey + 'T00:00:00.000Z') : null;
+  if (!todayStart || Number.isNaN(todayStart.getTime())) return new Map();
+
+  const scheduledBookings = await Booking.find({
+    vendorId: { $in: ids },
+    bookingType: 'scheduled',
+    scheduledDate: { $gte: todayStart },
+    status: { $in: SLOT_BLOCKING_STATUSES }
+  }).select('vendorId scheduledDate timeSlot.start').lean();
+
+  const nextByVendor = new Map();
+  scheduledBookings.forEach(booking => {
+    const start = getScheduledStartDate(booking.scheduledDate, booking.timeSlot?.start);
+    if (!start || start <= now) return;
+
+    const vendorKey = booking.vendorId.toString();
+    const current = nextByVendor.get(vendorKey);
+    if (!current || start < current) nextByVendor.set(vendorKey, start);
+  });
+
+  return nextByVendor;
+};
+
+/**
+ * Keep an instant request eligible for a vendor only if it can complete before
+ * that vendor's next scheduled booking. Buffer and travel are intentionally
+ * zero for this rule.
+ */
+const filterInstantVendorsBeforeScheduledBooking = async ({
+  vendors,
+  serviceDurationMins = 0,
+  bookedItems = [],
+  fixedDurationMins = 45,
+  now = new Date()
+}) => {
+  const durationMins = resolveInstantServiceDuration({
+    serviceDurationMins,
+    bookedItems,
+    fixedDurationMins
+  });
+  const nextByVendor = await getNextScheduledStartByVendor(
+    (vendors || []).map(vendor => vendor._id),
+    now
+  );
+  const instantEnd = new Date(new Date(now).getTime() + durationMins * 60 * 1000);
+
+  return (vendors || []).filter(vendor => {
+    const nextScheduledStart = nextByVendor.get(vendor._id.toString());
+    return !nextScheduledStart || instantEnd <= nextScheduledStart;
+  });
+};
+
+/**
+ * Final acceptance-time check for an instant request. Dispatch eligibility is
+ * checked when the request is created, but the vendor may accept later.
+ */
+const isVendorEligibleForInstantBooking = async ({
+  vendorId,
+  booking,
+  fixedDurationMins = 45,
+  now = new Date()
+}) => {
+  const nextByVendor = await getNextScheduledStartByVendor([vendorId], now);
+  const nextScheduledStart = nextByVendor.get(vendorId.toString());
+  const durationMins = resolveInstantServiceDuration({ booking, fixedDurationMins });
+  const instantEnd = new Date(new Date(now).getTime() + durationMins * 60 * 1000);
+
+  return {
+    eligible: !nextScheduledStart || instantEnd <= nextScheduledStart,
+    durationMins,
+    nextScheduledStart: nextScheduledStart || null
+  };
 };
 
 /**
@@ -454,5 +607,7 @@ module.exports = {
   findAvailableVendorForSlot,
   findSlotCandidateVendors,
   getBookableSlotMap,
-  parseSlotTime
+  parseSlotTime,
+  filterInstantVendorsBeforeScheduledBooking,
+  isVendorEligibleForInstantBooking
 };

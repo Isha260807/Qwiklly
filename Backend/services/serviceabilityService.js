@@ -69,7 +69,15 @@ const checkServiceAvailabilityInZone = (service, zoneId) => {
  *   serviceable, zone, service, vendors, reason, debug
  * }
  */
-const checkBookingServiceability = async ({ serviceId, lat, lng }) => {
+const checkBookingServiceability = async ({
+  serviceId,
+  lat,
+  lng,
+  bookingType = null,
+  serviceDurationMins = 0,
+  bookedItems = [],
+  fixedDurationMins = 45
+}) => {
   const locationCheck = await checkLocationServiceability(lat, lng);
 
   if (!locationCheck.inZone) {
@@ -111,7 +119,11 @@ const checkBookingServiceability = async ({ serviceId, lat, lng }) => {
 
   const { vendors, reason, debug } = await findQualifiedVendors({
     zone,
-    serviceTitle: service.title
+    serviceTitle: service.title,
+    bookingType,
+    serviceDurationMins,
+    bookedItems,
+    fixedDurationMins
   });
 
   return {

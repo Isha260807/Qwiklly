@@ -15,7 +15,7 @@ const { createNotification } = require('../notificationControllers/notificationC
 const { sendNotificationToUser, sendNotificationToVendor } = require('../../services/firebaseAdmin');
 const { findAvailableVendorForSlot, findSlotCandidateVendors } = require('../../services/vendorMatchService');
 const { CANCELLATION_WINDOW_MS, USER_CANCELLABLE_STATUSES, getCancellationState } = require('../../utils/cancellationWindow');
-const { getSlotRules, isDateWithinWindow, isSlotStartAllowed } = require('../../services/slotSettingsService');
+const { getSlotRules, isDateWithinWindow, isSlotStartAllowed, isSlotStartInFuture } = require('../../services/slotSettingsService');
 const { reserveCouponUsage, releaseCouponReservation, consumeCouponReservation, cancelCouponUsage } = require('../../services/couponUsageService');
 
 const NORMAL_SLOT_BLOCKING_STATUSES = [
@@ -143,7 +143,7 @@ const createBooking = async (req, res) => {
       });
     }
 
-    const slotRules = isScheduledBooking ? await getSlotRules() : null;
+    const slotRules = await getSlotRules();
     // Every scheduled booking (fixed-price or duration/hourly) is silently assigned
     const bookedServiceIds = Array.isArray(bookedItems)
       ? [...new Set(bookedItems.map(item => {
@@ -237,7 +237,11 @@ const createBooking = async (req, res) => {
     const serviceability = await checkBookingServiceability({
       serviceId,
       lat: bookingLocation.lat,
-      lng: bookingLocation.lng
+      lng: bookingLocation.lng,
+      bookingType: effectiveBookingType,
+      serviceDurationMins: slotDurationMins || slotRules.slotServiceDurationMins,
+      bookedItems,
+      fixedDurationMins: slotRules.slotServiceDurationMins
     });
 
     // Hard-block reasons: the location/service itself is not bookable here,
@@ -279,8 +283,10 @@ const createBooking = async (req, res) => {
     if (isSlotBooking && !matchFailureReason) {
       // The global slot setup (hours, interval, blocked slots, booking window) is
       // the master list; vendor availability only narrows it down.
-      if (!isDateWithinWindow(requestedDateValue.toISOString().slice(0, 10), slotRules)
-        || !isSlotStartAllowed(timeSlot.start, slotRules)) {
+      const requestedDateKey = requestedDateValue.toISOString().slice(0, 10);
+      if (!isDateWithinWindow(requestedDateKey, slotRules)
+        || !isSlotStartAllowed(timeSlot.start, slotRules)
+        || !isSlotStartInFuture(requestedDateKey, timeSlot.start, new Date(), slotRules.leadTimeHours)) {
         return res.status(409).json({
           success: false,
           code: 'SLOT_UNAVAILABLE',
@@ -1454,6 +1460,8 @@ const dispatchBookingToVendors = async (bookingId) => {
     const Zone = require('../../models/Zone');
     const BookingRequest = require('../../models/BookingRequest');
     const bookedServiceTitle = booking.serviceName || booking.serviceId?.title || booking.serviceCategory || '';
+    const slotRules = await getSlotRules();
+    const instantDurationMins = Number(booking.hourlyTracking?.bookedMinutes) || 0;
 
     // zoneId was resolved at booking creation and is the permanent geographic
     // scope for this booking. Vendor coordinates are intentionally ignored.
@@ -1464,7 +1472,11 @@ const dispatchBookingToVendors = async (bookingId) => {
       if (zone) {
         const matchResult = await findQualifiedVendors({
           zone,
-          serviceTitle: bookedServiceTitle
+          serviceTitle: bookedServiceTitle,
+          bookingType: booking.bookingType,
+          serviceDurationMins: instantDurationMins,
+          bookedItems: booking.bookedItems,
+          fixedDurationMins: slotRules.slotServiceDurationMins
         });
         zoneVendors = matchResult.vendors;
         matchReason = matchResult.reason;

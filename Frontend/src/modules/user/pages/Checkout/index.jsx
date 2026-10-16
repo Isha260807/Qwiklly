@@ -23,6 +23,14 @@ import LiveBookingCard from '../../components/booking/LiveBookingCard';
 // Scheduled bookings can be made up to one month ahead (vendor availability is
 // marked by admin for the same window).
 const BOOKING_WINDOW_DAYS = 30;
+const DEFAULT_LEAD_TIME_HOURS = 0.5;
+
+const normalizeLeadTimeHours = (value) => {
+  const parsed = Number(value);
+  // Treat the old 1-hour default as the new 30-minute product default.
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed === 1) return DEFAULT_LEAD_TIME_HOURS;
+  return parsed;
+};
 
 // Zone/serviceability errors from the backend (see MATCH_FAILURE_REASONS in
 // Backend/utils/constants.js) carry a `code` + friendly `message` - surface
@@ -124,7 +132,7 @@ const Checkout = () => {
     slotEndHour: 21,
     slotIntervalMins: 60,
     maxDaysInAdvance: 7,
-    leadTimeHours: 1,
+    leadTimeHours: DEFAULT_LEAD_TIME_HOURS,
     slotServiceDurationMins: 45,
     disabledSlots: []
   });
@@ -219,7 +227,7 @@ const Checkout = () => {
                 slotEndHour: response.settings.slotEndHour ?? 21,
                 slotIntervalMins: response.settings.slotIntervalMins ?? 60,
                 maxDaysInAdvance: response.settings.maxDaysInAdvance ?? 7,
-                leadTimeHours: response.settings.leadTimeHours ?? 1,
+                leadTimeHours: normalizeLeadTimeHours(response.settings.leadTimeHours),
                 slotServiceDurationMins: response.settings.slotServiceDurationMins ?? 45,
                 disabledSlots: response.settings.disabledSlots || []
               });
@@ -257,7 +265,7 @@ const Checkout = () => {
                 slotEndHour: response.settings.slotEndHour ?? 21,
                 slotIntervalMins: response.settings.slotIntervalMins ?? 60,
                 maxDaysInAdvance: response.settings.maxDaysInAdvance ?? 7,
-                leadTimeHours: response.settings.leadTimeHours ?? 1,
+                leadTimeHours: normalizeLeadTimeHours(response.settings.leadTimeHours),
                 slotServiceDurationMins: response.settings.slotServiceDurationMins ?? 45,
                 disabledSlots: response.settings.disabledSlots || []
               });
@@ -1214,8 +1222,9 @@ const Checkout = () => {
       return allSlots;
     }
 
-    const leadHours = Number(slotConfig.leadTimeHours ?? 1);
-    const currentMinutes = (now.getHours() * 60) + now.getMinutes() + (leadHours * 60);
+    const leadTimeHours = normalizeLeadTimeHours(slotConfig.leadTimeHours);
+    const currentMinutes = (now.getHours() * 60) + now.getMinutes()
+      + (leadTimeHours * 60);
 
     return allSlots.filter(slot => slot.startMinutes >= currentMinutes);
   };

@@ -229,7 +229,7 @@ const getCheckoutData = async (req, res) => {
         slotEndHour: 21,
         slotIntervalMins: 60,
         maxDaysInAdvance: 7,
-        leadTimeHours: 1,
+        leadTimeHours: 0.5,
         slotServiceDurationMins: 45,
         disabledSlots: [],
         customSlots: []

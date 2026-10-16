@@ -606,8 +606,20 @@ export default function BookingDetails() {
   const originalGST = bill ? (bill.originalGST || 0) : (parseFloat(booking?.tax) || 0);
   const totalGST = originalGST + extraServiceGST + partsGST;
 
-  // Final Total from bill or booking
-  const finalTotal = bill?.grandTotal || (booking?.finalAmount || 0);
+  // Keep the vendor-facing payment summary identical to the user-facing summary.
+  // The booking fields are the canonical customer-facing amounts; the bill is
+  // only used as a fallback for older records that do not have them.
+  const paymentBase = Number(booking?.basePrice || bill?.originalServiceBase || 0);
+  const paymentDiscount = Number(booking?.discount || 0);
+  const paymentTax = Number(booking?.tax ?? (bill ? totalGST : 0)) || 0;
+  const paymentVisitingCharges = Number(
+    booking?.visitingCharges || booking?.visitationFee || bill?.visitingCharges || 0
+  ) || 0;
+  const paymentInstantBookingFee = Number(booking?.instantBookingCharges || 0);
+  const paymentTotal = isPlanBenefit
+    ? 0
+    : Number(booking?.finalAmount || booking?.totalAmount || bill?.grandTotal || 0);
+  const finalTotal = paymentTotal;
   const hasBill = !!bill;
 
   return (
@@ -827,7 +839,77 @@ export default function BookingDetails() {
           </div>
 
           <div className="p-3 space-y-2.5 text-xs">
-            {/* Services Section */}
+            {/* Customer Payment Summary */}
+            <div>
+              <h4 className="font-bold text-gray-900 flex items-center gap-1.5 mb-2 pb-1.5 border-b border-gray-100 text-xs">
+                <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px]"><FiDollarSign /></span>
+                Payment Summary
+              </h4>
+              <div className="space-y-1.5 pl-1 text-xs">
+                <div className="flex justify-between text-gray-600">
+                  <span>Base Price</span>
+                  {isPlanBenefit ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="line-through text-gray-400 text-[11px]">&#8377;{paymentBase.toLocaleString('en-IN')}</span>
+                      <span className="text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100">FREE</span>
+                    </div>
+                  ) : (
+                    <span className="font-medium text-gray-900">&#8377;{paymentBase.toLocaleString('en-IN')}</span>
+                  )}
+                </div>
+
+                {!isPlanBenefit && paymentDiscount > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span className="text-green-600 font-medium">Discount</span>
+                    <span className="font-medium text-green-600">-&#8377;{paymentDiscount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {(paymentTax > 0 || isPlanBenefit) && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Taxes &amp; GST</span>
+                    {isPlanBenefit ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="line-through text-gray-400 text-[11px]">&#8377;{paymentTax.toLocaleString('en-IN')}</span>
+                        <span className="text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100">FREE</span>
+                      </div>
+                    ) : (
+                      <span className="font-medium text-gray-900">&#8377;{paymentTax.toLocaleString('en-IN')}</span>
+                    )}
+                  </div>
+                )}
+
+                {(paymentVisitingCharges > 0 || isPlanBenefit) && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Convenience Fee</span>
+                    {isPlanBenefit ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="line-through text-gray-400 text-[11px]">&#8377;{paymentVisitingCharges.toLocaleString('en-IN')}</span>
+                        <span className="text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100">FREE</span>
+                      </div>
+                    ) : (
+                      <span className="font-medium text-gray-900">&#8377;{paymentVisitingCharges.toLocaleString('en-IN')}</span>
+                    )}
+                </div>
+                )}
+
+                {paymentInstantBookingFee > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Instant Booking Fee</span>
+                    <span className="font-medium text-gray-900">&#8377;{paymentInstantBookingFee.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between font-bold text-gray-900 border-t border-slate-200 pt-2 mt-1">
+                  <span>Total Paid</span>
+                  <span>&#8377;{paymentTotal.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
+
+            {false && (
+              <>
+                {/* Services Section */}
             <div>
               <h4 className="font-bold text-gray-900 flex items-center gap-1.5 mb-2 pb-1.5 border-b border-gray-100 text-xs">
                 <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px]"><FiTool /></span>
@@ -866,6 +948,8 @@ export default function BookingDetails() {
                 </div>
               </div>
             </div>
+              </>
+            )}
 
             {/* Parts Section */}
             {(parts.length > 0 || customItems.length > 0) && (
@@ -906,7 +990,9 @@ export default function BookingDetails() {
               </div>
             )}
 
-            {/* Visiting Charges */}
+            {false && (
+              <>
+                {/* Visiting Charges */}
             {(booking.visitingCharges > 0 || bill?.visitingCharges > 0) && (
               <div>
                 <h4 className="font-bold text-gray-900 flex items-center gap-1.5 mb-1.5 pb-1 border-b border-gray-100 text-xs">
@@ -918,6 +1004,8 @@ export default function BookingDetails() {
                   <span>₹{(bill?.visitingCharges || booking.visitingCharges || 0).toFixed(2)}</span>
                 </div>
               </div>
+            )}
+              </>
             )}
 
             {/* Transport Charges */}

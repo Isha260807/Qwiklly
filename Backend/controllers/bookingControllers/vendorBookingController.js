@@ -4,6 +4,8 @@ const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { sendNotificationToUser, sendNotificationToVendor } = require('../../services/firebaseAdmin');
+const { isVendorEligibleForInstantBooking } = require('../../services/vendorMatchService');
+const { getSlotRules } = require('../../services/slotSettingsService');
 const { creditSalaryEarningForBooking } = require('../../services/salaryEarningService');
 
 /**
@@ -233,6 +235,31 @@ const acceptBooking = async (req, res) => {
     // prevent race conditions. Only a vendor broadcast for this zone booking
     // can accept it, and the first successful update wins.
     const vObjId = mongoose.Types.ObjectId.isValid(vendorId) ? new mongoose.Types.ObjectId(vendorId) : vendorId;
+    const instantCandidate = await Booking.findOne({
+      _id: id,
+      bookingType: 'instant',
+      status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
+      vendorId: null,
+      'potentialVendors.vendorId': vObjId
+    }).select('bookingType bookedItems hourlyTracking').lean();
+
+    if (instantCandidate) {
+      const slotRules = await getSlotRules();
+      const eligibility = await isVendorEligibleForInstantBooking({
+        vendorId: vObjId,
+        booking: instantCandidate,
+        fixedDurationMins: slotRules.slotServiceDurationMins,
+        now: new Date()
+      });
+
+      if (!eligibility.eligible) {
+        return res.status(409).json({
+          success: false,
+          code: 'INSTANT_BOOKING_CONFLICT',
+          message: 'This instant booking can no longer be accepted before your scheduled booking.'
+        });
+      }
+    }
     const updatedBooking = await Booking.findOneAndUpdate(
       {
         _id: id,

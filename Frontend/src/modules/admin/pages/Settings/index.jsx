@@ -40,7 +40,7 @@ const AdminSettings = () => {
     slotEndHour: 21,
     slotIntervalMins: 60,
     maxDaysInAdvance: 7,
-    leadTimeHours: 1,
+    leadTimeHours: 0.5,
     slotServiceDurationMins: 45,
     disabledSlots: []
   });
@@ -204,7 +204,7 @@ const AdminSettings = () => {
             slotEndHour: res.settings.slotEndHour ?? 21,
             slotIntervalMins: res.settings.slotIntervalMins ?? 60,
             maxDaysInAdvance: res.settings.maxDaysInAdvance ?? 7,
-            leadTimeHours: res.settings.leadTimeHours ?? 1,
+            leadTimeHours: res.settings.leadTimeHours ?? 0.5,
             slotServiceDurationMins: res.settings.slotServiceDurationMins ?? 45,
             disabledSlots: res.settings.disabledSlots || []
           });

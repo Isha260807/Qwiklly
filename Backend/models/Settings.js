@@ -219,7 +219,7 @@ const settingsSchema = new mongoose.Schema({
   },
   leadTimeHours: {
     type: Number,
-    default: 1, // 1 hour minimum notice for same-day
+    default: 0.5, // 30-minute minimum notice for same-day
     min: 0
   },
   slotServiceDurationMins: {

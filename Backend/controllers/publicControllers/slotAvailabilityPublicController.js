@@ -1,7 +1,7 @@
 const { checkBookingServiceability } = require('../../services/serviceabilityService');
 const Service = require('../../models/UserService');
 const { findSlotCandidateVendors, getBookableSlotMap } = require('../../services/vendorMatchService');
-const { getSlotRules, isDateWithinWindow, isSlotStartAllowed } = require('../../services/slotSettingsService');
+const { getSlotRules, isDateWithinWindow, isSlotStartAllowed, isSlotStartInFuture } = require('../../services/slotSettingsService');
 const { MATCH_FAILURE_REASONS } = require('../../utils/constants');
 
 const HARD_BLOCK_REASONS = [
@@ -76,7 +76,10 @@ exports.getAvailableSlots = async (req, res) => {
 
     const availability = {};
     Object.entries(slotMap).forEach(([dateKey, starts]) => {
-      const allowed = starts.filter(start => isSlotStartAllowed(start, rules));
+      const allowed = starts.filter(start =>
+        isSlotStartAllowed(start, rules)
+        && isSlotStartInFuture(dateKey, start, new Date(), rules.leadTimeHours)
+      );
       if (allowed.length > 0) availability[dateKey] = allowed;
     });
 
