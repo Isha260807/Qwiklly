@@ -6,6 +6,12 @@ import { themeColors } from '../../../../theme';
 import NotificationBell from '../../components/common/NotificationBell';
 import { motion, AnimatePresence } from 'framer-motion';
 import { bookingService } from '../../../../services/bookingService';
+const BOOKING_STATUS_FILTERS = {
+  confirmed: ['confirmed', 'accepted', 'assigned'],
+  'in-progress': ['in_progress', 'journey_started', 'visited', 'work_started', 'on_the_way', 'worker_started'],
+  completed: ['completed', 'work_done', 'finished'],
+  cancelled: ['cancelled', 'rejected', 'declined']
+};
 
 const MyBookings = () => {
   const navigate = useNavigate();
@@ -19,9 +25,13 @@ const MyBookings = () => {
     const loadBookings = async () => {
       try {
         setLoading(true);
-        const params = {};
-        if (filter !== 'all') {
-          params.status = filter;
+        // Load every booking status for the All tab. Status groups are mapped
+        // to the backend's canonical values so tabs do not miss aliases such
+        // as accepted/assigned or journey_started/visited.
+        const params = { limit: 100 };
+        const statusGroup = BOOKING_STATUS_FILTERS[filter];
+        if (statusGroup) {
+          params.status = statusGroup.join(',');
         }
         const response = await bookingService.getUserBookings(params);
         if (isMounted) {
