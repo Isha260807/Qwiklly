@@ -340,6 +340,14 @@ const approveVendor = async (req, res) => {
         message: 'Vendor has not completed the registration details yet.'
       });
     }
+    if (!Array.isArray(vendor.zoneIds) || vendor.zoneIds.filter(Boolean).length === 0) {
+      return res.status(400).json({
+        success: false,
+        code: 'VENDOR_ZONE_REQUIRED',
+        message: 'First assign a zone to the vendor, then approve.'
+      });
+    }
+
 
     vendor.approvalStatus = VENDOR_STATUS.APPROVED;
     vendor.approvalDate = new Date();

@@ -14,6 +14,7 @@ const { BOOKING_STATUS, PAYMENT_STATUS, MATCH_FAILURE_REASONS } = require('../..
 const { createNotification } = require('../notificationControllers/notificationController');
 const { sendNotificationToUser, sendNotificationToVendor } = require('../../services/firebaseAdmin');
 const { findAvailableVendorForSlot, findSlotCandidateVendors } = require('../../services/vendorMatchService');
+const { commitSlotAssignmentAfterPayment, SLOT_ASSIGNMENT_STATE } = require('../../services/slotAssignmentService');
 const { CANCELLATION_WINDOW_MS, USER_CANCELLABLE_STATUSES, getCancellationState } = require('../../utils/cancellationWindow');
 const { getSlotRules, isDateWithinWindow, isSlotStartAllowed, isSlotStartInFuture } = require('../../services/slotSettingsService');
 const { reserveCouponUsage, releaseCouponReservation, consumeCouponReservation, cancelCouponUsage } = require('../../services/couponUsageService');
@@ -271,6 +272,7 @@ const createBooking = async (req, res) => {
     let nearbyVendors = serviceability.vendors; // zone + service + availability scoped candidates
     let matchFailureReason = nearbyVendors.length === 0 ? serviceability.reason : null;
     let assignedSlotVendor = null;
+    let assignedSlotSelectionVersion = null;
     let reservedSlotEnd = null;
 
     if (isSlotBooking) {
@@ -323,7 +325,8 @@ const createBooking = async (req, res) => {
         // data has no duration metadata, retain the global fixed-service fallback.
         durationMins: slotDurationMins || slotRules.slotServiceDurationMins,
         intervalMins: slotRules.intervalMins,
-        fixedDurationMins: slotRules.slotServiceDurationMins
+        fixedDurationMins: slotRules.slotServiceDurationMins,
+        zoneId: resolvedZone._id
       });
 
       if (slotMatch.reason === 'INVALID_SLOT') {
@@ -335,6 +338,7 @@ const createBooking = async (req, res) => {
       }
 
       assignedSlotVendor = slotMatch.vendor;
+      assignedSlotSelectionVersion = slotMatch.selectionVersion;
       // Duration/hourly bookings reserve every slot they span, so store the full range.
       if (assignedSlotVendor && slotMatch.slotEnd) reservedSlotEnd = slotMatch.slotEnd;
       if (!assignedSlotVendor) {
@@ -397,9 +401,13 @@ const createBooking = async (req, res) => {
     // "wait for admin" case - the booking is created (for the user's
     // history/audit trail) but immediately auto-cancelled with a clear
     // reason, rather than being parked for manual assignment.
+    const isImmediateSlotAssignment = isSlotBooking && assignedSlotVendor
+      && ((pricing.isFreeUnderPlan && finalAmount <= 0) || paymentMethod === 'cash');
     let bookingStatus = matchFailureReason
       ? BOOKING_STATUS.CANCELLED
-      : (isSlotBooking ? BOOKING_STATUS.CONFIRMED : BOOKING_STATUS.SEARCHING);
+      : (isSlotBooking
+        ? (isImmediateSlotAssignment ? BOOKING_STATUS.CONFIRMED : BOOKING_STATUS.AWAITING_PAYMENT)
+        : BOOKING_STATUS.SEARCHING);
     const NO_VENDOR_CANCELLATION_MESSAGES = {
       NO_ZONE_VENDOR: 'No service providers are currently registered in your area.',
       NO_SERVICE_VENDOR: 'No service providers in your area currently offer this service.',
@@ -575,9 +583,18 @@ const createBooking = async (req, res) => {
       useWalletPayment: Boolean(useWalletPayment && finalAmount > 0 && !pricing.isFreeUnderPlan),
       paymentMethod: paymentMethod || null,
       status: bookingStatus,
-      assignedAt: assignedSlotVendor ? new Date() : null,
-      ...(isNormalSlotBooking && assignedSlotVendor ? { vendorAssignmentStatus: 'ACCEPTED' } : {}),
+      // A selected vendor is a temporary slot hold until payment is settled.
+      // assignedAt is populated only by commitSlotAssignmentAfterPayment.
+      assignedAt: null,
+      ...(isImmediateSlotAssignment ? { vendorAssignmentStatus: 'PENDING' } : {}),
       paymentStatus: bookingPaymentStatus,
+      ...(isSlotBooking && assignedSlotVendor ? {
+        slotAssignment: {
+          state: SLOT_ASSIGNMENT_STATE.TENTATIVE,
+          selectionVersion: assignedSlotSelectionVersion,
+          selectedAt: new Date()
+        }
+      } : {}),
       hourlyTracking,
       ...(matchFailureReason ? {
         cancelledAt: new Date(),
@@ -625,7 +642,8 @@ const createBooking = async (req, res) => {
           timeSlot,
           durationMins: slotDurationMins || slotRules.slotServiceDurationMins,
           intervalMins: slotRules.intervalMins,
-          fixedDurationMins: slotRules.slotServiceDurationMins
+          fixedDurationMins: slotRules.slotServiceDurationMins,
+          zoneId: resolvedZone._id
         });
 
         if (!retryMatch.vendor) {
@@ -635,9 +653,11 @@ const createBooking = async (req, res) => {
         }
 
         assignedSlotVendor = retryMatch.vendor;
+        assignedSlotSelectionVersion = retryMatch.selectionVersion;
         bookingData.vendorId = assignedSlotVendor._id;
         bookingData.timeSlot.end = retryMatch.slotEnd || timeSlot.end;
-        bookingData.assignedAt = new Date();
+        bookingData.assignedAt = null;
+        bookingData.slotAssignment.selectionVersion = assignedSlotSelectionVersion;
       }
     }
 
@@ -646,6 +666,18 @@ const createBooking = async (req, res) => {
         await releaseCouponReservation(pricing.couponInfo.couponId);
       }
       throw bookingCreateError;
+    }
+
+    // Plan-covered and cash scheduled bookings do not have a separate online
+    // payment-success callback. They are committed immediately after the
+    // booking is persisted; normal online/wallet bookings commit in payment
+    // verification instead.
+    if (!matchFailureReason && isImmediateSlotAssignment && booking) {
+      const commitResult = await commitSlotAssignmentAfterPayment(booking);
+      if (!commitResult.committed) {
+        throw new Error('Scheduled booking assignment could not be committed');
+      }
+      booking = commitResult.booking || booking;
     }
 
     // Create Audit / Coupon Usage Record if a coupon was used - skipped when
@@ -731,7 +763,7 @@ const createBooking = async (req, res) => {
         }
 
         if (bookingForBackground.status !== BOOKING_STATUS.CANCELLED) {
-          if (isSlotBooking && bookingForBackground.vendorId) {
+          if (isSlotBooking && bookingForBackground.vendorId && [SLOT_ASSIGNMENT_STATE.TENTATIVE, SLOT_ASSIGNMENT_STATE.COMMITTED].includes(bookingForBackground.slotAssignment?.state)) {
             console.log(`[CreateBooking] Notifying assigned SLOT vendor for ${bookingForBackground.bookingNumber}.`);
             await notifyAssignedSlotVendor(bookingForBackground);
           } else if (!isSlotBooking) {
@@ -782,6 +814,9 @@ const notifyAssignedSlotVendor = async (booking) => {
       io.to(`vendor_${vendorId.toString()}`).emit('booking_updated', {
         bookingId: booking._id,
         status: booking.status,
+        bookingType: 'scheduled',
+        event: 'scheduled_booking_assigned',
+        playSound: true,
         message: 'A scheduled booking has been assigned to you.'
       });
     }
@@ -975,6 +1010,14 @@ const cancelBooking = async (req, res) => {
       },
       { new: false }
     ).lean();
+
+    if (previous?.bookingType === 'scheduled') {
+      const releaseUpdate = { $set: { 'slotAssignment.state': SLOT_ASSIGNMENT_STATE.RELEASED } };
+      if (previous.slotAssignment?.state !== SLOT_ASSIGNMENT_STATE.COMMITTED) {
+        releaseUpdate.$unset = { vendorId: '' };
+      }
+      await Booking.updateOne({ _id: previous._id }, releaseUpdate);
+    }
 
     if (!previous) {
       const existing = await Booking.findOne({ _id: id, userId }).lean();
@@ -1642,5 +1685,6 @@ module.exports = {
   rescheduleBooking,
   addReview,
   getUserRatings,
-  dispatchBookingToVendors
+  dispatchBookingToVendors,
+  notifyAssignedSlotVendor
 };

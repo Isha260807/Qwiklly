@@ -220,6 +220,13 @@ const cancelBooking = async (req, res) => {
     booking.cancelledBy = 'admin';
     booking.cancellationReason = cancellationReason || 'Cancelled by admin';
 
+    if (booking.bookingType === 'scheduled' && booking.slotAssignment) {
+      const wasCommitted = booking.slotAssignment.state === 'COMMITTED';
+      booking.slotAssignment.state = 'RELEASED';
+      if (!wasCommitted) {
+        booking.vendorId = null;
+      }
+    }
     await booking.save();
 
     res.status(200).json({

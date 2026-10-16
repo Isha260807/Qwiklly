@@ -493,6 +493,13 @@ export default function BookingDetails() {
   };
 
   const handleStartJourney = async () => {
+    const isScheduledPaymentPending = booking.bookingType === 'scheduled'
+      && booking.status === 'awaiting_payment';
+    if (isScheduledPaymentPending) {
+      toast.error('Waiting for customer payment. You can start the journey once payment is completed.');
+      return;
+    }
+
     // If self-job, call the start API first
     if (booking.assignedTo?.name === 'You (Self)') {
       const isPaymentComplete = booking.paymentStatus === 'success' || booking.paymentStatus === 'plan_covered';
@@ -1459,14 +1466,15 @@ export default function BookingDetails() {
               <FiArrowRight className="w-3.5 h-3.5" />
             </button>
 
-            {(booking.status === 'confirmed' || booking.status === 'assigned') && (() => {
+            {(booking.status === 'confirmed' || booking.status === 'assigned' || (booking.bookingType === 'scheduled' && booking.status === 'awaiting_payment')) && (() => {
               const isSelfJob = booking.assignedTo?.name === 'You (Self)';
               const isPaymentComplete = booking.paymentStatus === 'success' || booking.paymentStatus === 'plan_covered';
-              const journeyDisabled = isSelfJob && !isPaymentComplete;
+              const journeyDisabled = (booking.bookingType === 'scheduled' && booking.status === 'awaiting_payment') || (isSelfJob && !isPaymentComplete);
               return (
                 <button
                   type="button"
                   onClick={handleStartJourney}
+                  disabled={journeyDisabled || loading}
                   className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs ${journeyDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   style={{
                     background: journeyDisabled ? '#9CA3AF' : 'linear-gradient(135deg, #10B981, #059669)',

@@ -36,7 +36,14 @@ const getDashboardStats = async (req, res) => {
                 {
                   $match: {
                     $or: [
-                      { vendorId: vId, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } },
+                      {
+                        vendorId: vId,
+                        status: { $nin: [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED] },
+                        $or: [
+                          { bookingType: 'scheduled' },
+                          { bookingType: { $ne: 'scheduled' }, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } }
+                        ]
+                      },
                       {
                         vendorId: null,
                         status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
@@ -56,6 +63,7 @@ const getDashboardStats = async (req, res) => {
                           {
                             $in: ['$status', [
                               BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.CONFIRMED,
+                              BOOKING_STATUS.AWAITING_PAYMENT,
                               BOOKING_STATUS.JOURNEY_STARTED, BOOKING_STATUS.VISITED, BOOKING_STATUS.IN_PROGRESS,
                               BOOKING_STATUS.WORK_DONE, 'started', 'reached', 'on_the_way'
                             ]]
@@ -88,7 +96,14 @@ const getDashboardStats = async (req, res) => {
                 {
                   $match: {
                     $or: [
-                      { vendorId: vId, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } },
+                      {
+                        vendorId: vId,
+                        status: { $nin: [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED] },
+                        $or: [
+                          { bookingType: 'scheduled' },
+                          { bookingType: { $ne: 'scheduled' }, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } }
+                        ]
+                      },
                       {
                         vendorId: null,
                         status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },

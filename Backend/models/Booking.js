@@ -352,6 +352,26 @@ const bookingSchema = new mongoose.Schema({
     default: 'PENDING',
     index: true
   },
+  // Scheduled bookings reserve a vendor while the user is on the payment
+  // screen. The assignment is not committed, and the round-robin cursor is
+  // not advanced, until payment succeeds.
+  slotAssignment: {
+    state: {
+      type: String,
+      enum: ['TENTATIVE', 'COMMITTING', 'COMMITTED', 'RELEASED', null],
+      default: null,
+      index: true
+    },
+    selectionVersion: {
+      type: Number,
+      default: null
+    },
+    selectedAt: { type: Date, default: null },
+    committingAt: { type: Date, default: null },
+    committedAt: { type: Date, default: null },
+    cursorAdvanced: { type: Boolean, default: false },
+    cursorStale: { type: Boolean, default: false }
+  },
   rejectedVendors: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Vendor'

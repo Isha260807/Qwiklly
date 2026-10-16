@@ -25,8 +25,12 @@ const getVendorBookings = async (req, res) => {
       $or: [
         {
           vendorId: vId,
-          status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT },
-          rejectedVendors: { $ne: vId }
+          status: { $nin: [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED] },
+          rejectedVendors: { $ne: vId },
+          $or: [
+            { bookingType: 'scheduled' },
+            { bookingType: { $ne: 'scheduled' }, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } }
+          ]
         },
         {
           vendorId: null,
@@ -64,7 +68,7 @@ const getVendorBookings = async (req, res) => {
           ]
         };
       } else if (status === 'assigned') {
-        query.status = { $in: [BOOKING_STATUS.ASSIGNED, 'worker_accepted'] };
+        query.status = { $in: [BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.ASSIGNED, 'worker_accepted'] };
       } else {
         query.status = status;
       }
@@ -649,6 +653,13 @@ const updateBookingStatus = async (req, res) => {
         success: false,
         message: 'Booking not found'
       });
+    }
+
+    // A scheduled booking with a payment-pending slot hold is not a vendor
+    // job yet. Only the payment commit path may turn it into a confirmed job.
+    if (booking.bookingType === 'scheduled' && booking.slotAssignment
+      && booking.slotAssignment?.state !== 'COMMITTED') {
+      return res.status(409).json({ success: false, message: 'This scheduled booking is waiting for customer payment.' });
     }
 
     // SLOT (scheduled, fixed-price) bookings are assigned by the system. Vendors

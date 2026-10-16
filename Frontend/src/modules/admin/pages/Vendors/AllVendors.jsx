@@ -215,7 +215,14 @@ const AllVendors = () => {
     });
   }, [vendors, filterStatus, searchQuery]);
 
-  const handleApprove = async (vendorId) => {
+  const handleApprove = async (vendorId, zoneIdsOverride = null) => {
+    const vendor = vendors.find(item => item.id === vendorId);
+    const zoneIds = Array.isArray(zoneIdsOverride) ? zoneIdsOverride : vendor?.zoneIds;
+    if (!zoneIds?.length) {
+      toast.error('First assign a zone to the vendor, then approve.');
+      return false;
+    }
+
     try {
       const response = await adminVendorService.approveVendor(vendorId);
       if (response.success) {
@@ -223,12 +230,15 @@ const AllVendors = () => {
           v.id === vendorId ? { ...v, approvalStatus: 'approved' } : v
         ));
         toast.success('Vendor approved successfully!');
+        return true;
       } else {
         toast.error(response.message || 'Failed to approve vendor');
+        return false;
       }
     } catch (error) {
       console.error('Error approving vendor:', error);
-      toast.error('Failed to approve vendor. Please try again.');
+      toast.error(error.response?.data?.message || 'Failed to approve vendor. Please try again.');
+      return false;
     }
   };
 
@@ -300,7 +310,7 @@ const AllVendors = () => {
   };
 
   const handleSaveVendorZones = async () => {
-    if (!selectedVendor || !canEditVendorZones) return;
+    if (!selectedVendor || !canEditVendorZones) return false;
     try {
       setSavingZones(true);
       const response = await zoneService.assignVendorZones(selectedVendor.id, selectedZoneIds);
@@ -315,11 +325,14 @@ const AllVendors = () => {
           : v));
         setSelectedVendor(prev => prev ? { ...prev, zoneIds: savedZoneIdList, assignedZoneNames: savedZoneNames } : prev);
         toast.success('Vendor zones updated successfully');
+        return true;
       } else {
         toast.error(response.message || 'Failed to update vendor zones');
+        return false;
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to update vendor zones');
+      return false;
     } finally {
       setSavingZones(false);
     }
@@ -921,9 +934,17 @@ const AllVendors = () => {
               <div className="flex gap-3 pt-4 border-t border-gray-200">
                 <button
                   onClick={async () => {
-                    await handleApprove(selectedVendor.id);
-                    setIsViewModalOpen(false);
-                    setSelectedVendor(null);
+                    const selectedIds = (selectedZoneIds || []).map(String).sort();
+                    const savedIds = (selectedVendor.zoneIds || []).map(String).sort();
+                    if (selectedIds.join('|') !== savedIds.join('|')) {
+                      const saved = await handleSaveVendorZones();
+                      if (!saved) return;
+                    }
+                    const approved = await handleApprove(selectedVendor.id, selectedZoneIds);
+                    if (approved) {
+                      setIsViewModalOpen(false);
+                      setSelectedVendor(null);
+                    }
                   }}
                   className="flex-1 px-4 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
                 >

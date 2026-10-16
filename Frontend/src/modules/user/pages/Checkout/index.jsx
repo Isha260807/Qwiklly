@@ -597,6 +597,12 @@ const Checkout = () => {
         setBookingRequest(response.data);
 
         // If the backend returns an assigned vendor immediately (rare but possible)
+        if (isSlotBooking && response.data._id) {
+          setShowVendorModal(false);
+          setSearchingVendors(false);
+          navigate(`/user/booking-confirmation/${response.data._id}`, { replace: true });
+          return;
+        }
         if (response.data.vendorId && (response.data.status === 'ACCEPTED' || response.data.status === 'ASSIGNED')) {
           setCurrentStep('accepted');
           setAcceptedVendor({

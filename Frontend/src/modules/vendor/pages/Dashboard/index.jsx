@@ -474,6 +474,7 @@ const Dashboard = memo(() => {
     const s = String(status).toLowerCase();
     const statusColors = {
       'accepted': '#3B82F6',
+      'awaiting_payment': '#F59E0B',
       'confirmed': '#10B981',
       'assigned': '#8B5CF6',
       'journey_started': '#F59E0B',
@@ -493,6 +494,7 @@ const Dashboard = memo(() => {
       'requested': 'Requested',
       'searching': 'Searching',
       'accepted': 'Accepted',
+      'awaiting_payment': 'Payment Pending',
       'confirmed': 'Confirmed',
       'assigned': 'Assigned',
       'journey_started': 'On the way',

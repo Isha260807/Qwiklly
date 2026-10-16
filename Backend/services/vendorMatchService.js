@@ -3,6 +3,7 @@ const Booking = require('../models/Booking');
 const VendorSlotAvailability = require('../models/VendorSlotAvailability');
 const { calculateDistance } = require('./locationService');
 const { VENDOR_STATUS, BOOKING_STATUS, MATCH_FAILURE_REASONS } = require('../utils/constants');
+const { getSelectionContext } = require('./slotAssignmentService');
 
 /**
  * Vendor matching is zone-only.
@@ -449,7 +450,7 @@ const rangesOverlap = (a, b) => a.start < b.end && b.start < a.end;
  * NORMAL scheduled services receive the global approximate duration from the
  * caller; duration/hourly services receive the customer's selected duration.
  */
-const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, durationMins = 0, intervalMins = 60, fixedDurationMins = 45 }) => {
+const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, durationMins = 0, intervalMins = 60, fixedDurationMins = 45, zoneId = null }) => {
   const requestedStart = parseSlotTime(timeSlot?.start);
   const dayRange = getUtcDayRange(scheduledDate);
   const dateKey = toDateKey(scheduledDate);
@@ -487,6 +488,41 @@ const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, du
     return { vendor: null, reason: MATCH_FAILURE_REASONS.NO_AVAILABLE_VENDOR };
   }
 
+  // A payment-pending slot is a temporary hold. Do not advance the cursor for
+  // it, but prefer another vendor for the next booking so one vendor is not
+  // repeatedly selected while the rest of the pool is free.
+  let selectionPool = qualified;
+  if (zoneId) {
+    const pendingHolds = await Booking.find({
+      bookingType: 'scheduled',
+      zoneId,
+      vendorId: { $in: qualified.map(item => item.vendor._id) },
+      status: { $in: [BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.CONFIRMED] },
+      paymentStatus: 'pending',
+      'slotAssignment.state': { $in: ['TENTATIVE', 'COMMITTING'] }
+    }).select('vendorId').lean();
+
+    const pendingVendorIds = new Set(pendingHolds.map(item => String(item.vendorId)));
+    const nonPendingPool = qualified.filter(item => !pendingVendorIds.has(String(item.vendor._id)));
+    if (nonPendingPool.length > 0) selectionPool = nonPendingPool;
+  }
+
+  let orderedQualified = selectionPool;
+  let selectionVersion = null;
+  if (zoneId) {
+    const selectionContext = await getSelectionContext({
+      zoneId,
+      vendors: selectionPool.map(item => item.vendor)
+    });
+    const qualifiedByVendor = new Map(
+      selectionPool.map(item => [String(item.vendor._id), item])
+    );
+    orderedQualified = selectionContext.vendors
+      .map(vendor => qualifiedByVendor.get(String(vendor._id)))
+      .filter(Boolean);
+    selectionVersion = selectionContext.version;
+  }
+
   const existingBookings = await Booking.find({
     vendorId: { $in: qualified.map(item => item.vendor._id) },
     $or: [
@@ -513,13 +549,13 @@ const findAvailableVendorForSlot = async ({ vendors, scheduledDate, timeSlot, du
     bookedByVendor.get(key).push(range || { start: 0, end: 24 * 60 });
   });
 
-  const match = qualified.find(({ vendor, span }) => {
+  const match = orderedQualified.find(({ vendor, span }) => {
     const booked = bookedByVendor.get(vendor._id.toString()) || [];
     return !booked.some(existing => rangesOverlap(span.range, existing));
   });
 
   return match
-    ? { vendor: match.vendor, reason: null, slotEnd: minutesToHHMM(match.span.range.end) }
+    ? { vendor: match.vendor, reason: null, slotEnd: minutesToHHMM(match.span.range.end), selectionVersion }
     : { vendor: null, reason: MATCH_FAILURE_REASONS.NO_AVAILABLE_VENDOR };
 };
 

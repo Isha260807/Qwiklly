@@ -291,7 +291,7 @@ class BookingScheduler {
 
       const unpaid = await Booking.find({
         bookingType: 'scheduled',
-        status: BOOKING_STATUS.CONFIRMED,
+        status: { $in: [BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.CONFIRMED] },
         vendorId: { $ne: null },
         acceptedAt: null,
         paymentMethod: 'online',
@@ -303,16 +303,22 @@ class BookingScheduler {
 
       await Promise.all(unpaid.map(async ({ _id }) => {
         try {
+          const hold = await Booking.findById(_id).select('vendorId').lean();
+          const releasedVendorId = hold?.vendorId;
           // Conditional update: skip if payment landed in the meantime
           const cancelled = await Booking.findOneAndUpdate(
-            { _id, status: BOOKING_STATUS.CONFIRMED, paymentStatus: PAYMENT_STATUS.PENDING },
+            { _id, status: { $in: [BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.CONFIRMED] }, paymentStatus: PAYMENT_STATUS.PENDING },
             {
               $set: {
                 status: BOOKING_STATUS.CANCELLED,
+                'slotAssignment.state': 'RELEASED',
                 cancelledAt: new Date(),
                 cancelledBy: 'system',
                 cancellationReason: 'Payment was not completed in time'
-              }
+              },
+              $unset: {
+                vendorId: ''
+              },
             },
             { new: true }
           ).lean();
@@ -340,7 +346,7 @@ class BookingScheduler {
               status: BOOKING_STATUS.CANCELLED,
               message: 'Booking cancelled - payment not completed in time'
             });
-            this.io.to(`vendor_${cancelled.vendorId}`).emit('booking_updated', {
+            if (releasedVendorId) this.io.to(`vendor_${releasedVendorId}`).emit('booking_updated', {
               bookingId: cancelled._id,
               status: BOOKING_STATUS.CANCELLED,
               message: 'An unpaid scheduled booking was released'

@@ -9,7 +9,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { adminBookingService } from '../../../../services/adminBookingService';
 
-const NOT_YET_ASSIGNABLE_STATUSES = ['COMPLETED', 'CANCELLED', 'REJECTED'];
+const NOT_YET_ASSIGNABLE_STATUSES = ['AWAITING_PAYMENT', 'COMPLETED', 'CANCELLED', 'REJECTED'];
 
 const statusBadgeConfig = {
   SEARCHING: { bg: 'bg-amber-100 text-amber-800 border-amber-200', label: 'Searching Partner', icon: FiLoader },
@@ -156,7 +156,20 @@ const BookingDetails = () => {
   const StatusIcon = statusCfg.icon;
 
   const user = booking.userId || {};
-  const vendor = booking.vendorId || {};
+  const isUncommittedSlotHold =
+    booking.bookingType === 'scheduled' &&
+    booking.slotAssignment &&
+    booking.slotAssignment.state !== 'COMMITTED';
+  const isCancelledUnpaidSlot =
+    booking.bookingType === 'scheduled' &&
+    normalizedStatus === 'CANCELLED' &&
+    String(booking.paymentStatus || '').toLowerCase() === 'pending';
+  const vendorAssignmentPending = isUncommittedSlotHold || isCancelledUnpaidSlot;
+  const isReleasedSlot =
+    booking.bookingType === 'scheduled' &&
+    normalizedStatus === 'CANCELLED' &&
+    (booking.slotAssignment?.state === 'RELEASED' || isCancelledUnpaidSlot);
+  const vendor = isReleasedSlot ? {} : (booking.vendorId || {});
   const address = booking.address || {};
   const bookedItems = booking.bookedItems || [];
 
@@ -345,11 +358,12 @@ const BookingDetails = () => {
                 </div>
               </div>
               <span className={`text-xs px-2.5 py-1 rounded-lg font-semibold ${vendor._id ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                {vendor._id ? 'Assigned' : 'Unassigned'}
+                {isReleasedSlot ? 'Released' : (vendorAssignmentPending ? 'Pending Payment' : (vendor._id ? 'Assigned' : 'Unassigned'))}
               </span>
             </div>
 
             {vendor._id ? (
+              <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Partner Info</p>
@@ -372,6 +386,7 @@ const BookingDetails = () => {
                 </div>
 
                 <div className="space-y-1.5">
+
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Partner Address</p>
                   <p className="text-sm text-gray-700 font-medium">
                     {vendor.address?.fullAddress || vendor.address?.city || 'Registered city: Indore'}
@@ -381,15 +396,26 @@ const BookingDetails = () => {
                   </p>
                 </div>
               </div>
+              {vendorAssignmentPending && (
+                <div className="p-4 mt-4 bg-amber-50 rounded-xl text-xs text-amber-800 flex items-center gap-2.5">
+                  <FiAlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>Selected vendor: <strong>{vendor.name || vendor.businessName}</strong>. Final assignment will be committed after customer payment.</span>
+                </div>
+              )}
+              </>
             ) : (
               <div className="space-y-3">
                 <div className="p-4 bg-amber-50 rounded-xl text-xs text-amber-800 flex items-center gap-2.5">
                   <FiAlertCircle className="w-4 h-4 flex-shrink-0" />
                   <span>
-                    No partner is currently assigned to this booking.
-                    {normalizedStatus === 'PENDING_ADMIN'
-                      ? ' Zone/service/availability matching found no automatic candidates - assign one manually below.'
-                      : ' Matching engine is broadcasting to all available vendors in the zone.'}
+                    {isReleasedSlot
+                      ? 'Slot hold was released. This booking has no assigned vendor.'
+                      : vendorAssignmentPending
+                      ? 'Vendor selection is held temporarily. Assignment will complete after customer payment.'
+                      : <>No partner is currently assigned to this booking.
+                        {normalizedStatus === 'PENDING_ADMIN'
+                          ? ' Zone/service/availability matching found no automatic candidates - assign one manually below.'
+                          : ' Matching engine is broadcasting to all available vendors in the zone.'}</>}
                   </span>
                 </div>
 

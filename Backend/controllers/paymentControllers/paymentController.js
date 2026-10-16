@@ -9,7 +9,17 @@ const { createNotification } = require('../notificationControllers/notificationC
 const { recordBookingEarning } = require('../../services/earningTrackerService');
 const { creditSalaryEarningForBooking } = require('../../services/salaryEarningService');
 const { settleCouponUsage } = require('../../services/couponUsageService');
+const { commitSlotAssignmentAfterPayment } = require('../../services/slotAssignmentService');
 
+const notifyCommittedSlotVendor = async (booking, commitResult) => {
+  if (!commitResult?.committed || commitResult.alreadyCommitted || booking?.bookingType !== 'scheduled') return;
+  try {
+    const { notifyAssignedSlotVendor } = require('../bookingControllers/userBookingController');
+    await notifyAssignedSlotVendor(commitResult.booking || booking);
+  } catch (error) {
+    console.error('[Payment] Scheduled vendor notification failed:', error);
+  }
+};
 /**
  * Create Razorpay order for booking payment
  */
@@ -238,13 +248,16 @@ const debitWalletContribution = async (booking, amount) => {
  */
 const finalizePaymentSuccess = async (booking, paymentId) => {
   if (booking.paymentStatus === PAYMENT_STATUS.SUCCESS) {
+    const commitResult = await commitSlotAssignmentAfterPayment(booking);
+    await notifyCommittedSlotVendor(booking, commitResult);
+    if (commitResult.booking) booking = commitResult.booking;
     return { alreadyProcessed: true };
   }
 
   // Claim the payment atomically so a client verify and Razorpay webhook cannot
   // both debit the wallet or create duplicate payment transactions.
   const paymentClaim = await Booking.findOneAndUpdate(
-    { _id: booking._id, paymentStatus: { $ne: PAYMENT_STATUS.SUCCESS } },
+    { _id: booking._id, paymentStatus: { $ne: PAYMENT_STATUS.SUCCESS }, status: { $nin: [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED] } },
     { $set: { paymentStatus: PAYMENT_STATUS.SUCCESS } },
     { new: false }
   );
@@ -288,6 +301,12 @@ const finalizePaymentSuccess = async (booking, paymentId) => {
 
   // ── Atomic Coupon Consumption on Payment Success ──
   // Settle the reserved coupon usage exactly once after online payment succeeds.
+  if (booking.bookingType === 'scheduled') {
+    const commitResult = await commitSlotAssignmentAfterPayment(booking);
+    await notifyCommittedSlotVendor(booking, commitResult);
+    if (commitResult.booking) booking = commitResult.booking;
+  }
+
   if (booking.coupon && booking.coupon.couponId) {
     try {
       await settleCouponUsage({ bookingId: booking._id, paymentId });
@@ -603,6 +622,12 @@ const processWalletPayment = async (req, res) => {
     // ── Credit Vendor Wallet from VendorBill (single source of truth) ──
 
     // Wallet payment also consumes the reserved coupon usage.
+    if (booking.bookingType === 'scheduled') {
+      const commitResult = await commitSlotAssignmentAfterPayment(booking);
+      await notifyCommittedSlotVendor(booking, commitResult);
+      if (commitResult.booking) booking = commitResult.booking;
+    }
+
     if (booking.coupon && booking.coupon.couponId) {
       try {
         await settleCouponUsage({ bookingId: booking._id, paymentId: booking.paymentId });
