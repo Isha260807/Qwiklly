@@ -223,7 +223,12 @@ const BookingDetails = () => {
           // Fetch full data to ensure consistency
           loadBooking();
 
-          if (data.message) {
+          const updateStatus = String(data.status || data.data?.status || '').toLowerCase();
+          const updateType = String(data.type || data.data?.type || '').toLowerCase();
+          const isCancellationUpdate = updateStatus === 'cancelled'
+            || updateType === 'booking_cancelled'
+            || /cancelled|canceled/i.test(String(data.message || ''));
+          if (data.message && !isCancellationUpdate) {
             toast(data.message, { icon: '🔔' });
           }
         }
@@ -347,7 +352,6 @@ const BookingDetails = () => {
         try {
           const response = await bookingService.cancel(booking._id || booking.id, 'Cancelled by user');
           if (response.success) {
-            toast.success(response.message || 'Booking cancelled successfully');
             loadBooking();
           } else {
             toast.error(response.message || 'Failed to cancel booking');

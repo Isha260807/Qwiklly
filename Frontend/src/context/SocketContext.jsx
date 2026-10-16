@@ -282,29 +282,13 @@ export const SocketProvider = ({ children }) => {
         playNotificationSound();
       }
 
-      // Show custom toast for all notifications
-      toast.custom((t) => (
-        <SwipeableNotification
-          t={t}
-          data={data}
-          onClick={() => {
-            toast.dismiss(t.id);
-            if (data.type === 'salary_payment_received' && userType === 'vendor') {
-              navigate('/vendor/wallet');
-              return;
-            }
-            // Optional: navigate based on relatedId
-            if (data.relatedId) {
-              if (userType === 'vendor') navigate(`/vendor/booking/${data.relatedId}`);
-              else if (userType === 'worker') navigate(`/worker/job/${data.relatedId}`);
-              else navigate(`/user/booking/${data.relatedId}`);
-            }
-          }}
-        />
-      ), {
-        id: 'socket-notification', // Prevent stacking
-        duration: 3500, // Slightly longer to allow interaction/reading since it's dismissible
-        position: 'top-right'
+      const bookingNotificationId = data.relatedId || data.bookingId || data.data?.bookingId;
+      const notificationToastId = bookingNotificationId
+        ? 'booking-notification-' + String(bookingNotificationId) : 'socket-notification';
+      const notificationMessage = data.message || data.title || 'New notification';
+      toast.success(notificationMessage, {
+        id: notificationToastId,
+        duration: 3500
       });
 
       // Dispatch update events to refresh UI components
