@@ -490,8 +490,38 @@ const assignVendorToBooking = async (req, res) => {
         relatedId: booking._id,
         relatedType: 'booking'
       });
+
+      // Also notify user that vendor has been assigned
+      await createNotification({
+        userId: booking.userId,
+        type: 'booking_accepted',
+        title: 'Booking Assigned!',
+        message: `Your booking ${booking.bookingNumber} has been assigned to ${vendor.businessName || vendor.name}.`,
+        relatedId: booking._id,
+        relatedType: 'booking'
+      });
+
+      const { getIO } = require('../../sockets');
+      const io = getIO();
+      if (io && booking.userId) {
+        io.to(`user_${booking.userId}`).emit('booking_accepted', {
+          bookingId: booking._id,
+          bookingNumber: booking.bookingNumber,
+          vendor: {
+            id: vendor._id,
+            name: vendor.name,
+            businessName: vendor.businessName
+          },
+          message: `Your booking ${booking.bookingNumber} has been assigned to ${vendor.businessName || vendor.name}.`
+        });
+        io.to(`user_${booking.userId}`).emit('booking_updated', {
+          bookingId: booking._id,
+          status: booking.status,
+          message: `Your booking ${booking.bookingNumber} has been assigned to ${vendor.businessName || vendor.name}.`
+        });
+      }
     } catch (notifyErr) {
-      console.error('Assign vendor notification error:', notifyErr);
+      console.error('Assign vendor notification/socket error:', notifyErr);
     }
 
     res.status(200).json({ success: true, message: 'Vendor assigned successfully', data: booking });

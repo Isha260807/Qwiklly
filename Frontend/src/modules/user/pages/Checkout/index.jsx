@@ -632,54 +632,70 @@ const Checkout = () => {
     }
   };
 
-  // Listen for real-time vendor acceptance
+  // Listen for real-time vendor acceptance with polling fallback
   useEffect(() => {
-    if (currentStep !== 'waiting' || !bookingRequest) return;
+    if (currentStep !== 'waiting' || !bookingRequest?._id) return;
 
+    let isHandled = false;
+    let pollInterval = null;
+
+    const handleVendorAssigned = (vendorPayload) => {
+      if (isHandled) return;
+      isHandled = true;
+      if (pollInterval) clearInterval(pollInterval);
+
+      const vendorData = {
+        id: vendorPayload?.id || vendorPayload?._id,
+        name: vendorPayload?.name || 'Vendor',
+        businessName: vendorPayload?.businessName || vendorPayload?.name || 'Service Provider',
+        rating: vendorPayload?.rating || 4.8,
+        distance: vendorPayload?.distance || 'Nearby',
+        estimatedTime: vendorPayload?.estimatedTime || '15-20 mins',
+        price: bookingRequest.amount
+      };
+
+      setAcceptedVendor(vendorData);
+      setCurrentStep('accepted');
+      setSearchingVendors(false);
+      toast.success(`${vendorData.businessName} accepted your booking!`);
+
+      // Close modal after 2 seconds and navigate to confirmation
+      setTimeout(() => {
+        setShowVendorModal(false);
+        navigate(`/user/booking-confirmation/${bookingRequest._id}`, {
+          replace: true
+        });
+      }, 2000);
+    };
+
+    const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
     const socketUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '') || 'http://localhost:5000';
     const socket = io(socketUrl, {
-      auth: { token: localStorage.getItem('accessToken') },
+      auth: { token },
       transports: ['websocket', 'polling']
     });
 
-    socket.on('connect', () => {
-    });
-
-    socket.on('connect_error', (err) => {
-    });
-
     socket.on('booking_accepted', (data) => {
-      if (data.bookingId === bookingRequest._id) {
+      if (String(data.bookingId) === String(bookingRequest._id)) {
+        handleVendorAssigned(data.vendor);
+      }
+    });
 
-        // Construct vendor object from event data
-        // Note: Real backend should send full details, falling back to defaults for display
-        const vendorData = {
-          id: data.vendor.id,
-          name: data.vendor.name || 'Vendor',
-          businessName: data.vendor.businessName || 'Service Provider',
-          rating: 4.8, // Default if not sent
-          distance: 'Nearby', // Default if not sent
-          estimatedTime: '15-20 mins',
-          price: bookingRequest.amount
-        };
-
-        setAcceptedVendor(vendorData);
-        setCurrentStep('accepted');
-        setSearchingVendors(false);
-        toast.success(`${vendorData.businessName} accepted your booking!`);
-
-        // Close modal after 2 seconds and navigate to confirmation
-        setTimeout(() => {
-          setShowVendorModal(false);
-          navigate(`/user/booking-confirmation/${bookingRequest._id}`, {
-            replace: true
-          });
-        }, 2000);
+    socket.on('booking_updated', (data) => {
+      if (String(data.bookingId) === String(bookingRequest._id)) {
+        const status = String(data.status || '').toLowerCase();
+        if (['assigned', 'confirmed', 'accepted'].includes(status) || data.vendor) {
+          handleVendorAssigned(data.vendor || {});
+        }
       }
     });
 
     socket.on('booking_search_failed', (data) => {
-      if (data.bookingId === bookingRequest._id) {
+      if (String(data.bookingId) === String(bookingRequest._id)) {
+        if (isHandled) return;
+        isHandled = true;
+        if (pollInterval) clearInterval(pollInterval);
+
         setSearchingVendors(false);
         setCurrentStep('failed');
         toast.error(data.message || 'No vendors available at the moment.');
@@ -688,11 +704,9 @@ const Checkout = () => {
         const handleAutoCancel = async () => {
           try {
             await bookingService.cancel(bookingRequest._id, 'No vendors found after search timeout');
-            setTimeout(() => {
-              window.location.reload();
-            }, 3000); // 3 second delay to let the user see the error
           } catch (err) {
             console.error('Auto-cancel failed:', err);
+          } finally {
             setTimeout(() => {
               window.location.reload();
             }, 3000);
@@ -702,7 +716,26 @@ const Checkout = () => {
       }
     });
 
+    // Fallback polling every 3 seconds to guarantee it auto-updates even if socket misses
+    pollInterval = setInterval(async () => {
+      if (isHandled) return;
+      try {
+        const response = await bookingService.getById(bookingRequest._id);
+        if (response.success && response.data) {
+          const bookingData = response.data;
+          const status = String(bookingData.status || '').toLowerCase();
+          if (bookingData.vendorId || (status && status !== 'requested' && status !== 'searching')) {
+            const v = typeof bookingData.vendorId === 'object' ? bookingData.vendorId : {};
+            handleVendorAssigned(v);
+          }
+        }
+      } catch (err) {
+        console.error('Checkout polling check failed:', err);
+      }
+    }, 3000);
+
     return () => {
+      if (pollInterval) clearInterval(pollInterval);
       socket.disconnect();
     };
   }, [currentStep, bookingRequest]);

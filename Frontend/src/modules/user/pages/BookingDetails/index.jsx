@@ -251,6 +251,7 @@ const BookingDetails = () => {
         }
       };
 
+      socket.on('booking_accepted', handleUpdate);
       socket.on('booking_updated', handleUpdate);
       socket.on('notification', handleUpdate);
       socket.on('hourly_service_ended', handleHourlyServiceEnded);
@@ -258,6 +259,7 @@ const BookingDetails = () => {
       socket.on('hourly_extra_payment_paid', () => loadBooking());
 
       return () => {
+        socket.off('booking_accepted', handleUpdate);
         socket.off('booking_updated', handleUpdate);
         socket.off('notification', handleUpdate);
         socket.off('hourly_service_ended', handleHourlyServiceEnded);

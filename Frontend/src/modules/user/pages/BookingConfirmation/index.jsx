@@ -22,6 +22,7 @@ import { paymentService } from '../../../../services/paymentService';
 import { walletService } from '../../../../services/walletService';
 import NotificationBell from '../../components/common/NotificationBell';
 import ConfirmDialog from '../../../../components/common/ConfirmDialog';
+import { useSocket } from '../../../../context/SocketContext';
 
 // Inline SearchingAnimation Component
 const SearchingAnimation = () => {
@@ -97,6 +98,7 @@ const BookingConfirmation = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
+  const socket = useSocket();
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(
@@ -298,6 +300,41 @@ const BookingConfirmation = () => {
     }
   }, [id, navigate]);
 
+  // Real-time socket listener for instant vendor assignment
+  useEffect(() => {
+    if (!socket || !id || !isSearching) return;
+
+    const handleRealtimeUpdate = async (data) => {
+      if (String(data?.bookingId) === String(id) || String(data?._id) === String(id)) {
+        try {
+          const response = await bookingService.getById(id);
+          if (response.success) {
+            const updated = { ...response.data };
+            if (updated.paymentMethod === 'plan_benefit') {
+              if (!updated.tax) updated.tax = 0;
+              if (!updated.visitingCharges && !updated.visitationFee) updated.visitingCharges = 0;
+            }
+            setBooking(updated);
+            const currentStatus = updated.status?.toLowerCase();
+            if (updated.vendorId || (currentStatus !== 'requested' && currentStatus !== 'searching')) {
+              setIsSearching(false);
+            }
+          }
+        } catch (error) {
+          console.error('Socket booking update error:', error);
+        }
+      }
+    };
+
+    socket.on('booking_accepted', handleRealtimeUpdate);
+    socket.on('booking_updated', handleRealtimeUpdate);
+
+    return () => {
+      socket.off('booking_accepted', handleRealtimeUpdate);
+      socket.off('booking_updated', handleRealtimeUpdate);
+    };
+  }, [socket, id, isSearching]);
+
   // Poll for vendor acceptance
   useEffect(() => {
     if (!isSearching || !id) return;
@@ -325,7 +362,7 @@ const BookingConfirmation = () => {
       } catch (error) {
         console.error('Polling error:', error);
       }
-    }, 5000); // Poll every 5 seconds
+    }, 3000); // Poll every 3 seconds
 
     return () => clearInterval(pollInterval);
   }, [isSearching, id]);

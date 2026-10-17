@@ -313,25 +313,7 @@ const Notifications = () => {
           <div className="bg-white rounded-xl p-6 text-center shadow-sm border border-gray-100/80 my-4">
             <FiBell className="w-10 h-10 mx-auto mb-2 text-gray-300" />
             <p className="text-gray-700 font-semibold text-xs mb-0.5">No notifications</p>
-            <p className="text-[11px] text-gray-400 mb-3">You're all caught up!</p>
-            <button
-              onClick={handleSendTestNotification}
-              disabled={isTesting}
-              className="px-4 py-2 rounded-xl text-white text-xs font-semibold inline-flex items-center gap-1.5 shadow-xs active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
-            >
-              {isTesting ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Sending Test...</span>
-                </>
-              ) : (
-                <>
-                  <FiSend className="w-3.5 h-3.5" />
-                  <span>Send Test Notification</span>
-                </>
-              )}
-            </button>
+            <p className="text-[11px] text-gray-400">You're all caught up!</p>
           </div>
         ) : (
           <div className="space-y-2">

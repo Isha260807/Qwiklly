@@ -158,37 +158,14 @@ router.delete('/remove-all', authenticate, async (req, res) => {
  */
 router.post('/test', authenticate, async (req, res) => {
   try {
-    const vendorId = req.user._id;
-    const vendor = await Vendor.findById(vendorId);
-
-    if (!vendor) {
-      return res.status(404).json({ success: false, error: 'Vendor not found' });
-    }
-
-    const tokens = [...(vendor.fcmTokens || []), ...(vendor.fcmTokenMobile || [])];
-    const uniqueTokens = [...new Set(tokens)];
-
-    if (uniqueTokens.length === 0) {
-      return res.json({ success: false, error: 'No FCM tokens found for vendor' });
-    }
-
-    const response = await sendPushNotification(uniqueTokens, {
-      title: '🔔 Test Notification',
-      body: 'This is a test notification for vendor!',
-      data: {
-        type: 'test',
-        link: '/vendor/dashboard'
-      }
-    });
-
     res.json({
       success: true,
-      message: 'Test notification sent',
-      successCount: response.successCount,
-      failureCount: response.failureCount
+      message: 'Test notifications are disabled',
+      successCount: 0,
+      failureCount: 0
     });
   } catch (error) {
-    console.error('Error sending test notification:', error);
+    console.error('Error in vendor test notification route:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

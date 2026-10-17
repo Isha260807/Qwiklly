@@ -420,22 +420,8 @@ async function testPushNotification(userType = 'user') {
       };
     }
 
-    // 5. Trigger local notification fallback through Service Worker to guarantee immediate visual feedback
-    try {
-      if ('serviceWorker' in navigator && Notification.permission === 'granted') {
-        const reg = await navigator.serviceWorker.ready;
-        if (reg && reg.showNotification) {
-          await reg.showNotification('🔔 Test Notification', {
-            body: 'This is a test notification from Qwiklly! Push notifications are working properly.',
-            icon: '/Homster-logo.png',
-            badge: '/Homster-logo.png',
-            tag: `test-push-${Date.now()}`
-          });
-        }
-      }
-    } catch (swErr) {
-      console.warn('[FCM] Local notification banner fallback error:', swErr);
-    }
+    // 5. Local notification banner disabled
+
 
     return {
       success: true,
