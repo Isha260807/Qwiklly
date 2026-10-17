@@ -32,10 +32,6 @@ const EmergencySOSAlertModal = () => {
       stopEmergencyAlarm();
       setAlarmPlaying(false);
     }
-
-    return () => {
-      stopEmergencyAlarm();
-    };
   }, [activeSOS]);
 
   const handleDismiss = (e) => {

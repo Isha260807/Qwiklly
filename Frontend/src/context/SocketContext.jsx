@@ -87,25 +87,10 @@ export const SocketProvider = ({ children }) => {
 
   const userType = getUserType(location.pathname);
 
-  // Login happens in the same browser tab, so storage changes alone do not
-  // rerun the socket effect. Bump the connection version after authentication.
-  useEffect(() => {
-    const handleVendorAuthenticated = () => setAuthVersion(version => version + 1);
-    window.addEventListener('vendor_session_authenticated', handleVendorAuthenticated);
-    return () => window.removeEventListener('vendor_session_authenticated', handleVendorAuthenticated);
-  }, []);
-
-  useEffect(() => {
-    if (!userType) {
-      if (socket) {
-        socket.disconnect();
-        setSocket(null);
-      }
-      return;
-    }
-
+  const getActiveToken = (type) => {
+    if (!type) return null;
     let tokenKey = 'accessToken';
-    switch (userType) {
+    switch (type) {
       case 'vendor':
         tokenKey = 'vendorAccessToken';
         break;
@@ -120,8 +105,39 @@ export const SocketProvider = ({ children }) => {
         tokenKey = 'accessToken';
         break;
     }
+    return sessionStorage.getItem(tokenKey) || localStorage.getItem(tokenKey);
+  };
 
-    const token = sessionStorage.getItem(tokenKey) || localStorage.getItem(tokenKey);
+  const currentToken = getActiveToken(userType);
+
+  // Login happens in the same browser tab, so storage changes alone do not
+  // rerun the socket effect. Bump the connection version after authentication.
+  useEffect(() => {
+    const handleAuthChange = () => setAuthVersion(version => version + 1);
+    window.addEventListener('vendor_session_authenticated', handleAuthChange);
+    window.addEventListener('admin_session_authenticated', handleAuthChange);
+    window.addEventListener('worker_session_authenticated', handleAuthChange);
+    window.addEventListener('user_session_authenticated', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+    return () => {
+      window.removeEventListener('vendor_session_authenticated', handleAuthChange);
+      window.removeEventListener('admin_session_authenticated', handleAuthChange);
+      window.removeEventListener('worker_session_authenticated', handleAuthChange);
+      window.removeEventListener('user_session_authenticated', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!userType) {
+      if (socket) {
+        socket.disconnect();
+        setSocket(null);
+      }
+      return;
+    }
+
+    const token = currentToken;
     // If no token, we don't connect
     if (!token) {
       if (socket) {
@@ -137,8 +153,6 @@ export const SocketProvider = ({ children }) => {
 
     // Disconnect previous if any
     if (socket) {
-      // Optimization: if we are already connected with same token/auth, maybe don't reconnect?
-      // But determining that is hard. Simpler to reconnect.
       socket.disconnect();
     }
 
@@ -154,7 +168,7 @@ export const SocketProvider = ({ children }) => {
       secure: true,
       rejectUnauthorized: false,
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
@@ -270,10 +284,11 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for generic notifications
     newSocket.on('notification', (data) => {
-      // If emergency_sos notification, update notification count/list and skip duplicate modal dispatch & generic sound
+      // If emergency_sos notification, ensure admin modal and sound trigger
       if (data.type === 'emergency_sos') {
         if (userType === 'admin') {
           window.dispatchEvent(new Event('adminNotificationsUpdated'));
+          window.dispatchEvent(new CustomEvent('adminEmergencySOSAlert', { detail: data.data || data }));
         }
         return;
       }
@@ -487,7 +502,7 @@ export const SocketProvider = ({ children }) => {
       }
       newSocket.disconnect();
     };
-  }, [userType, authVersion]);
+  }, [userType, currentToken, authVersion]);
 
   return (
     <SocketContext.Provider value={socket}>

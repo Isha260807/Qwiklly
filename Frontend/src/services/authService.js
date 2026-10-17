@@ -240,6 +240,7 @@ export const adminAuthService = {
       storage.setItem('adminAccessToken', response.data.accessToken);
       storage.setItem('adminRefreshToken', response.data.refreshToken);
       storage.setItem('adminData', JSON.stringify(response.data.admin));
+      window.dispatchEvent(new Event('admin_session_authenticated'));
     }
     return response.data;
   },
@@ -254,6 +255,10 @@ export const adminAuthService = {
     localStorage.removeItem('adminAccessToken');
     localStorage.removeItem('adminRefreshToken');
     localStorage.removeItem('adminData');
+    sessionStorage.removeItem('adminAccessToken');
+    sessionStorage.removeItem('adminRefreshToken');
+    sessionStorage.removeItem('adminData');
+    window.dispatchEvent(new Event('admin_session_authenticated'));
   }
 };
 
