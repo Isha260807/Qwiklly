@@ -76,6 +76,90 @@ const Pagination = ({ pagination, onPageChange }) => {
   );
 };
 
+const addressCache = new Map();
+
+const SOSLocationDisplay = ({ location }) => {
+  const lat = location?.lat;
+  const lng = location?.lng;
+  const rawAddress = location?.address || location?.formattedAddress;
+  const isPlaceholder = !rawAddress || /^(location not specified|location unavailable|n\/a|not specified)$/i.test(String(rawAddress).trim());
+
+  const [address, setAddress] = useState(() => {
+    if (!isPlaceholder) return String(rawAddress).trim();
+    if (lat && lng) {
+      const cacheKey = `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
+      if (addressCache.has(cacheKey)) return addressCache.get(cacheKey);
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (!isPlaceholder) {
+      setAddress(String(rawAddress).trim());
+      return;
+    }
+
+    if (!lat || !lng) {
+      setAddress('Location unavailable');
+      return;
+    }
+
+    const cacheKey = `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
+    if (addressCache.has(cacheKey)) {
+      setAddress(addressCache.get(cacheKey));
+      return;
+    }
+
+    let isMounted = true;
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
+      headers: { 'Accept-Language': 'en-IN,en;q=0.9' }
+    })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!isMounted || !data) return;
+        const parts = data.display_name?.split(',').map(s => s.trim()) || [];
+        const readable = parts.slice(0, 3).join(', ');
+        if (readable) {
+          addressCache.set(cacheKey, readable);
+          setAddress(readable);
+        } else {
+          setAddress(rawAddress && !isPlaceholder ? rawAddress : 'Location unavailable');
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setAddress(rawAddress && !isPlaceholder ? rawAddress : 'Location unavailable');
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [rawAddress, isPlaceholder, lat, lng]);
+
+  const mapUrl = lat && lng ? `https://www.google.com/maps?q=${lat},${lng}` : null;
+  const textToShow = address || (lat && lng ? 'Resolving location…' : 'Location unavailable');
+
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <FiMapPin className="text-gray-400 shrink-0" />
+      {mapUrl ? (
+        <a
+          href={mapUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-gray-600 hover:text-[#720C3E] hover:underline font-medium truncate"
+          title={`Open in Google Maps (${lat}, ${lng})`}
+        >
+          {textToShow}
+        </a>
+      ) : (
+        <span className="truncate">{textToShow}</span>
+      )}
+    </div>
+  );
+};
+
 const Support = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -250,7 +334,7 @@ const Support = () => {
                 </div>
                 <div className="mt-4 grid gap-3 border-t border-gray-100 pt-4 text-sm text-gray-600 sm:grid-cols-2">
                   <div className="flex items-center gap-2"><FiPhone className="text-gray-400" /> {sos.phone || 'Phone unavailable'}</div>
-                  <div className="flex items-center gap-2"><FiMapPin className="text-gray-400" /> {lat && lng ? `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}` : sos.location?.address || 'Location unavailable'}</div>
+                  <SOSLocationDisplay location={sos.location} />
                 </div>
                 {sos.note && <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-900"><strong>Note:</strong> {sos.note}</p>}
               </div>

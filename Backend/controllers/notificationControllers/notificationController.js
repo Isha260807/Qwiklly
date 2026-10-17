@@ -534,7 +534,7 @@ const triggerEmergencySOS = async (req, res) => {
     const finalLocation = {
       lat: location?.lat || vendor.location?.lat || null,
       lng: location?.lng || vendor.location?.lng || null,
-      address: location?.address || vendor.address?.addressLine1 || vendor.address?.street || 'Location not specified',
+      address: location?.address || (vendor.address ? [vendor.address.fullAddress || vendor.address.addressLine1, vendor.address.city, vendor.address.state].filter(Boolean).join(', ') : null) || vendor.address?.addressLine1 || 'Location not specified',
       accuracy: location?.accuracy || null
     };
 

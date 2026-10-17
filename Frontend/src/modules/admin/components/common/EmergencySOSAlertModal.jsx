@@ -133,7 +133,11 @@ const EmergencySOSAlertModal = () => {
                 <div className="flex items-center gap-1.5 text-gray-700 font-medium">
                   <FiMapPin className="text-red-600 flex-shrink-0" />
                   <span className="truncate">
-                    {lat && lng ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : activeSOS.location?.address || 'Location Shared'}
+                    {activeSOS.location?.address && !/^(location not specified|location unavailable)$/i.test(activeSOS.location.address)
+                      ? activeSOS.location.address
+                      : lat && lng
+                      ? `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+                      : 'Location Shared'}
                   </span>
                 </div>
               </div>
