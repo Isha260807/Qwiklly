@@ -17,6 +17,7 @@ import { toast } from 'react-hot-toast';
 import { io } from 'socket.io-client';
 
 import { registerFCMToken } from '../../../../services/pushNotificationService';
+import { vendorAuthService } from '../../../../services/authService';
 import StatsCards from './components/StatsCards';
 import PendingBookings from './components/PendingBookings';
 
@@ -46,15 +47,19 @@ const Dashboard = memo(() => {
   });
   const getInitialVendorProfile = () => {
     try {
-      const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+      const storedVendor = JSON.parse(localStorage.getItem('vendorData') || '{}');
+      const storedProfile = JSON.parse(localStorage.getItem('vendorProfile') || '{}');
+      const profile = { ...storedProfile, ...storedVendor };
       const services = profile.service || profile.services || profile.categories || [];
       const servicesList = Array.isArray(services) ? services : (services ? [services] : []);
       const hasBank = !!(
-        profile.bankDetails?.accountNumber ||
-        profile.bankDetails?.upiId ||
         profile.bankDetails?.upiQrCode ||
+        profile.bankDetails?.upiId ||
+        profile.bankDetails?.accountNumber ||
         profile.bankAccount?.accountNumber ||
+        profile.upiQrCode ||
         profile.upiId ||
+        profile.payoutDetails?.upiQrCode ||
         profile.payoutDetails?.upiId ||
         profile.payoutDetails?.accountNumber
       );
@@ -239,17 +244,25 @@ const Dashboard = memo(() => {
     }));
     setRecentJobs(recentJobsData);
 
-    // Load vendor profile from localStorage
+    // Load vendor profile
     try {
-      const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+      const storedVendor = JSON.parse(localStorage.getItem('vendorData') || '{}');
+      const storedProfile = JSON.parse(localStorage.getItem('vendorProfile') || '{}');
+      const apiVendor = response?.data?.vendor || {};
+      const profile = { ...storedProfile, ...storedVendor, ...apiVendor };
+      if (apiVendor.bankDetails) {
+        profile.bankDetails = { ...(storedVendor.bankDetails || {}), ...apiVendor.bankDetails };
+      }
       const services = profile.service || profile.services || profile.categories || [];
       const servicesList = Array.isArray(services) ? services : (services ? [services] : []);
       const hasBank = !!(
-        profile.bankDetails?.accountNumber ||
-        profile.bankDetails?.upiId ||
         profile.bankDetails?.upiQrCode ||
+        profile.bankDetails?.upiId ||
+        profile.bankDetails?.accountNumber ||
         profile.bankAccount?.accountNumber ||
+        profile.upiQrCode ||
         profile.upiId ||
+        profile.payoutDetails?.upiQrCode ||
         profile.payoutDetails?.upiId ||
         profile.payoutDetails?.accountNumber
       );
@@ -260,8 +273,11 @@ const Dashboard = memo(() => {
         service: servicesList,
         payoutAdded: hasBank
       });
+      if (apiVendor && Object.keys(apiVendor).length > 0) {
+        localStorage.setItem('vendorData', JSON.stringify({ ...storedVendor, ...apiVendor }));
+      }
     } catch (e) {
-      console.error('Error updating vendor profile from localStorage:', e);
+      console.error('Error updating vendor profile:', e);
     }
   }, []);
 
@@ -269,15 +285,19 @@ const Dashboard = memo(() => {
   useEffect(() => {
     const handleProfileSync = () => {
       try {
-        const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+        const storedVendor = JSON.parse(localStorage.getItem('vendorData') || '{}');
+        const storedProfile = JSON.parse(localStorage.getItem('vendorProfile') || '{}');
+        const profile = { ...storedProfile, ...storedVendor };
         const services = profile.service || profile.services || profile.categories || [];
         const servicesList = Array.isArray(services) ? services : (services ? [services] : []);
         const hasBank = !!(
-          profile.bankDetails?.accountNumber ||
-          profile.bankDetails?.upiId ||
           profile.bankDetails?.upiQrCode ||
+          profile.bankDetails?.upiId ||
+          profile.bankDetails?.accountNumber ||
           profile.bankAccount?.accountNumber ||
+          profile.upiQrCode ||
           profile.upiId ||
+          profile.payoutDetails?.upiQrCode ||
           profile.payoutDetails?.upiId ||
           profile.payoutDetails?.accountNumber
         );
@@ -308,6 +328,26 @@ const Dashboard = memo(() => {
 
       const response = await vendorDashboardService.getDashboardStats({ forceRefresh: !showSpinner });
       processApiResponse(response);
+
+      // Double-check profile from API if payout is not yet marked added
+      try {
+        const pRes = await vendorAuthService.getProfile();
+        if (pRes?.success && pRes?.vendor) {
+          const v = pRes.vendor;
+          const hasBank = !!(
+            v.bankDetails?.upiQrCode ||
+            v.bankDetails?.upiId ||
+            v.bankDetails?.accountNumber
+          );
+          if (hasBank) {
+            setVendorProfile(prev => ({ ...prev, payoutAdded: true }));
+            const storedVendor = JSON.parse(localStorage.getItem('vendorData') || '{}');
+            localStorage.setItem('vendorData', JSON.stringify({ ...storedVendor, ...v }));
+          }
+        }
+      } catch (pErr) {
+        // Non-blocking
+      }
     } catch (err) {
       console.error('Error loading dashboard data:', err);
       setError(String(err.message || 'Failed to load dashboard data'));
@@ -534,37 +574,22 @@ const Dashboard = memo(() => {
 
       <main className="pt-2">
 
-        {/* Incomplete Profile Banner (Unified) */}
-        {((!vendorProfile.service || vendorProfile.service.length === 0) || !vendorProfile.payoutAdded) && (() => {
-          const noServices = !vendorProfile.service || vendorProfile.service.length === 0;
-          const noPayout = !vendorProfile.payoutAdded;
-          
-          let title = "QR Code Required";
-          let message = "Add your UPI QR code to receive payments.";
-          let targetPath = '/vendor/profile';
-
-          if (noServices && !noPayout) {
-            targetPath = '/vendor/profile';
-          } else if (!noServices && noPayout) {
-            targetPath = '/vendor/profile/payout';
-          }
-
-          return (
-            <div className="px-4 pt-2 -mb-2">
-              <div
-                onClick={() => navigate(targetPath)}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer transition-all active:opacity-80"
-                style={{ background: 'rgba(114,12,62,0.06)', border: '1px solid rgba(114,12,62,0.18)' }}
-              >
-                <FiClock className="h-4 w-4 flex-shrink-0" style={{ color: '#720C3E' }} />
-                <p className="text-xs font-semibold flex-1" style={{ color: '#4D082A' }}>
-                  {title} — <span className="font-normal">{message}</span>
-                </p>
-                <FiArrowRight className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#720C3E' }} />
-              </div>
+        {/* Incomplete Profile Banner: Only show if QR code is NOT added */}
+        {!vendorProfile.payoutAdded && (
+          <div className="px-4 pt-2 -mb-2">
+            <div
+              onClick={() => navigate('/vendor/profile/payout')}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer transition-all active:opacity-80"
+              style={{ background: 'rgba(114,12,62,0.06)', border: '1px solid rgba(114,12,62,0.18)' }}
+            >
+              <FiClock className="h-4 w-4 flex-shrink-0" style={{ color: '#720C3E' }} />
+              <p className="text-xs font-semibold flex-1" style={{ color: '#4D082A' }}>
+                QR Code Required — <span className="font-normal">Add your UPI QR code to receive payments.</span>
+              </p>
+              <FiArrowRight className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#720C3E' }} />
             </div>
-          );
-        })()}
+          </div>
+        )}
 
         {/* Stats Cards - Optimized Component */}
         <StatsCards stats={stats} />

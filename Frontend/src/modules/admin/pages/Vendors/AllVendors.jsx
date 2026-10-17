@@ -12,7 +12,9 @@ import {
   FiSmartphone,
   FiMapPin,
   FiLoader,
-  FiDownload
+  FiDownload,
+  FiChevronLeft,
+  FiChevronRight
 } from 'react-icons/fi';
 import { FaQrcode } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
@@ -28,6 +30,8 @@ const AllVendors = () => {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'pending', 'approved', 'rejected'
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const VENDORS_PER_PAGE = 10;
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [zones, setZones] = useState([]);
@@ -96,7 +100,7 @@ const AllVendors = () => {
   const loadVendors = async () => {
     try {
       setLoading(true);
-      const response = await adminVendorService.getAllVendors();
+      const response = await adminVendorService.getAllVendors({ limit: 1000 });
       if (response.success) {
         // Transform backend data to frontend format
         const transformedVendors = response.data.map(vendor => ({
@@ -209,6 +213,17 @@ const AllVendors = () => {
       return matchesStatus && matchesSearch;
     });
   }, [vendors, filterStatus, searchQuery]);
+
+  // Reset pagination when search query or filter status changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus]);
+
+  const totalPages = Math.ceil(filteredVendors.length / VENDORS_PER_PAGE) || 1;
+  const paginatedVendors = useMemo(() => {
+    const startIndex = (currentPage - 1) * VENDORS_PER_PAGE;
+    return filteredVendors.slice(startIndex, startIndex + VENDORS_PER_PAGE);
+  }, [filteredVendors, currentPage]);
 
   const handleApprove = async (vendorId, zoneIdsOverride = null) => {
     const vendor = vendors.find(item => item.id === vendorId);
@@ -452,7 +467,7 @@ const AllVendors = () => {
                     <td colSpan="6" className="px-4 py-8 text-center text-xs text-gray-500">No vendors found</td>
                   </tr>
                 ) : (
-                  filteredVendors.map((vendor) => (
+                  paginatedVendors.map((vendor) => (
                     <tr key={vendor.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div>
@@ -625,6 +640,64 @@ const AllVendors = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {filteredVendors.length > 0 && (
+            <div className="p-3.5 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
+              <span className="font-medium">
+                Showing {Math.min((currentPage - 1) * VENDORS_PER_PAGE + 1, filteredVendors.length)} to{' '}
+                {Math.min(currentPage * VENDORS_PER_PAGE, filteredVendors.length)} of {filteredVendors.length} vendors
+              </span>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-medium transition-all cursor-pointer"
+                  >
+                    <FiChevronLeft className="w-3.5 h-3.5" />
+                    <span>Prev</span>
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                      .map((p, idx, arr) => {
+                        const prev = arr[idx - 1];
+                        return (
+                          <React.Fragment key={p}>
+                            {prev && p - prev > 1 && <span className="px-1 text-gray-400">...</span>}
+                            <button
+                              type="button"
+                              onClick={() => setCurrentPage(p)}
+                              className={`min-w-[28px] h-7 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                currentPage === p
+                                  ? 'bg-[#9E2A2B] text-white shadow-2xs'
+                                  : 'border border-gray-200 text-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 font-medium transition-all cursor-pointer"
+                  >
+                    <span>Next</span>
+                    <FiChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </CardShell>
 

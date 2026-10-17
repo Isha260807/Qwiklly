@@ -327,23 +327,15 @@ const ActiveJobs = memo(() => {
                     </div>
 
                     {/* Quick Action Buttons */}
-                    {['ACCEPTED', 'CONFIRMED'].includes(job.status?.toUpperCase()) && !job.assignedTo && (
+                    {['ACCEPTED', 'CONFIRMED'].includes(job.status?.toUpperCase()) && (
                       <div className="mt-2.5 pt-2 border-t border-gray-100 flex gap-2">
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleAssignToSelf(job.id); }}
-                          className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1"
-                          style={{ background: 'white', color: themeColors.button, border: `1.5px solid ${themeColors.button}` }}
-                        >
-                          <FiUser className="w-3 h-3" />
-                          Do it Myself
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); navigate(`/vendor/booking/${job.id}/assign-worker`); }}
-                          className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 flex items-center justify-center gap-1"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/vendor/booking/${job.id}/timeline`); }}
+                          className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-xs"
                           style={{ background: themeColors.button }}
                         >
-                          <FiUser className="w-3 h-3" />
-                          Assign Worker
+                          <FiMapPin className="w-3.5 h-3.5" />
+                          View Job & Start Journey
                         </button>
                       </div>
                     )}

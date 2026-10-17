@@ -200,6 +200,36 @@ const createBooking = async (req, res) => {
       ? new Date(`${requestedDateValue.toISOString().slice(0, 10)}T00:00:00.000Z`)
       : requestedDateValue;
 
+    // Check if user already has an active booking for this date and time slot
+    if (isSlotBooking && storedScheduledDate && timeSlot?.start) {
+      const existingUserBooking = await Booking.findOne({
+        userId,
+        scheduledDate: storedScheduledDate,
+        'timeSlot.start': timeSlot.start,
+        status: {
+          $in: [
+            BOOKING_STATUS.PENDING,
+            BOOKING_STATUS.AWAITING_PAYMENT,
+            BOOKING_STATUS.CONFIRMED,
+            BOOKING_STATUS.ACCEPTED,
+            BOOKING_STATUS.ASSIGNED,
+            BOOKING_STATUS.JOURNEY_STARTED,
+            BOOKING_STATUS.VISITED,
+            BOOKING_STATUS.IN_PROGRESS,
+            BOOKING_STATUS.WORK_DONE
+          ]
+        }
+      }).select('_id bookingNumber serviceName');
+
+      if (existingUserBooking) {
+        return res.status(409).json({
+          success: false,
+          code: 'DUPLICATE_BOOKING',
+          message: `You already have an active booking (${existingUserBooking.bookingNumber || existingUserBooking.serviceName || 'Service'}) for this time slot. Please choose another slot.`
+        });
+      }
+    }
+
     // 2. Fetch Category if exists
     const categoryId = service.categoryId || service.categoryIds?.[0];
     const category = categoryId ? await Category.findById(categoryId).select('title icon image slug').lean() : null;
@@ -782,11 +812,12 @@ const createBooking = async (req, res) => {
     console.error('Create booking error:', error);
     const isSlotRequest = ['scheduled', 'slot'].includes(String(req.body?.bookingType || '').toLowerCase());
     if (isSlotRequest && (error?.code === 11000 || error?.code === 'SLOT_UNAVAILABLE' || error?.code === 'DUPLICATE_BOOKING')) {
+      const isDuplicate = error.code === 'DUPLICATE_BOOKING' || isUserSlotReservationDuplicate(error) || (error?.code === 11000 && (error.keyPattern?.userId || String(error.message || '').includes('userId')));
       return res.status(409).json({
         success: false,
-        code: error.code === 'DUPLICATE_BOOKING' ? 'DUPLICATE_BOOKING' : 'SLOT_UNAVAILABLE',
-        message: error.code === 'DUPLICATE_BOOKING'
-          ? 'You already have a booking for this service and slot.'
+        code: isDuplicate ? 'DUPLICATE_BOOKING' : 'SLOT_UNAVAILABLE',
+        message: isDuplicate
+          ? (error.message || 'You already have an active booking for this time slot. Please choose another slot.')
           : 'This slot is currently unavailable. Please select another time slot.'
       });
     }

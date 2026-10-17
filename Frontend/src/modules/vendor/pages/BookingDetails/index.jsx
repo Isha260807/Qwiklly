@@ -120,7 +120,7 @@ export default function BookingDetails() {
         bookingType: apiData.bookingType,
         status: apiData.status,
         description: apiData.description || apiData.notes || 'No description provided',
-        assignedTo: apiData.workerId ? { name: apiData.workerId.name } : (apiData.assignedAt ? { name: 'You (Self)' } : null),
+        assignedTo: { name: 'You (Self)' },
         workerResponse: apiData.workerResponse,
         workerResponseAt: apiData.workerResponseAt,
         paymentMethod: apiData.paymentMethod,
@@ -1466,7 +1466,7 @@ export default function BookingDetails() {
               <FiArrowRight className="w-3.5 h-3.5" />
             </button>
 
-            {(booking.status === 'confirmed' || booking.status === 'assigned' || (booking.bookingType === 'scheduled' && booking.status === 'awaiting_payment')) && (() => {
+            {(booking.status === 'confirmed' || booking.status === 'accepted' || booking.status === 'assigned' || (booking.bookingType === 'scheduled' && booking.status === 'awaiting_payment')) && (() => {
               const isSelfJob = booking.assignedTo?.name === 'You (Self)';
               const isPaymentComplete = booking.paymentStatus === 'success' || booking.paymentStatus === 'plan_covered';
               const journeyDisabled = (booking.bookingType === 'scheduled' && booking.status === 'awaiting_payment') || (isSelfJob && !isPaymentComplete);

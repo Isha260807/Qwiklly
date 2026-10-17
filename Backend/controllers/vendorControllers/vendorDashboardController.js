@@ -181,6 +181,13 @@ const getDashboardStats = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
+        vendor: {
+          id: req.user?._id || req.user?.id,
+          name: req.user?.name,
+          businessName: req.user?.businessName,
+          service: req.user?.service || req.user?.categories || [],
+          bankDetails: req.user?.bankDetails || {}
+        },
         config: {
           maxSearchTime: globalSettings?.maxSearchTime || 5 // mins
         },

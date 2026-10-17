@@ -63,10 +63,14 @@ const getBrowsingLocation = () => {
 
 const getServiceabilityErrorMessage = (error) => {
   const data = error?.response?.data;
-  if (data && SERVICEABILITY_CODES.includes(data.code)) {
+  if (!data) return null;
+  if (data.code && SERVICEABILITY_CODES.includes(data.code)) {
     if (data.nearestZone?.name) {
       return `${data.message} Nearest service area: ${data.nearestZone.name} (${data.nearestZone.distanceKm}km away).`;
     }
+    return data.message;
+  }
+  if (data.message) {
     return data.message;
   }
   return null;
@@ -626,7 +630,8 @@ const Checkout = () => {
         }
       }
     } catch (error) {
-      toast.error(getServiceabilityErrorMessage(error) || 'Failed to initiate booking request. Please try again.');
+      const errorMsg = error?.response?.data?.message || getServiceabilityErrorMessage(error) || 'Failed to initiate booking request. Please try again.';
+      toast.error(errorMsg);
       setShowVendorModal(false);
       setSearchingVendors(false);
     }
@@ -907,7 +912,8 @@ const Checkout = () => {
     } catch (error) {
       toast.dismiss();
       console.error('Booking flow error:', error);
-      toast.error(getServiceabilityErrorMessage(error) || 'Something went wrong. Please try again.');
+      const errorMsg = error?.response?.data?.message || getServiceabilityErrorMessage(error) || 'Something went wrong. Please try again.';
+      toast.error(errorMsg);
       setSearchingVendors(false);
     }
   };

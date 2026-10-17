@@ -332,12 +332,12 @@ const DailyAttendance = () => {
                           {attendance?.lastOfflineAt
                             ? formatClock(attendance.lastOfflineAt)
                             : status === 'open'
-                              ? 'Still online'
+                              ? (liveOnline ? 'Still online' : (vendor.lastSeenAt ? formatClock(vendor.lastSeenAt) : 'Offline'))
                               : 'Not recorded'}
                         </td>
                         <td className="px-4 py-4 text-sm font-bold text-blue-700">
                           {formatDuration(attendance, overview.dateKey || dateKey)}
-                          {status === 'open' && <span className="ml-1 text-[10px] font-semibold text-emerald-600">ACTIVE</span>}
+                          {status === 'open' && liveOnline && <span className="ml-1 text-[10px] font-semibold text-emerald-600">ACTIVE</span>}
                         </td>
                         <td className="px-4 py-4">
                           <span className={liveOnline

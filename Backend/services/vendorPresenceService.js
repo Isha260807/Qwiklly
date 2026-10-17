@@ -74,7 +74,7 @@ const upsertAttendanceStart = async ({ vendorId, dateKey, now, source }) => {
     lastEventAt: now,
     lastEventSource: source
   };
-  if (source === 'manual_toggle') {
+  if (source === 'manual_toggle' || source === 'login') {
     set.lastOfflineAt = null;
     set.manualOffAt = null;
     set.endReason = null;
@@ -100,7 +100,7 @@ const upsertAttendanceEnd = async ({ vendorId, dateKey, now, source }) => {
         lastOfflineAt: now,
         manualOffAt: now,
         dayStatus: 'CLOSED',
-        endReason: 'MANUAL_TOGGLE',
+        endReason: source === 'logout' ? 'LOGOUT' : (source === 'manual_toggle' ? 'MANUAL_TOGGLE' : source),
         lastEventAt: now,
         lastEventSource: source
       }
@@ -250,7 +250,7 @@ const setVendorPresence = async ({
     update.currentSocketId = null;
   }
 
-  if (isManualOn) {
+  if (isManualOn || normalizedSource === 'login') {
     update.manualOffDateKey = null;
   }
   if (isManualOff) {
@@ -295,10 +295,17 @@ const setVendorPresence = async ({
   const state = getVendorState(savedVendor);
   if (requestedOnline) {
     await upsertAttendanceStart({ vendorId, dateKey, now, source: normalizedSource });
-  } else if (isManualOff) {
-    // Manual OFF closes attendance even when a socket disconnect already
-    // made the live vendor status false.
+  } else if (isManualOff || normalizedSource === 'logout') {
+    // Manual OFF or Logout closes attendance, records Day End time, and closes shift.
     await upsertAttendanceEnd({ vendorId, dateKey, now, source: normalizedSource });
+  }
+
+  try {
+    const { setVendorOnline, setVendorAvailability } = require('./redisService');
+    await setVendorOnline(vendorId, state.isOnline);
+    await setVendorAvailability(vendorId, state.availability);
+  } catch (redisErr) {
+    // Non-blocking
   }
 
   await savePresenceEvent({

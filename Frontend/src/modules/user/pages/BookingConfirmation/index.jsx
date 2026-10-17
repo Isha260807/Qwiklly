@@ -481,7 +481,13 @@ const BookingConfirmation = () => {
             >
               <FiArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </button>
-            <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">Booking Sent</h1>
+            <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">
+              {['cancelled', 'expired', 'rejected', 'failed', 'timeout'].includes(booking?.status?.toLowerCase())
+                ? 'Booking Cancelled'
+                : isSearching
+                  ? 'Searching Expert'
+                  : (booking?.status?.toLowerCase() === 'requested' ? 'Booking Sent' : 'Booking Confirmed')}
+            </h1>
           </div>
           <NotificationBell 
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 text-white flex items-center justify-center transition-all backdrop-blur-sm border border-white/20 shadow-sm relative shrink-0 cursor-pointer"
@@ -530,9 +536,13 @@ const BookingConfirmation = () => {
               <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-2 shadow-xs">
                 <FiXCircle className="w-7 h-7 text-red-600" />
               </div>
-              <h1 className="text-base font-bold text-gray-900 mb-0.5">No Expert Found</h1>
+              <h1 className="text-base font-bold text-gray-900 mb-0.5">
+                {booking?.status?.toLowerCase() === 'cancelled' ? 'Booking Cancelled' : 'No Expert Found'}
+              </h1>
               <p className="text-xs text-gray-500 max-w-xs mb-3 leading-tight">
-                We couldn't find a nearby expert for your request at this moment.
+                {booking?.status?.toLowerCase() === 'cancelled'
+                  ? (booking?.cancellationReason || 'This booking has been cancelled.')
+                  : "We couldn't find a nearby expert for your request at this moment."}
               </p>
             </div>
           )}
@@ -544,11 +554,18 @@ const BookingConfirmation = () => {
                 <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Booking ID</p>
                 <p className="text-sm font-bold text-gray-900 tracking-tight">{booking.bookingNumber || booking._id || booking.id}</p>
               </div>
-              <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${(isSearching || booking?.status?.toLowerCase() === 'requested')
-                ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                : 'bg-green-50 text-green-700 border border-green-200'
-                }`}>
-                {isSearching ? 'Finding Vendor...' : (booking?.status?.toLowerCase() === 'requested' ? 'Request Sent' : 'Confirmed')}
+              <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                ['cancelled', 'expired', 'rejected', 'failed', 'timeout'].includes(booking?.status?.toLowerCase())
+                  ? 'bg-red-50 text-red-700 border border-red-200'
+                  : (isSearching || booking?.status?.toLowerCase() === 'requested')
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : 'bg-green-50 text-green-700 border border-green-200'
+              }`}>
+                {['cancelled', 'expired', 'rejected', 'failed', 'timeout'].includes(booking?.status?.toLowerCase())
+                  ? 'Cancelled'
+                  : isSearching
+                    ? 'Finding Vendor...'
+                    : (booking?.status?.toLowerCase() === 'requested' ? 'Request Sent' : 'Confirmed')}
               </div>
             </div>
           </div>

@@ -54,57 +54,50 @@ const BookingTimeline = () => {
         const response = await getBookingById(id);
         const apiData = response.data || response;
 
-        const isSelfJob = apiData.assignedAt && !apiData.workerId;
+        const isSelfJob = true;
         const mappedBooking = {
           ...apiData,
           id: apiData._id || apiData.id,
-          isSelfJob,
-          assignedTo: apiData.workerId ? { name: apiData.workerId.name } : (apiData.assignedAt ? { name: 'You (Self)' } : null),
+          isSelfJob: true,
+          assignedTo: { name: 'You (Self)' },
           location: {
             address: apiData.address?.addressLine1 || apiData.location?.address || 'Address not available',
             lat: apiData.address?.lat || apiData.location?.lat,
             lng: apiData.address?.lng || apiData.location?.lng
           },
           status: apiData.status,
-          // Timeline mapping if backend supports it, otherwise derived from status/timestamps
           timeline: [
             { stage: 1, timestamp: apiData.createdAt },
             { stage: 2, timestamp: apiData.acceptedAt },
-            { stage: 3, timestamp: apiData.assignedAt },
-            { stage: 4, timestamp: apiData.startedAt }, // Assuming started means visited for now? Or keep null
-            { stage: 5, timestamp: apiData.completedAt }, // Simplified mapping
+            { stage: 3, timestamp: apiData.journeyStartedAt || apiData.startedAt },
+            { stage: 4, timestamp: apiData.visitedAt },
+            { stage: 5, timestamp: apiData.workDoneAt },
+            { stage: 6, timestamp: apiData.completedAt },
           ]
         };
         setBooking(mappedBooking);
 
         // Determine current stage based on status
-        // Determine current stage based on status
         const statusMap = {
           'requested': 1,
           'searching': 1,
           'confirmed': 2,
-          'assigned': 3,
-          'journey_started': 4,
-          'visited': 5,
-          'in_progress': 5,
-          'work_done': 7,
-          'completed': 8,
+          'accepted': 2,
+          'assigned': 2,
+          'journey_started': 3,
+          'visited': 4,
+          'in_progress': 4,
+          'work_done': 5,
+          'completed': 6,
           'cancelled': 2,
           'rejected': 1,
         };
 
-        const isActuallyPaid = apiData.isWorkerPaid || apiData.workerPaymentStatus === 'PAID' || apiData.workerPaymentStatus === 'SUCCESS';
         const isSettled = apiData.finalSettlementStatus === 'DONE';
 
-        // Custom logic for later stages
         let stage = statusMap[apiData.status] || 2;
-        // Scheduled (slot) bookings are assigned to the vendor at creation, so they
-        // skip the "Assign Worker" step and go straight to starting the journey.
-        if (apiData.status === 'confirmed' && isSelfJob) stage = 3;
         if (apiData.status === 'completed') {
-          if (isSettled) stage = 10; // Booking Complete
-          else if (isActuallyPaid || isSelfJob) stage = 9; // Final Settlement (Skip Pay Worker for self)
-          else stage = 8; // Pay Worker
+          stage = isSettled ? 8 : 6;
         }
 
         setCurrentStage(stage);
@@ -230,6 +223,7 @@ const BookingTimeline = () => {
 
   // Journey can only start once the customer's payment has gone through (or the plan covers it)
   const isPaymentComplete = booking?.paymentStatus === 'success' || booking?.paymentStatus === 'plan_covered';
+  const isSettled = booking?.finalSettlementStatus === 'DONE';
 
   /* Handlers for Vendor Self-Job */
   const handleStartSelfJob = async () => {
@@ -316,80 +310,49 @@ const BookingTimeline = () => {
     },
     {
       id: 3,
-      title: 'Assigned',
-      icon: FiUser,
-      action: !isTerminalBooking && currentStage === 2 ? () => navigate(`/vendor/booking/${id}/assign-worker`) : null,
-      description: isTerminalBooking
-        ? 'No worker assignment allowed for this booking'
-        : booking?.assignedTo ? `Assigned to ${booking.assignedTo.name}` : 'Assign worker or start yourself',
+      title: 'Journey Started',
+      icon: FiMapPin,
+      action: (currentStage === 2) ? handleStartSelfJob : null,
+      description: currentStage < 3
+        ? (!isPaymentComplete ? 'Waiting for customer payment before journey can start' : 'Ready to start journey to customer location')
+        : 'You started journey',
     },
     {
       id: 4,
-      title: 'Journey Started',
+      title: 'Visited Site',
       icon: FiMapPin,
-      action: (currentStage === 3 && booking?.isSelfJob) ? handleStartSelfJob : null,
-      description: (currentStage === 3 && booking?.isSelfJob && !isPaymentComplete)
-        ? 'Waiting for customer payment before journey can start'
-        : booking?.isSelfJob ? 'You started journey' : (booking?.assignedTo ? 'Worker started journey' : 'Waiting for journey start'),
+      action: (currentStage === 3) ? () => setIsVisitModalOpen(true) : null,
+      description: currentStage >= 4 ? 'Arrived at location' : 'Reach customer location and verify OTP',
     },
     {
       id: 5,
-      title: 'Visited Site',
-      icon: FiMapPin,
-      action: (currentStage === 4 && booking?.isSelfJob) ? () => setIsVisitModalOpen(true) : null,
-      description: 'Arrived at location',
+      title: 'Work Done',
+      icon: FiTool,
+      action: (currentStage === 4) ? () => setIsWorkDoneModalOpen(true) : null,
+      description: currentStage >= 5 ? 'Service work completed' : 'Complete the service work',
     },
     {
       id: 6,
-      title: 'Work Done',
-      icon: FiTool,
-      action: (currentStage === 5 && booking?.isSelfJob) ? () => setIsWorkDoneModalOpen(true) : null,
-      description: 'Service work completed',
+      title: 'Complete Booking',
+      icon: FiCheckCircle,
+      action: (currentStage === 5) ? handleCompleteBooking : null,
+      description: currentStage >= 6 ? 'Service completion confirmed' : 'Confirm service completion',
     },
     {
       id: 7,
-      title: booking?.isSelfJob ? 'Complete Booking' : 'Approve Worker Work',
-      icon: FiCheckCircle,
-      action: (() => {
-        if (booking?.status === 'completed' || booking?.status === 'COMPLETED') return null;
-
-        if (booking?.isSelfJob && currentStage === 7) {
-          return handleCompleteBooking;
-        }
-
-        if (!booking?.isSelfJob && currentStage === 7) {
-          return handleApproveWork;
-        }
-        return null;
-      })(),
-      description: booking?.isSelfJob ? 'Confirm service completion' : 'Review and approve worker work',
+      title: 'Final Settlement',
+      icon: FiFileText,
+      action: (currentStage === 6 && !isSettled) ? handleFinalSettlement : null,
+      description: isSettled ? 'Settlement completed' : 'Complete final settlement',
     },
     {
       id: 8,
-      title: 'Pay Worker',
-      icon: FiDollarSign,
-      action: (currentStage === 8 && !(booking?.isWorkerPaid || booking?.workerPaymentStatus === 'PAID' || booking?.workerPaymentStatus === 'SUCCESS')) ? handleWorkerPayment : null,
-      description: (booking?.isWorkerPaid || booking?.workerPaymentStatus === 'PAID' || booking?.workerPaymentStatus === 'SUCCESS') ? 'Worker Paid' : 'Settle payment with worker',
-    },
-    {
-      id: 9,
-      title: 'Final Settlement',
-      icon: FiFileText,
-      action: (currentStage === 9) ? handleFinalSettlement : null,
-      description: booking?.finalSettlementStatus === 'DONE' ? 'Settlement Done' : 'Complete final settlement',
-    },
-    {
-      id: 10,
       title: 'Booking Complete',
       icon: FiCheckCircle,
       action: null,
       description: 'Booking successfully finalized',
     },
-  ].filter(stage => {
-    // Hide worker-specific stages for self jobs
-    if (booking?.isSelfJob && stage.id === 8) return false;
-    return true;
-  });
+  ];
 
   // Auto-verify as last digit enters
   useEffect(() => {
@@ -513,7 +476,7 @@ const BookingTimeline = () => {
                       <p className="text-[11px] text-gray-500 mb-1 leading-snug">{stage.description}</p>
 
                       {/* Hourly Service Timer / End Service — replaces "Mark Work Done" for hourly bookings */}
-                      {!isTerminalBooking && stage.id === 6 && booking?.hourlyTracking?.isHourly && (currentStage === 5 || currentStage === 6) &&
+                      {!isTerminalBooking && stage.id === 5 && booking?.hourlyTracking?.isHourly && (currentStage === 4 || currentStage === 5) &&
                         !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed) && (
                           <div className="my-1">
                             <HourlyServiceTimer
@@ -527,9 +490,9 @@ const BookingTimeline = () => {
 
                       {/* Action Button */}
                       {stage.action && !isTerminalBooking && !isSkipped &&
-                        !(stage.id === 6 && booking?.hourlyTracking?.isHourly && !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed)) &&
+                        !(stage.id === 5 && booking?.hourlyTracking?.isHourly && !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed)) &&
                         (() => {
-                        const isJourneyPaymentBlocked = stage.id === 4 && booking?.isSelfJob && !isPaymentComplete;
+                        const isJourneyPaymentBlocked = stage.id === 3 && !isPaymentComplete;
                         return (
                           <button
                             onClick={isJourneyPaymentBlocked ? undefined : stage.action}
@@ -540,21 +503,17 @@ const BookingTimeline = () => {
                               background: isJourneyPaymentBlocked ? '#9CA3AF' : themeColors.button,
                             }}
                           >
-                            {stage.id === 3 ? 'Assign Worker' :
-                              stage.id === 4 ? (isJourneyPaymentBlocked ? 'Payment Pending' : 'Start Journey') :
-                                stage.id === 5 ? 'Mark Arrived' :
-                                  stage.id === 6 ? 'Mark Work Done' :
-                                    stage.id === 7 ? (
-                                      booking?.isSelfJob ? 'Complete Booking' : 'Approve Work'
-                                    ) :
-                                      stage.id === 8 ? 'Pay Worker' :
-                                        stage.id === 9 ? 'Final Settlement' : 'Continue'}
+                            {stage.id === 3 ? (isJourneyPaymentBlocked ? 'Payment Pending' : 'Start Journey') :
+                              stage.id === 4 ? 'Mark Arrived' :
+                                stage.id === 5 ? 'Mark Work Done' :
+                                  stage.id === 6 ? 'Complete Booking' :
+                                    stage.id === 7 ? 'Final Settlement' : 'Continue'}
                           </button>
                         );
                       })()}
 
-                      {/* Online Payment Status Badge for Stage 7 */}
-                      {stage.id === 7 && (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid') && !isCompleted && (
+                      {/* Online Payment Status Badge for Stage 6 */}
+                      {stage.id === 6 && (booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid') && !isCompleted && (
                         <div className="mt-1 flex items-center gap-1.5 text-emerald-700 font-bold text-[10px] bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100">
                           <FiCheckCircle className="w-3.5 h-3.5 text-emerald-600" />
                           ONLINE PAYMENT RECEIVED

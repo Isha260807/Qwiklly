@@ -892,7 +892,7 @@ const startSelfJob = async (req, res) => {
     }
 
     // Status Check
-    const allowed = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ASSIGNED];
+    const allowed = [BOOKING_STATUS.CONFIRMED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.ACCEPTED];
     if (!allowed.includes(booking.status)) {
       return res.status(400).json({ success: false, message: `Cannot start journey from current status: ${booking.status}` });
     }

@@ -638,50 +638,41 @@ const login = async (req, res) => {
 const logout = async (req, res) => {
   try {
     const { platform = 'web' } = req.body;
+    const vendorId = req.user?.id || req.userId;
 
-    // Only the currently active session may log the vendor out.
-    if (!req.user?.id || !req.authSessionId) {
-      return res.status(401).json({
-        success: false,
-        code: 'VENDOR_SESSION_REPLACED',
-        message: 'Your vendor session is no longer active. Please login again.'
+    if (!vendorId) {
+      return res.status(200).json({
+        success: true,
+        message: 'Logged out successfully'
       });
     }
 
-    const presence = await setVendorPresence({
-      vendorId: req.user.id,
+    const sessionId = req.authSessionId || req.user?.loginSessionId || null;
+
+    // Set vendor presence offline and close daily attendance (records Day End & marks CLOSED)
+    await setVendorPresence({
+      vendorId,
       isOnline: false,
       source: 'logout',
-      sessionId: req.authSessionId,
-      eventId: req.headers['x-event-id'] || req.body.eventId || 'logout:' + req.user.id + ':' + req.authSessionId
+      sessionId,
+      eventId: req.headers['x-event-id'] || req.body.eventId || 'logout:' + vendorId + ':' + Date.now()
     });
 
-    if (presence.reason === 'STALE_SESSION') {
-      return res.status(401).json({
-        success: false,
-        code: 'VENDOR_SESSION_REPLACED',
-        message: 'Your vendor session is no longer active. Please login again.'
-      });
-    }
-
     const updateFields = platform === 'mobile'
-      ? { fcmTokenMobile: [], loginSessionId: null }
-      : { fcmTokens: [], loginSessionId: null };
-    const clearedVendor = await Vendor.findOneAndUpdate(
-      { _id: req.user.id, loginSessionId: req.authSessionId },
-      { $set: updateFields },
-      { new: false }
-    ).select('_id');
+      ? { fcmTokenMobile: [], loginSessionId: null, isOnline: false, availability: 'OFFLINE', currentSocketId: null }
+      : { fcmTokens: [], loginSessionId: null, isOnline: false, availability: 'OFFLINE', currentSocketId: null };
 
-    if (!clearedVendor) {
-      return res.status(401).json({
-        success: false,
-        code: 'VENDOR_SESSION_REPLACED',
-        message: 'Your vendor session is no longer active. Please login again.'
-      });
+    await Vendor.findByIdAndUpdate(vendorId, { $set: updateFields });
+
+    try {
+      const { setVendorOnline, setVendorAvailability } = require('../../services/redisService');
+      await setVendorOnline(vendorId, false);
+      await setVendorAvailability(vendorId, 'OFFLINE');
+    } catch (rErr) {
+      // Non-blocking
     }
 
-    console.log('[AUTH] ' + platform + ' session cleared and vendor set OFFLINE: ' + req.user.id);
+    console.log('[AUTH] ' + platform + ' session cleared and vendor set OFFLINE: ' + vendorId);
     res.status(200).json({
       success: true,
       message: 'Logged out successfully'
