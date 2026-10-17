@@ -1066,11 +1066,6 @@ const ZoneManagement = () => {
                       <div className="min-w-0">
                         <h4 className="text-xs font-bold text-gray-900 truncate">{vendor.name}</h4>
                         <p className="text-[11px] text-gray-500">{vendor.phone}</p>
-                        <p className="text-[10px] text-indigo-600 font-medium truncate mt-0.5">
-                          {Array.isArray(vendor.service)
-                            ? vendor.service.join(', ')
-                            : (vendor.service || 'No services specified')}
-                        </p>
                       </div>
                     </div>
 

@@ -150,7 +150,8 @@ const getBookingById = async (req, res) => {
     const scopedQuery = Object.keys(cityFilter).length ? { $and: [query, cityFilter] } : query;
     const booking = await Booking.findOne(scopedQuery)
       .populate('userId', 'name phone email addresses')
-      .populate('vendorId', 'name businessName phone email address profilePhoto')
+      .populate('vendorId', 'name businessName phone email address approvalStatus profilePhoto')
+      .populate('rejectedVendors', 'name businessName phone email')
       .populate('serviceId', 'title description iconUrl images')
       .populate('categoryId', 'title slug');
 
@@ -221,11 +222,7 @@ const cancelBooking = async (req, res) => {
     booking.cancellationReason = cancellationReason || 'Cancelled by admin';
 
     if (booking.bookingType === 'scheduled' && booking.slotAssignment) {
-      const wasCommitted = booking.slotAssignment.state === 'COMMITTED';
       booking.slotAssignment.state = 'RELEASED';
-      if (!wasCommitted) {
-        booking.vendorId = null;
-      }
     }
     await booking.save();
 

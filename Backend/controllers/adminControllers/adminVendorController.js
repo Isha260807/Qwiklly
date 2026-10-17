@@ -1,3 +1,5 @@
+const mongoose = require('mongoose');
+const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
 const VendorAttendance = require('../../models/VendorAttendance');
 const Booking = require('../../models/Booking');
@@ -607,32 +609,90 @@ const getAllVendorBookings = async (req, res) => {
   try {
     const { status, page = 1, limit = 20, search } = req.query;
 
-    const query = { vendorId: { $exists: true, $ne: null }, ...getAdminBookingCityFilter(req) };
-    if (status) {
-      query.status = status;
+    const query = { ...getAdminBookingCityFilter(req) };
+
+    if (status && status !== 'all' && status !== 'ALL' && status !== 'ALL_STATUS') {
+      const s = status.toLowerCase();
+      if (s === 'pending') {
+        query.status = { $in: ['pending', 'searching', 'requested', 'awaiting_payment', 'pending_admin', 'no_vendors'] };
+      } else if (s === 'accepted' || s === 'confirmed' || s === 'assigned') {
+        query.status = { $in: ['confirmed', 'accepted', 'assigned'] };
+      } else if (s === 'visited' || s === 'in_progress' || s === 'journey_started') {
+        query.status = { $in: ['visited', 'journey_started', 'in_progress'] };
+      } else if (s === 'work_done') {
+        query.status = 'work_done';
+      } else if (s === 'completed') {
+        query.status = { $in: ['completed', 'final_settlement'] };
+      } else if (s === 'cancelled') {
+        query.status = 'cancelled';
+      } else if (s === 'rejected') {
+        query.status = 'rejected';
+      } else {
+        query.status = { $regex: new RegExp(`^${status}$`, 'i') };
+      }
     }
 
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // If search is provided, we need to find vendors by business name or name first
-    if (search) {
-      const vendors = await Vendor.find({
+    // If search is provided
+    if (search && search.trim()) {
+      const trimmedSearch = search.trim();
+      const searchRegex = { $regex: trimmedSearch, $options: 'i' };
+      const searchConditions = [
+        { bookingNumber: searchRegex },
+        { serviceName: searchRegex },
+        { customerPhone: searchRegex },
+        { customerName: searchRegex },
+        { 'items.serviceName': searchRegex },
+        { 'items.title': searchRegex }
+      ];
+
+      if (mongoose.Types.ObjectId.isValid(trimmedSearch) && trimmedSearch.length === 24) {
+        searchConditions.push({ _id: new mongoose.Types.ObjectId(trimmedSearch) });
+      }
+
+      // Find matching vendors
+      const matchingVendors = await Vendor.find({
         ...getAdminVendorCityFilter(req),
         $or: [
-          { businessName: { $regex: search, $options: 'i' } },
-          { name: { $regex: search, $options: 'i' } },
-          { phone: { $regex: search, $options: 'i' } }
+          { businessName: searchRegex },
+          { name: searchRegex },
+          { phone: searchRegex }
         ]
       }).select('_id');
 
-      const vendorIds = vendors.map(v => v._id);
-      query.vendorId = { $in: vendorIds };
+      if (matchingVendors.length > 0) {
+        searchConditions.push({ vendorId: { $in: matchingVendors.map(v => v._id) } });
+      }
+
+      // Find matching users
+      const matchingUsers = await User.find({
+        $or: [
+          { name: searchRegex },
+          { phone: searchRegex },
+          { email: searchRegex }
+        ]
+      }).select('_id');
+
+      if (matchingUsers.length > 0) {
+        searchConditions.push({ userId: { $in: matchingUsers.map(u => u._id) } });
+      }
+
+      if (query.$or) {
+        query.$and = [
+          { $or: query.$or },
+          { $or: searchConditions }
+        ];
+        delete query.$or;
+      } else {
+        query.$or = searchConditions;
+      }
     }
 
     const bookings = await Booking.find(query)
       .populate('vendorId', 'name businessName phone profileImage')
-      .populate('userId', 'name phone')
+      .populate('userId', 'name phone email')
       .populate('serviceId', 'title iconUrl')
       .sort({ createdAt: -1 })
       .skip(skip)

@@ -200,7 +200,7 @@ const VendorAnalytics = () => {
                     </div>
                     <div className="truncate">
                       <p className="font-bold text-sm text-gray-900 truncate">{vendor.businessName || vendor.name}</p>
-                      <p className="text-xs text-gray-500">{vendor.phone || (Array.isArray(vendor.service) ? vendor.service.join(', ') : 'Service Partner')}</p>
+                      <p className="text-xs text-gray-500">{vendor.phone || 'Service Partner'}</p>
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0 ml-3">

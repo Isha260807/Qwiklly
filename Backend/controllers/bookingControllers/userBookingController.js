@@ -1050,9 +1050,6 @@ const cancelBooking = async (req, res) => {
 
     if (previous?.bookingType === 'scheduled') {
       const releaseUpdate = { $set: { 'slotAssignment.state': SLOT_ASSIGNMENT_STATE.RELEASED } };
-      if (previous.slotAssignment?.state !== SLOT_ASSIGNMENT_STATE.COMMITTED) {
-        releaseUpdate.$unset = { vendorId: '' };
-      }
       await Booking.updateOne({ _id: previous._id }, releaseUpdate);
     }
 

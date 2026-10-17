@@ -12,16 +12,25 @@ const VendorBookings = () => {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0 });
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const loadBookings = async (page = 1) => {
     try {
       setLoading(true);
       const params = {
         page,
-        limit: pagination.limit,
+        limit: pagination.limit || 20,
         status: filterStatus === 'all' ? undefined : filterStatus,
-        search: searchQuery.trim() || undefined
+        search: debouncedSearch.trim() || undefined
       };
       const response = await adminVendorService.getAllBookings(params);
       if (response.success) {
@@ -37,17 +46,24 @@ const VendorBookings = () => {
   };
 
   useEffect(() => {
-    loadBookings();
-  }, [filterStatus, searchQuery]);
+    loadBookings(1);
+  }, [filterStatus, debouncedSearch]);
 
   const getStatusStyle = (status) => {
     const s = (status || '').toLowerCase();
     const styles = {
       pending: 'bg-yellow-100 text-yellow-800',
       searching: 'bg-amber-100 text-amber-800',
+      requested: 'bg-yellow-100 text-yellow-800',
+      awaiting_payment: 'bg-amber-100 text-amber-800',
+      no_vendors: 'bg-slate-100 text-slate-800',
+      pending_admin: 'bg-orange-100 text-orange-800',
       accepted: 'bg-blue-100 text-blue-800',
+      confirmed: 'bg-blue-100 text-blue-800',
       assigned: 'bg-indigo-100 text-indigo-800',
+      journey_started: 'bg-cyan-100 text-cyan-800',
       visited: 'bg-cyan-100 text-cyan-800',
+      in_progress: 'bg-teal-100 text-teal-800',
       work_done: 'bg-emerald-100 text-emerald-800',
       final_settlement: 'bg-purple-100 text-purple-800',
       completed: 'bg-green-100 text-green-800',
@@ -82,7 +98,7 @@ const VendorBookings = () => {
   return (
     <div className="space-y-6">
       <CardShell icon={FiBriefcase}>
-        {/* Search and Filter */}
+        {/* Search, Filter and Total Count */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="flex-1 relative">
             <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
@@ -93,23 +109,30 @@ const VendorBookings = () => {
               placeholder="Search by partner, customer, booking ID, phone..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
           </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="accepted">Accepted</option>
-            <option value="visited">Visited</option>
-            <option value="work_done">Work Done</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="rejected">Rejected</option>
-          </select>
+          <div className="flex items-center gap-3">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium"
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending / Searching</option>
+              <option value="accepted">Accepted / Assigned</option>
+              <option value="visited">Visited / In Progress</option>
+              <option value="work_done">Work Done</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            {pagination.total > 0 && (
+              <span className="text-xs font-semibold px-3 py-2 bg-gray-100 text-gray-700 rounded-xl whitespace-nowrap">
+                Total: {pagination.total}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Bookings List */}

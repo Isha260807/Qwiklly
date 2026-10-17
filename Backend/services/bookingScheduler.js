@@ -315,10 +315,7 @@ class BookingScheduler {
                 cancelledAt: new Date(),
                 cancelledBy: 'system',
                 cancellationReason: 'Payment was not completed in time'
-              },
-              $unset: {
-                vendorId: ''
-              },
+              }
             },
             { new: true }
           ).lean();

@@ -192,10 +192,6 @@ const AllVendors = () => {
 
   const filteredVendors = useMemo(() => {
     return vendors.filter(vendor => {
-      const serviceString = Array.isArray(vendor.service)
-        ? vendor.service.join(' ')
-        : (vendor.service || '');
-
       let matchesStatus = true;
       if (filterStatus === 'online') {
         matchesStatus = vendor.isOnline;
@@ -209,7 +205,6 @@ const AllVendors = () => {
         vendor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         vendor.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
         vendor.phone.includes(searchQuery) ||
-        serviceString.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (vendor.businessName && vendor.businessName.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesStatus && matchesSearch;
     });
@@ -403,7 +398,7 @@ const AllVendors = () => {
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search vendors by name, phone, email, service..."
+              placeholder="Search vendors by name, phone, email, business..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all text-xs font-medium"
@@ -482,9 +477,6 @@ const AllVendors = () => {
                       <td className="px-4 py-3">
                         <div>
                           <p className="font-bold text-gray-800 text-xs">{vendor.businessName || 'N/A'}</p>
-                          <p className="text-[10px] text-blue-600 font-medium">
-                            {Array.isArray(vendor.service) ? vendor.service.join(', ') : (vendor.service || 'No service')}
-                          </p>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -665,12 +657,7 @@ const AllVendors = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Phone</label>
                 <div className="text-gray-900">{selectedVendor.phone}</div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Service Category</label>
-                <div className="text-gray-900">
-                  {Array.isArray(selectedVendor.service) ? selectedVendor.service.join(', ') : (selectedVendor.service || 'N/A')}
-                </div>
-              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Approval Status</label>
                 <div>{getStatusBadge(selectedVendor.approvalStatus)}</div>

@@ -169,7 +169,7 @@ const BookingDetails = () => {
     booking.bookingType === 'scheduled' &&
     normalizedStatus === 'CANCELLED' &&
     (booking.slotAssignment?.state === 'RELEASED' || isCancelledUnpaidSlot);
-  const vendor = isReleasedSlot ? {} : (booking.vendorId || {});
+  const vendor = booking.vendorId || {};
   const address = booking.address || {};
   const bookedItems = booking.bookedItems || [];
 
@@ -357,8 +357,12 @@ const BookingDetails = () => {
                   <p className="text-xs text-gray-500 font-medium">Service provider execution info</p>
                 </div>
               </div>
-              <span className={`text-xs px-2.5 py-1 rounded-lg font-semibold ${vendor._id ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                {isReleasedSlot ? 'Released' : (vendorAssignmentPending ? 'Pending Payment' : (vendor._id ? 'Assigned' : 'Unassigned'))}
+              <span className={`text-xs px-2.5 py-1 rounded-lg font-semibold ${vendor._id ? (normalizedStatus === 'CANCELLED' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-700') : 'bg-gray-100 text-gray-700'}`}>
+                {vendor._id
+                  ? (normalizedStatus === 'CANCELLED'
+                    ? (isReleasedSlot ? 'Released (Assigned Partner)' : 'Cancelled (Assigned Partner)')
+                    : (vendorAssignmentPending ? 'Pending Payment' : 'Assigned'))
+                  : (isReleasedSlot ? 'Released (No Partner)' : 'Unassigned')}
               </span>
             </div>
 
@@ -396,7 +400,15 @@ const BookingDetails = () => {
                   </p>
                 </div>
               </div>
-              {vendorAssignmentPending && (
+              {normalizedStatus === 'CANCELLED' && (
+                <div className="p-3.5 mt-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2.5">
+                  <FiAlertCircle className="w-4 h-4 flex-shrink-0 text-amber-600" />
+                  <span>
+                    Booking was cancelled ({booking.cancellationReason || 'Slot hold released'}). The partner details assigned at the time of booking are preserved above.
+                  </span>
+                </div>
+              )}
+              {vendorAssignmentPending && normalizedStatus !== 'CANCELLED' && (
                 <div className="p-4 mt-4 bg-amber-50 rounded-xl text-xs text-amber-800 flex items-center gap-2.5">
                   <FiAlertCircle className="w-4 h-4 flex-shrink-0" />
                   <span>Selected vendor: <strong>{vendor.name || vendor.businessName}</strong>. Final assignment will be committed after customer payment.</span>
@@ -408,14 +420,16 @@ const BookingDetails = () => {
                 <div className="p-4 bg-amber-50 rounded-xl text-xs text-amber-800 flex items-center gap-2.5">
                   <FiAlertCircle className="w-4 h-4 flex-shrink-0" />
                   <span>
-                    {isReleasedSlot
+                    {normalizedStatus === 'CANCELLED'
+                      ? 'No partner was assigned to this booking before cancellation.'
+                      : isReleasedSlot
                       ? 'Slot hold was released. This booking has no assigned vendor.'
                       : vendorAssignmentPending
                       ? 'Vendor selection is held temporarily. Assignment will complete after customer payment.'
                       : <>No partner is currently assigned to this booking.
                         {normalizedStatus === 'PENDING_ADMIN'
                           ? ' Zone/service/availability matching found no automatic candidates - assign one manually below.'
-                          : ' Matching engine is broadcasting to all available vendors in the zone.'}</>}
+                          : ' Matching engine is broadcasting to all available vendors in the zone.'}</> }
                   </span>
                 </div>
 
@@ -469,6 +483,45 @@ const BookingDetails = () => {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Rejected / Declined Vendors */}
+            {booking.rejectedVendors && booking.rejectedVendors.length > 0 && (
+              <div className="pt-4 mt-2 border-t border-gray-100">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <FiXCircle className="w-3.5 h-3.5 text-red-400" />
+                  Vendors Who Declined ({booking.rejectedVendors.length})
+                </p>
+                <div className="space-y-2">
+                  {booking.rejectedVendors.map((rv, idx) => (
+                    <div
+                      key={rv._id || idx}
+                      className="flex items-center justify-between px-3 py-2.5 bg-red-50 border border-red-100 rounded-xl"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-red-100 text-red-500 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                          {(rv.name || rv.businessName || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-800">{rv.businessName || rv.name || 'Unknown Vendor'}</p>
+                          {rv.businessName && rv.name && rv.businessName !== rv.name && (
+                            <p className="text-[11px] text-gray-500">{rv.name}</p>
+                          )}
+                          {rv.phone && (
+                            <p className="text-[11px] text-gray-500 flex items-center gap-1">
+                              <FiPhone className="w-2.5 h-2.5" />
+                              {rv.phone}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600 flex-shrink-0">
+                        Declined
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
