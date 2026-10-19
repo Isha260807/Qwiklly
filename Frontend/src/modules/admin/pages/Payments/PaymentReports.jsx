@@ -9,7 +9,8 @@ import {
   FiPercent,
   FiCreditCard,
   FiRefreshCw,
-  FiAlertTriangle
+  FiAlertTriangle,
+  FiTag
 } from 'react-icons/fi';
 import api from '../../../../services/api';
 import toast from 'react-hot-toast';
@@ -315,6 +316,7 @@ const PaymentReports = () => {
           { key: 'customer', header: 'Customer' },
           { key: 'vendor', header: 'Vendor' },
           { key: 'amount', header: 'Amount', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` },
+          { key: 'couponAmount', header: 'Coupon', render: (val) => `₹${(val || 0).toLocaleString('en-IN')}` },
           { key: 'paymentMethod', header: 'Method' },
           {
             key: 'bookingStatus', header: 'Status', render: (val) => (
@@ -348,7 +350,7 @@ const PaymentReports = () => {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6"
     >
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Row 1: Revenue Core */}
         <StatsCard
           title="Total Revenue"
@@ -370,6 +372,13 @@ const PaymentReports = () => {
           subtitle="Tax Liability"
           icon={FiPercent}
           color="purple"
+        />
+        <StatsCard
+          title="Coupon Discounts"
+          value={`₹${(overview?.revenue?.totalCouponDiscount || 0).toLocaleString('en-IN')}`}
+          subtitle="Savings given to customers"
+          icon={FiTag}
+          color="orange"
         />
 
       </div>
@@ -453,6 +462,7 @@ const PaymentReports = () => {
               {activeReport === 'transactions' && (
                 <>
                   <div><span className="text-gray-500">Total Amount:</span> <span className="font-semibold">₹{(reportSummary.totalAmount || 0).toLocaleString('en-IN')}</span></div>
+                  <div><span className="text-gray-500">Coupon Discounts:</span> <span className="font-semibold text-amber-600">₹{(reportSummary.totalCouponAmount || 0).toLocaleString('en-IN')}</span></div>
                 </>
               )}
             </div>

@@ -277,6 +277,7 @@ const sendBookingCompletionEmails = async (booking) => {
     const transporter = createTransporter();
     const user = booking.userId;
     const bookingId = booking.bookingNumber || booking._id;
+    const couponDiscount = Number(booking.couponDiscount ?? booking.coupon?.discountAmount ?? 0);
 
     if (user && user.email) {
       const content = `
@@ -290,7 +291,8 @@ const sendBookingCompletionEmails = async (booking) => {
           <div class="card-title">Official Receipt</div>
           <div class="data-row"><span class="data-label">Invoice No.</span><span class="data-value">INV-${bookingId}</span></div>
           <div class="data-row"><span class="data-label">Completed On</span><span class="data-value">${new Date().toLocaleDateString('en-IN')}</span></div>
-          <div class="data-row"><span class="data-label">Service Charge</span><span class="data-value">₹${booking.basePrice - booking.discount}</span></div>
+          <div class="data-row"><span class="data-label">Service Charge</span><span class="data-value">₹${booking.basePrice}</span></div>
+          ${couponDiscount > 0 ? '<div class="data-row"><span class="data-label">Coupon Discount</span><span class="data-value">₹-' + couponDiscount + '</span></div>' : ''}
           <div class="data-row"><span class="data-label">Visiting Fee</span><span class="data-value">₹${booking.visitingCharges}</span></div>
           <div class="data-row"><span class="data-label">HST (Tax)</span><span class="data-value">₹${booking.tax}</span></div>
           

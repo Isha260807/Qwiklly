@@ -308,12 +308,38 @@ const getTransactionStats = async (req, res) => {
     const stats = revenueStats[0] || { totalRevenue: 0, totalRefunds: 0 };
     const netRevenue = stats.totalRevenue - stats.totalRefunds;
 
+    const couponDiscountStats = await Booking.aggregate([
+      {
+        $match: {
+          $or: [
+            { paymentStatus: 'success' },
+            { status: { $in: ['completed', 'success', 'work_done', 'COMPLETED', 'SUCCESS', 'WORK_DONE', 'paid', 'PAID'] } }
+          ]
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          couponDiscount: {
+            $sum: {
+              $cond: [
+                { $gt: [{ $ifNull: ['$couponDiscount', 0] }, 0] },
+                { $ifNull: ['$couponDiscount', 0] },
+                { $ifNull: ['$coupon.discountAmount', 0] }
+              ]
+            }
+          }
+        }
+      }
+    ]);
+
     res.status(200).json({
       success: true,
       data: {
         totalRevenue: stats.totalRevenue,
         totalRefunds: stats.totalRefunds,
-        netRevenue
+        netRevenue,
+        couponDiscount: couponDiscountStats[0]?.couponDiscount || 0
       }
     });
 

@@ -573,8 +573,8 @@ const Checkout = () => {
         amount: amountToPay,
 
         // Pass Full Breakdown to Backend
-        basePrice: totalOriginalPrice,
-        discount: savings,
+        basePrice: itemTotal,
+        discount: couponDiscount,
         tax: taxesAndFee,
         visitationFee: finalVisitedFee,
 
@@ -843,8 +843,8 @@ const Checkout = () => {
         paymentMethod: amountToPay === 0 ? 'plan_benefit' : 'online',
         useWalletPayment: Boolean(useWallet && amountToPay > 0),
         amount: amountToPay,
-        basePrice: totalOriginalPrice,
-        discount: savings,
+        basePrice: itemTotal,
+        discount: couponDiscount,
         tax: taxesAndFee,
         visitationFee: finalVisitedFee,
         couponCode: appliedCoupon?.code || null,
@@ -1112,14 +1112,14 @@ const Checkout = () => {
   };
 
   const itemTotal = cartItems.reduce((sum, item) => sum + calculateItemPrice(item), 0);
-  // Calculate savings including Plan Savings
+  // Keep the current service price as the checkout item total. The original list price is used only for the special free-plan breakdown below.
   const totalOriginalPrice = cartItems.reduce((sum, item) => {
     const original = (item.originalPrice || item.unitPrice || (item.price / (item.serviceCount || 1))) * (item.serviceCount || 1);
     // If priced 0, original is huge saving
     return sum + original;
   }, 0);
 
-  const planSavings = totalOriginalPrice - itemTotal;
+
   const taxableAmount = Math.max(0, itemTotal - couponDiscount);
   const taxesAndFee = itemTotal === 0 ? 0 : Math.round((itemTotal * gstPercentage) / 100);
   const finalVisitedFee = itemTotal === 0 ? 0 : visitedFee;
@@ -1127,6 +1127,7 @@ const Checkout = () => {
 
   const totalAmount = itemTotal === 0 ? 0 : (taxableAmount + taxesAndFee + finalVisitedFee + finalInstantFee);
   const amountToPay = totalAmount;
+  const savings = couponDiscount;
   const walletApplicableAmount = Math.min(walletBalance, amountToPay);
   const onlinePayableAmount = Math.max(0, amountToPay - (useWallet ? walletApplicableAmount : 0));
 
@@ -1134,8 +1135,7 @@ const Checkout = () => {
   const displayTax = totalAmount === 0 ? Math.round((totalOriginalPrice * gstPercentage) / 100) : taxesAndFee;
   const displayFee = totalAmount === 0 ? visitedFee : finalVisitedFee;
   const displayInstantFee = totalAmount === 0 ? (bookingType === 'instant' ? instantBookingCharges : 0) : finalInstantFee;
-  const displaySavings = totalAmount === 0 ? (totalOriginalPrice + displayTax + displayFee + displayInstantFee) : (planSavings + couponDiscount);
-  const savings = displaySavings;
+
   // Every cart item contributes to the vendor's occupancy. Duration-priced
   // items use the selected duration; fixed-price items use the admin-configured
   // estimated execution time. No buffer is added here.
@@ -1631,21 +1631,13 @@ const Checkout = () => {
           </h3>
 
           <div className="space-y-3">
-            {/* Original Price (before plan) */}
+            {/* Current service price */}
             <div className="flex justify-between items-center">
               <span className="text-sm text-slate-600">Item Total</span>
               <span className="text-sm font-medium text-slate-900">
-                ₹{totalOriginalPrice.toLocaleString('en-IN')}
+                ₹{itemTotal.toLocaleString('en-IN')}
               </span>
             </div>
-
-            {/* Plan Discount Line */}
-            {planSavings > 0 && (
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-green-600">Plan Discount</span>
-                <span className="text-sm font-medium text-green-600">-₹{planSavings.toLocaleString('en-IN')}</span>
-              </div>
-            )}
 
             {/* Coupon Discount Line */}
             {couponDiscount > 0 && appliedCoupon && (

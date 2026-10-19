@@ -1398,7 +1398,18 @@ const completeSelfJob = async (req, res) => {
     // STEP 1: ORIGINAL SERVICE ONLY (No extra services or parts)
     // ═══════════════════════════════════════════
     const originalBase = Number(booking.basePrice) || (Number(booking.finalAmount) ? Number(booking.finalAmount) / (1 + serviceGstPct / 100) : 0);
-    const originalGST = parseFloat(((originalBase * serviceGstPct) / 100).toFixed(2));
+    const bookingTax = Number(booking.tax);
+    const originalGST = booking.paymentMethod === 'plan_benefit'
+      ? 0
+      : (bookingTax > 0
+        ? parseFloat(bookingTax.toFixed(2))
+        : parseFloat(((originalBase * serviceGstPct) / 100).toFixed(2)));
+    const couponDiscount = booking.paymentMethod === 'plan_benefit'
+      ? 0
+      : Math.max(0, Number(booking.couponDiscount ?? booking.coupon?.discountAmount ?? 0));
+    const instantBookingCharges = booking.paymentMethod === 'plan_benefit'
+      ? 0
+      : Math.max(0, Number(booking.instantBookingCharges) || 0);
     const visitingCharges = Number(booking.visitingCharges) || 0;
 
     const totalServiceBase = parseFloat(originalBase.toFixed(2));
@@ -1408,7 +1419,7 @@ const completeSelfJob = async (req, res) => {
     const partsGST = 0;
     const totalGST = originalGST;
 
-    const grandTotal = booking.finalAmount || parseFloat((totalServiceBase + totalGST + visitingCharges).toFixed(2));
+    const grandTotal = booking.finalAmount || parseFloat((totalServiceBase + totalGST + visitingCharges + instantBookingCharges - couponDiscount).toFixed(2));
 
     // ═══════════════════════════════════════════
     // STEP 2: REVENUE SPLIT (Vendor % on service base)
@@ -1447,6 +1458,8 @@ const completeSelfJob = async (req, res) => {
       vendorServiceBase: 0,
       totalServiceBase,
       totalPartsBase: 0,
+      couponDiscount,
+      instantBookingCharges,
       visitingCharges,
 
       // GST totals

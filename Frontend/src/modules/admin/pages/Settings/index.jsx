@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiClock, FiCheck, FiSlash, FiCalendar, FiGift, FiCreditCard } from 'react-icons/fi';
+import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiClock, FiCheck, FiSlash, FiCalendar, FiGift, FiCreditCard, FiEye, FiEyeOff } from 'react-icons/fi';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus } from '../../services/settingsService';
 import { ADMIN_PERMISSION_OPTIONS, SETTINGS_PERMISSION_OPTIONS } from '../../../../components/auth/adminAccess';
 import ZoneManagement from '../Zones';
@@ -89,6 +89,7 @@ const AdminSettings = () => {
   // Admin Management State
   const [admins, setAdmins] = useState([]);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [newAdmin, setNewAdmin] = useState({
     name: '',
     email: '',
@@ -516,6 +517,7 @@ const AdminSettings = () => {
         toast.success('Admin created successfully');
       }
       setNewAdmin({ name: '', email: '', password: '', role: 'sub_admin', permissions: [] });
+      setShowAdminPassword(false);
       setShowAddAdmin(false);
       loadAdmins();
     } catch (error) {
@@ -534,6 +536,7 @@ const AdminSettings = () => {
       password: '',
       permissions: Array.isArray(admin.permissions) ? admin.permissions : []
     });
+    setShowAdminPassword(false);
     setShowAddAdmin(true);
   };
 
@@ -1127,7 +1130,7 @@ const AdminSettings = () => {
                       <p className="text-sm text-gray-500">Total {admins.length} administrators found</p>
                     </div>
                   </div>
-                  <button onClick={() => { setNewAdmin({ name: '', email: '', password: '', role: 'sub_admin', permissions: [] }); setShowAddAdmin(!showAddAdmin); }}
+                  <button onClick={() => { setNewAdmin({ name: '', email: '', password: '', role: 'sub_admin', permissions: [] }); setShowAdminPassword(false); setShowAddAdmin(!showAddAdmin); }}
                     className={`px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg transition-all ${showAddAdmin ? 'bg-gray-100 text-gray-600' : 'bg-amber-600 text-white hover:bg-amber-700 shadow-amber-100'}`}>
                     {showAddAdmin ? <FiX className="w-4 h-4" /> : <FiPlus className="w-4 h-4" />}
                     {showAddAdmin ? 'Cancel' : 'Add New Admin'}
@@ -1155,8 +1158,23 @@ const AdminSettings = () => {
                             className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200" />
                           <input type="email" placeholder="Email Address" value={newAdmin.email} onChange={e => setNewAdmin(p => ({ ...p, email: e.target.value }))}
                             className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200" />
-                          <input type="password" placeholder={newAdmin.id ? "Password (leave blank to keep)" : "Password"} value={newAdmin.password} onChange={e => setNewAdmin(p => ({ ...p, password: e.target.value }))}
-                            className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200" />
+                          <div className="relative">
+                            <input
+                              type={showAdminPassword ? "text" : "password"}
+                              placeholder={newAdmin.id ? "Password (leave blank to keep)" : "Password"}
+                              value={newAdmin.password}
+                              onChange={e => setNewAdmin(p => ({ ...p, password: e.target.value }))}
+                              className="w-full px-4 py-2.5 pr-10 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowAdminPassword(!showAdminPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
+                              aria-label={showAdminPassword ? "Hide password" : "Show password"}
+                            >
+                              {showAdminPassword ? <FiEyeOff className="w-4 h-4" /> : <FiEye className="w-4 h-4" />}
+                            </button>
+                          </div>
 
                           {/* Role Selection */}
                           <select value={newAdmin.role} onChange={e => setNewAdmin(p => ({

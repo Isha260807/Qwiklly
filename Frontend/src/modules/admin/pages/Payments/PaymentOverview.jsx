@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   FiSearch, FiFilter, FiDownload, FiDollarSign, FiTrendingUp,
   FiTrendingDown, FiAlertCircle, FiCheckCircle, FiClock, FiXCircle,
-  FiRefreshCw, FiCreditCard, FiUser, FiBriefcase
+  FiRefreshCw, FiCreditCard, FiUser, FiBriefcase, FiTag
 } from 'react-icons/fi';
 import { adminTransactionService } from '../../../../services/adminTransactionService';
 import toast from 'react-hot-toast';
@@ -13,7 +13,8 @@ const PaymentOverview = () => {
   const [stats, setStats] = useState({
     totalRevenue: 0,
     totalRefunds: 0,
-    netRevenue: 0
+    netRevenue: 0,
+    couponDiscount: 0
   });
 
   const [transactions, setTransactions] = useState([]);
@@ -170,7 +171,7 @@ const PaymentOverview = () => {
       className="space-y-4"
     >
       {/* KPI Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Total Revenue */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
@@ -204,6 +205,17 @@ const PaymentOverview = () => {
           </div>
           <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
             <FiTrendingUp className="w-5 h-5" />
+          </div>
+        </div>
+        {/* Coupon Discounts */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+          <div>
+            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider">Coupon Discounts</p>
+            <h3 className="text-2xl font-extrabold text-amber-600 mt-1">{formatCurrency(stats.couponDiscount)}</h3>
+            <p className="text-[10px] text-gray-400 mt-0.5">Savings given to customers</p>
+          </div>
+          <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
+            <FiTag className="w-5 h-5" />
           </div>
         </div>
       </div>

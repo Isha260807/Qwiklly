@@ -73,8 +73,16 @@ const InvoiceModal = ({ isOpen, onClose, booking, companySettings }) => {
   const tax = Number(booking.tax || 0);
   const visitingCharges = Number(booking.visitingCharges || 0);
   const instantCharges = Number(booking.instantBookingCharges || 0);
-  const discount = Number(booking.discount || booking.couponDiscount || 0);
-  const grandTotal = Number(booking.finalAmount || booking.userPayableAmount || (basePrice + tax + visitingCharges + instantCharges - discount));
+  const couponDiscount = Number(
+    booking.couponDiscount ?? booking.coupon?.discountAmount ?? 0
+  );
+  const gstPercentage = Number(
+    booking.gstPercentage ?? (basePrice > 0 ? ((tax / basePrice) * 100).toFixed(2) : 0)
+  );
+  const grandTotal = Number(
+    booking.finalAmount || booking.userPayableAmount ||
+    (basePrice + tax + visitingCharges + instantCharges - couponDiscount)
+  );
 
   const handleDownloadPdf = async () => {
     if (isDownloading) return;
@@ -189,10 +197,10 @@ const InvoiceModal = ({ isOpen, onClose, booking, companySettings }) => {
 
       addSectionTitle('Payment Summary');
       addAmountRow('Taxable Base Amount', basePrice);
-      if (tax > 0) addAmountRow(`GST (${booking.gstPercentage || 18}%)`, tax);
+      if (tax > 0) addAmountRow(`GST (${gstPercentage}%)`, tax);
       if (visitingCharges > 0) addAmountRow('Visiting / Convenience Fee', visitingCharges);
       if (instantCharges > 0) addAmountRow('Instant Booking Fee', instantCharges);
-      if (discount > 0) addAmountRow('Discount / Coupon', -discount, [5, 150, 105]);
+      if (couponDiscount > 0) addAmountRow('Coupon Discount', -couponDiscount, [5, 150, 105]);
       ensureSpace(14);
       pdf.setDrawColor(203, 213, 225);
       pdf.line(margin, y - 2, right, y - 2);
@@ -387,7 +395,7 @@ const InvoiceModal = ({ isOpen, onClose, booking, companySettings }) => {
             
             {tax > 0 && (
               <div className="flex justify-between text-slate-600 text-[11px] sm:text-xs">
-                <span>GST ({booking.gstPercentage || 18}%):</span>
+                <span>GST ({gstPercentage}%):</span>
                 <span className="font-semibold text-slate-800">₹{tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
             )}
@@ -406,10 +414,10 @@ const InvoiceModal = ({ isOpen, onClose, booking, companySettings }) => {
               </div>
             )}
 
-            {discount > 0 && (
+            {couponDiscount > 0 && (
               <div className="flex justify-between text-emerald-600 font-semibold text-[11px] sm:text-xs">
-                <span>Discount / Coupon:</span>
-                <span>-₹{discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span>Coupon Discount:</span>
+                <span>-₹{couponDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
             )}
 

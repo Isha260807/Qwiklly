@@ -617,7 +617,9 @@ export default function BookingDetails() {
   // The booking fields are the canonical customer-facing amounts; the bill is
   // only used as a fallback for older records that do not have them.
   const paymentBase = Number(booking?.basePrice || bill?.originalServiceBase || 0);
-  const paymentDiscount = Number(booking?.discount || 0);
+  const paymentDiscount = Number(
+    booking?.couponDiscount ?? booking?.coupon?.discountAmount ?? 0
+  );
   const paymentTax = Number(booking?.tax ?? (bill ? totalGST : 0)) || 0;
   const paymentVisitingCharges = Number(
     booking?.visitingCharges || booking?.visitationFee || bill?.visitingCharges || 0
@@ -867,7 +869,7 @@ export default function BookingDetails() {
 
                 {!isPlanBenefit && paymentDiscount > 0 && (
                   <div className="flex justify-between text-gray-600">
-                    <span className="text-green-600 font-medium">Discount</span>
+                    <span className="text-green-600 font-medium">Coupon Discount</span>
                     <span className="font-medium text-green-600">-&#8377;{paymentDiscount.toFixed(2)}</span>
                   </div>
                 )}

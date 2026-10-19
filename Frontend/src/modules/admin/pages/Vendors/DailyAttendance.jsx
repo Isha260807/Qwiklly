@@ -16,7 +16,7 @@ import { toast } from 'react-hot-toast';
 import CardShell from '../UserCategories/components/CardShell';
 import adminVendorService from '../../../../services/adminVendorService';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 const getDateKey = (offset = 0) => {
   const date = new Date();
@@ -195,7 +195,6 @@ const DailyAttendance = () => {
               Yesterday
             </button>
             <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-              <FiCalendar className="h-4 w-4 text-blue-600" />
               <input
                 type="date"
                 value={dateKey}
@@ -314,10 +313,14 @@ const DailyAttendance = () => {
                       <tr key={vendor._id} className="transition hover:bg-blue-50/40">
                         <td className="px-4 py-4">
                           <div className="font-bold text-gray-900">
-                            {vendor.businessName || vendor.name || 'Unnamed vendor'}
+                            {vendor.name || vendor.businessName || 'Unnamed vendor'}
                           </div>
                           <div className="mt-1 text-xs text-gray-500">
-                            {vendor.name || '—'} {vendor.phone ? '· ' + vendor.phone : ''}
+                            {vendor.businessName && vendor.businessName !== vendor.name ? (
+                              <span>{vendor.businessName} {vendor.phone ? '· ' + vendor.phone : ''}</span>
+                            ) : (
+                              <span>{vendor.phone || '—'}</span>
+                            )}
                           </div>
                         </td>
                         <td className="px-4 py-4">

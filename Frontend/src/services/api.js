@@ -98,6 +98,20 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // Skip token refresh logic for auth endpoints where 401 indicates invalid credentials
+    const isAuthEndpoint = 
+      originalRequest?.url?.includes('/auth/login') ||
+      originalRequest?.url?.includes('/auth/register') ||
+      originalRequest?.url?.includes('/auth/verify-login') ||
+      originalRequest?.url?.includes('/auth/verify-otp') ||
+      originalRequest?.url?.includes('/auth/send-otp') ||
+      originalRequest?.url?.includes('/auth/refresh-token') ||
+      originalRequest?.url?.includes('/auth/validate-referral');
+
+    if (isAuthEndpoint) {
+      return Promise.reject(error);
+    }
+
     // If error is 401 and we haven't tried to refresh yet
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
@@ -121,7 +135,9 @@ api.interceptors.response.use(
       const refreshToken = sessionStorage.getItem(refresh) || localStorage.getItem(refresh);
 
       if (!refreshToken) {
-        // No refresh token, logout
+        // No refresh token, logout and reset refresh state
+        processQueue(error, null);
+        isRefreshing = false;
         handleLogout(role);
         return Promise.reject(error);
       }

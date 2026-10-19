@@ -197,11 +197,28 @@ exports.getVendorReport = async (req, res) => {
       growthRate = 100;
     }
 
-    const bookingCounts = await Booking.aggregate([
+    const bookingStats = await Booking.aggregate([
       { $match: { vendorId: { $ne: null } } },
-      { $group: { _id: '$vendorId', bookingsCount: { $sum: 1 } } }
+      {
+        $group: {
+          _id: '$vendorId',
+          bookingsCount: { $sum: 1 },
+          completedCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+          },
+          grossRevenue: {
+            $sum: {
+              $cond: [
+                { $eq: ['$status', 'completed'] },
+                { $ifNull: ['$finalAmount', 0] },
+                0
+              ]
+            }
+          }
+        }
+      }
     ]);
-    const bookingCountByVendor = new Map(bookingCounts.map((item) => [String(item._id), item.bookingsCount]));
+    const bookingStatsByVendor = new Map(bookingStats.map((item) => [String(item._id), item]));
 
     // Salary-based vendor earnings replace the old booking revenue/share metric.
     const salaryByVendor = await VendorSalaryEarning.aggregate([
@@ -242,7 +259,7 @@ exports.getVendorReport = async (req, res) => {
       { $unwind: { path: '$vendor', preserveNullAndEmptyArrays: true } },
       {
         $project: {
-          businessName: { $ifNull: ['$vendor.businessName', '$vendor.name', 'Partner'] },
+          businessName: { $ifNull: ['$vendor.businessName', { $ifNull: ['$vendor.name', 'Partner'] }] },
           name: { $ifNull: ['$vendor.name', 'Partner'] },
           phone: { $ifNull: ['$vendor.phone', ''] },
           service: { $ifNull: ['$vendor.service', []] },
@@ -257,13 +274,53 @@ exports.getVendorReport = async (req, res) => {
       }
     ]).then((items) => items.map((item) => ({
       ...item,
-      bookingsCount: bookingCountByVendor.get(String(item._id)) || 0
+      bookingsCount: (bookingStatsByVendor.get(String(item._id)) || {}).bookingsCount || 0
     })));
 
-    const topVendors = salaryByVendor.slice(0, 10).map((item) => ({
-      ...item,
-      totalRevenue: item.totalSalaryEarning || 0
-    }));
+    // Build topVendors from all vendors who have bookings, merging salary data
+    const salaryByVendorMap = new Map(salaryByVendor.map((item) => [String(item._id), item]));
+    
+    // Get vendor details for vendors that have bookings but no salary records
+    const allVendorIdsWithBookings = [...bookingStatsByVendor.keys()];
+    const vendorsWithoutSalary = allVendorIdsWithBookings.filter((id) => !salaryByVendorMap.has(id));
+    
+    let extraVendorDetails = [];
+    if (vendorsWithoutSalary.length > 0) {
+      extraVendorDetails = await Vendor.find({
+        _id: { $in: vendorsWithoutSalary }
+      }).select('businessName name phone service').lean();
+    }
+    
+    // Merge all vendors: salary-based + booking-only
+    const allVendorEntries = [
+      ...salaryByVendor.map((item) => ({
+        _id: item._id,
+        businessName: item.businessName,
+        name: item.name,
+        phone: item.phone,
+        bookingsCount: (bookingStatsByVendor.get(String(item._id)) || {}).bookingsCount || 0,
+        totalRevenue: (bookingStatsByVendor.get(String(item._id)) || {}).grossRevenue || 0,
+        completedBookings: (bookingStatsByVendor.get(String(item._id)) || {}).completedCount || 0,
+        salaryEarning: item.totalSalaryEarning || 0
+      })),
+      ...extraVendorDetails.map((v) => {
+        const stats = bookingStatsByVendor.get(String(v._id)) || {};
+        return {
+          _id: v._id,
+          businessName: v.businessName || v.name || 'Partner',
+          name: v.name || 'Partner',
+          phone: v.phone || '',
+          bookingsCount: stats.bookingsCount || 0,
+          totalRevenue: stats.grossRevenue || 0,
+          completedBookings: stats.completedCount || 0,
+          salaryEarning: 0
+        };
+      })
+    ];
+    
+    // Sort by gross revenue descending and take top 10
+    allVendorEntries.sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0));
+    const topVendors = allVendorEntries.slice(0, 10);
     const salaryTotals = salaryByVendor.reduce((totals, item) => ({
       totalEarning: totals.totalEarning + (item.totalSalaryEarning || 0),
       pendingEarning: totals.pendingEarning + (item.pendingSalaryEarning || 0),
@@ -455,7 +512,7 @@ exports.getCustomerReport = async (req, res) => {
         $group: {
           _id: '$userId',
           bookingCount: { $sum: 1 },
-          totalSpent: { $sum: { $ifNull: ['$finalAmount', '$basePrice', 0] } }
+          totalSpent: { $sum: { $ifNull: ['$finalAmount', { $ifNull: ['$basePrice', 0] }] } }
         }
       },
       { $sort: { totalSpent: -1, bookingCount: -1 } },

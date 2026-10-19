@@ -375,7 +375,18 @@ const BillingPage = () => {
     // Original booking base (service)
     const isPlanBooking = booking.paymentMethod === 'plan_benefit';
     const originalBase = isPlanBooking ? 0 : (booking.basePrice || 0);
-    const originalServiceGST = isPlanBooking ? 0 : parseFloat(((originalBase * serviceGstPct) / 100).toFixed(2));
+    const bookingTax = Number(booking.tax);
+    const originalServiceGST = isPlanBooking
+      ? 0
+      : (bookingTax > 0
+        ? parseFloat(bookingTax.toFixed(2))
+        : parseFloat(((originalBase * serviceGstPct) / 100).toFixed(2)));
+    const couponDiscount = isPlanBooking
+      ? 0
+      : Math.max(0, Number(booking.couponDiscount ?? booking.coupon?.discountAmount ?? 0));
+    const instantBookingCharges = isPlanBooking
+      ? 0
+      : Math.max(0, Number(booking.instantBookingCharges) || 0);
 
     // Extra Services: price is base, GST calculated separately
     let extraServiceBase = 0;
@@ -416,7 +427,7 @@ const BillingPage = () => {
     const totalPartsBase = partsBase + customBase;
     const totalPartsGST = partsGST + customGST;
 
-    const finalBillAmount = parseFloat(((totalServiceBase + totalServiceGST) + (totalPartsBase + totalPartsGST) + visitingCharges + finalTransportCharges).toFixed(2));
+    const finalBillAmount = parseFloat(((totalServiceBase + totalServiceGST) + (totalPartsBase + totalPartsGST) + visitingCharges + instantBookingCharges + finalTransportCharges - couponDiscount).toFixed(2));
 
     return {
       originalBase,
@@ -427,6 +438,8 @@ const BillingPage = () => {
       totalServiceGST,
       totalPartsGST,
       totalGST: parseFloat((totalServiceGST + totalPartsGST).toFixed(2)),
+      couponDiscount,
+      instantBookingCharges,
       visitingCharges,
       transportCharges: finalTransportCharges,
       finalBillAmount,
@@ -1127,6 +1140,20 @@ const BillingPage = () => {
                         <span>₹{(calculations.partsBase + calculations.totalPartsGST).toFixed(2)}</span>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {calculations.couponDiscount > 0 && (
+                  <div className="flex justify-between text-sm pl-2 font-bold text-green-700">
+                    <span>Coupon Discount</span>
+                    <span>-₹{calculations.couponDiscount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {calculations.instantBookingCharges > 0 && (
+                  <div className="flex justify-between text-sm pl-2 font-bold text-gray-800">
+                    <span>Instant Booking Fee</span>
+                    <span>₹{calculations.instantBookingCharges.toFixed(2)}</span>
                   </div>
                 )}
 

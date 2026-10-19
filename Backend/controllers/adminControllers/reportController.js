@@ -7,6 +7,16 @@ const PlatformEarning = require('../../models/PlatformEarning');
 const VendorPayrollPayment = require('../../models/VendorPayrollPayment');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 
+const PAYMENT_SUMMARY_BOOKING_STATUSES = [
+  BOOKING_STATUS.COMPLETED,
+  'completed',
+  'COMPLETED',
+  'work_done',
+  'WORK_DONE',
+  'paid',
+  'PAID'
+];
+
 /**
  * Get Financial Dashboard Overview
  * Quick stats for the top cards
@@ -82,6 +92,36 @@ const getFinanceOverview = async (req, res) => {
         revenueStats.count = fb.count;
       }
     }
+
+    // Coupon discounts are stored on bookings, not PlatformEarning records.
+    // Aggregate them from the same completed booking population used by the
+    // finance summary so customer savings are visible in payment reporting.
+    const couponBookingMatch = { status: { $in: PAYMENT_SUMMARY_BOOKING_STATUSES } };
+    if (startDate && endDate) {
+      couponBookingMatch.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999))
+      };
+    }
+
+    const couponDiscountStats = await Booking.aggregate([
+      { $match: couponBookingMatch },
+      {
+        $group: {
+          _id: null,
+          totalCouponDiscount: {
+            $sum: {
+              $cond: [
+                { $gt: [{ $ifNull: ['$couponDiscount', 0] }, 0] },
+                { $ifNull: ['$couponDiscount', 0] },
+                { $ifNull: ['$coupon.discountAmount', 0] }
+              ]
+            }
+          }
+        }
+      }
+    ]);
+    revenueStats.totalCouponDiscount = couponDiscountStats[0]?.totalCouponDiscount || 0;
 
     const payrollMatch = { status: 'paid' };
     if (startDate && endDate) {
@@ -191,7 +231,7 @@ const getPaymentTransactions = async (req, res) => {
       .populate('userId', 'name phone')
       .populate('vendorId', 'businessName phone')
       .populate('serviceId', 'title')
-      .select('bookingNumber finalAmount paymentMethod paymentStatus status createdAt completedAt razorpayPaymentId vendorBillId')
+      .select('bookingNumber finalAmount couponDiscount coupon paymentMethod paymentStatus status createdAt completedAt razorpayPaymentId vendorBillId')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -214,6 +254,7 @@ const getPaymentTransactions = async (req, res) => {
         customer: b.userId?.name || 'Guest',
         vendor: b.vendorId?.businessName || 'Unassigned',
         amount: bill?.grandTotal || b.finalAmount || 0,
+        couponAmount: Math.max(Number(b.couponDiscount || 0), Number(b.coupon?.discountAmount || 0)),
 
         tax: bill?.totalGST || 0,
         paymentMethod: b.paymentMethod || 'N/A',
@@ -227,8 +268,9 @@ const getPaymentTransactions = async (req, res) => {
     const totalsResult = reportData.reduce((acc, row) => {
       acc.totalAmount += row.amount;
       acc.totalTax += row.tax;
+      acc.totalCouponAmount += row.couponAmount;
       return acc;
-    }, { totalAmount: 0, totalTax: 0 });
+    }, { totalAmount: 0, totalTax: 0, totalCouponAmount: 0 });
 
     if (format === 'csv') {
       return sendCSV(res, reportData, 'payment_transactions');

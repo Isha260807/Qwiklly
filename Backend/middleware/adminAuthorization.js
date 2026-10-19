@@ -32,6 +32,13 @@ const PATH_PERMISSIONS = [
   ['/zones', ADMIN_PERMISSIONS.ZONES],
   ['/payments', ADMIN_PERMISSIONS.PAYMENTS],
   ['/transactions', ADMIN_PERMISSIONS.TRANSACTIONS],
+  // Analytics pages are exposed from the Users and Vendors modules. Keep
+  // their report APIs aligned with the permission used to open those pages;
+  // otherwise a sub-admin can see the menu item but receives a 403 from the
+  // report endpoint unless the unrelated global Reports permission is also
+  // assigned.
+  ['/reports/customers', ADMIN_PERMISSIONS.USERS],
+  ['/reports/vendors', ADMIN_PERMISSIONS.VENDORS],
   ['/reports', ADMIN_PERMISSIONS.REPORTS],
   ['/reviews', ADMIN_PERMISSIONS.REVIEWS],
   ['/plans', ADMIN_PERMISSIONS.PLANS],

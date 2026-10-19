@@ -442,6 +442,7 @@ const BookingConfirmation = () => {
   const totalPayable = Number(paymentBreakdown?.totalAmount ?? booking.finalAmount ?? 0);
   const walletApplicableAmount = breakdownReady ? Number(paymentBreakdown.walletAmount || 0) : 0;
   const onlinePayableAmount = breakdownReady ? Number(paymentBreakdown.onlineAmount || 0) : 0;
+  const couponDiscount = Number(booking?.couponDiscount ?? booking?.coupon?.discountAmount ?? 0);
   return (
     <div className="min-h-screen pb-20 relative bg-white">
       {/* Refined Brand Mesh Gradient Background */}
@@ -738,10 +739,10 @@ const BookingConfirmation = () => {
               </div>
 
               {/* Discount */}
-              {booking.paymentMethod !== 'plan_benefit' && booking.discount > 0 && (
+              {booking.paymentMethod !== 'plan_benefit' && couponDiscount > 0 && (
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-green-600 font-medium">Discount</span>
-                  <span className="font-medium text-green-600">-₹{booking.discount.toLocaleString('en-IN')}</span>
+                  <span className="text-green-600 font-medium">Coupon Discount</span>
+                  <span className="font-medium text-green-600">-₹{couponDiscount.toLocaleString('en-IN')}</span>
                 </div>
               )}
 

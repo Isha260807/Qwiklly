@@ -287,8 +287,13 @@ const VendorAnalytics = () => {
                 className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition space-y-2"
               >
                 <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-sm text-gray-900 truncate">{v.businessName || v.name}</h4>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  <div className="min-w-0 flex-1 mr-2">
+                    <h4 className="font-bold text-sm text-gray-900 truncate">{v.name || v.businessName || 'Unnamed vendor'}</h4>
+                    {v.businessName && v.businessName !== v.name && (
+                      <p className="text-xs text-gray-500 truncate mt-0.5">{v.businessName}</p>
+                    )}
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
                     v.approvalStatus === 'approved' ? 'bg-green-100 text-green-700' :
                     v.approvalStatus === 'rejected' ? 'bg-red-100 text-red-700' :
                     'bg-yellow-100 text-yellow-700'

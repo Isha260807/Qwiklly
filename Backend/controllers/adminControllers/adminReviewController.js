@@ -66,8 +66,45 @@ exports.getAllReviews = async (req, res) => {
     if (userId) query.userId = userId;
 
     if (search) {
+      const searchRegex = new RegExp(search, 'i');
+
+      const User = require('../../models/User');
+      const Vendor = require('../../models/Vendor');
+      const Service = require('../../models/Service');
+
+      const [matchingUserIds, matchingVendorIds, matchingServiceIds, matchingBookingIds] = await Promise.all([
+        User.find({
+          $or: [
+            { name: searchRegex },
+            { phone: searchRegex },
+            { email: searchRegex }
+          ]
+        }).distinct('_id'),
+        Vendor.find({
+          $or: [
+            { businessName: searchRegex },
+            { name: searchRegex },
+            { phone: searchRegex }
+          ]
+        }).distinct('_id'),
+        Service.find({
+          title: searchRegex
+        }).distinct('_id'),
+        Booking.find({
+          $or: [
+            { bookingNumber: searchRegex },
+            { customerName: searchRegex },
+            { serviceName: searchRegex }
+          ]
+        }).distinct('_id')
+      ]);
+
       query.$or = [
-        { review: { $regex: search, $options: 'i' } }
+        { review: searchRegex },
+        { userId: { $in: matchingUserIds } },
+        { vendorId: { $in: matchingVendorIds } },
+        { serviceId: { $in: matchingServiceIds } },
+        { bookingId: { $in: matchingBookingIds } }
       ];
     }
 

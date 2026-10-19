@@ -85,6 +85,10 @@ const vendorBillSchema = new mongoose.Schema({
   // Visiting Charges
   visitingCharges: { type: Number, default: 0 },
 
+  // Original booking payment adjustments
+  couponDiscount: { type: Number, default: 0 },
+  instantBookingCharges: { type: Number, default: 0 },
+
   // Transport Charges
   transportCharges: { type: Number, default: 0 },
 

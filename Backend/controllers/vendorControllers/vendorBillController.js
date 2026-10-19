@@ -55,7 +55,16 @@ const createOrUpdateBill = async (req, res) => {
     const isPlanBooking = booking.paymentMethod === 'plan_benefit';
     const originalServiceBaseForBill = isPlanBooking ? 0 : (booking.basePrice || 0);
     const originalServiceBaseForEarnings = booking.basePrice || 0;
-    const originalGST = isPlanBooking ? 0 : parseFloat(((originalServiceBaseForBill * serviceGstPct) / 100).toFixed(2));
+    const bookingTax = Number(booking.tax);
+    const originalGST = isPlanBooking
+      ? 0
+      : (bookingTax > 0
+        ? parseFloat(bookingTax.toFixed(2))
+        : parseFloat(((originalServiceBaseForBill * serviceGstPct) / 100).toFixed(2)));
+    const couponDiscount = isPlanBooking
+      ? 0
+      : Math.max(0, Number(booking.couponDiscount ?? booking.coupon?.discountAmount ?? 0));
+    const instantBookingCharges = isPlanBooking ? 0 : Math.max(0, Number(booking.instantBookingCharges) || 0);
     const visitingCharges = Number(booking.visitingCharges) || 0;
 
     // ═══════════════════════════════════════
@@ -180,7 +189,7 @@ const createOrUpdateBill = async (req, res) => {
 
     const totalGST = parseFloat((originalGST + vendorServiceGST + partsGST).toFixed(2));
     const finalTransportCharges = Number(transportCharges) || 0;
-    const grandTotal = parseFloat((totalServiceBaseForBill + totalPartsBase + totalGST + visitingCharges + finalTransportCharges).toFixed(2));
+    const grandTotal = parseFloat((totalServiceBaseForBill + totalPartsBase + totalGST + visitingCharges + instantBookingCharges + finalTransportCharges - couponDiscount).toFixed(2));
 
     // ═══════════════════════════════════════
     // 5. REVENUE SPLIT (% applied on BASE only)
@@ -225,6 +234,8 @@ const createOrUpdateBill = async (req, res) => {
       partsGST: parseFloat(partsGST.toFixed(2)),
       totalGST,
       visitingCharges,
+      couponDiscount,
+      instantBookingCharges,
       transportCharges: finalTransportCharges,
       grandTotal,
       payoutConfig: {

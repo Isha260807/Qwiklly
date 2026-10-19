@@ -630,6 +630,7 @@ const BookingDetails = () => {
   // Final Total
   const hasBill = !!bill;
   const finalTotal = bill?.grandTotal || (booking.finalAmount || booking.totalAmount || 0);
+  const couponDiscount = Number(booking.couponDiscount ?? booking.coupon?.discountAmount ?? 0);
 
   // --------------------------------------
 
@@ -1314,6 +1315,12 @@ const BookingDetails = () => {
                             </div>
                           )}
 
+                          {!isPlanBenefit && couponDiscount > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-green-600">Coupon Discount</span>
+                              <span className="font-medium text-green-600">-&#8377;{couponDiscount.toLocaleString('en-IN')}</span>
+                            </div>
+                          )}
                           {/* Transport Charges */}
                           {bill?.transportCharges > 0 && (
                             <div className="mt-2 pt-2 border-t border-gray-100">
@@ -1395,10 +1402,10 @@ const BookingDetails = () => {
                             </div>
                           )}
 
-                          {booking.paymentMethod !== 'plan_benefit' && booking.discount > 0 && (
+                          {booking.paymentMethod !== 'plan_benefit' && couponDiscount > 0 && (
                             <div className="flex justify-between text-sm">
-                              <span className="text-green-600">Discount</span>
-                              <span className="font-medium text-green-600">-₹{booking.discount.toLocaleString('en-IN')}</span>
+                              <span className="text-green-600">Coupon Discount</span>
+                              <span className="font-medium text-green-600">-₹{couponDiscount.toLocaleString('en-IN')}</span>
                             </div>
                           )}
 
