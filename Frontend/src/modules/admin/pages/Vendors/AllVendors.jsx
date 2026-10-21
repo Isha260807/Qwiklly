@@ -73,7 +73,7 @@ const AllVendors = () => {
               ...v,
               currentZoneIds: (data.currentZoneIds || []).map(z => (typeof z === 'object' ? z._id : z)),
               lastLocationSyncAt: data.lastLocationSyncAt || new Date(),
-              isOnline: data.isOnline !== undefined ? Boolean(data.isOnline) : v.isOnline,
+              isOnline: v.isActive !== false && (data.isOnline !== undefined ? Boolean(data.isOnline) : v.isOnline),
               availability: data.availability || v.availability
             };
           }
@@ -111,8 +111,8 @@ const AllVendors = () => {
           businessName: vendor.businessName,
           service: vendor.service,
           approvalStatus: vendor.approvalStatus,
-          isOnline: Boolean(vendor.isOnline),
-          availability: vendor.availability || (vendor.isOnline ? 'AVAILABLE' : 'OFFLINE'),
+          isOnline: vendor.isActive !== false && Boolean(vendor.isOnline),
+          availability: vendor.isActive === false ? 'OFFLINE' : (vendor.availability || (vendor.isOnline ? 'AVAILABLE' : 'OFFLINE')),
           lastSeenAt: vendor.lastSeenAt,
           aadhar: vendor.aadhar?.number,
           pan: vendor.pan?.number,
@@ -275,8 +275,23 @@ const AllVendors = () => {
       const response = await adminVendorService.toggleStatus(vendorId, newStatus);
       if (response.success) {
         setVendors(prev => prev.map(v =>
-          v.id === vendorId ? { ...v, isActive: newStatus } : v
+          v.id === vendorId
+            ? {
+              ...v,
+              isActive: newStatus,
+              isOnline: newStatus ? v.isOnline : false,
+              availability: newStatus ? v.availability : 'OFFLINE'
+            }
+            : v
         ));
+        setSelectedVendor(prev => prev && prev.id === vendorId
+          ? {
+            ...prev,
+            isActive: newStatus,
+            isOnline: newStatus ? prev.isOnline : false,
+            availability: newStatus ? prev.availability : 'OFFLINE'
+          }
+          : prev);
         toast.success(`Vendor ${newStatus ? 'activated' : 'deactivated'} successfully`);
       } else {
         toast.error(response.message || 'Failed to update vendor status');
@@ -738,7 +753,7 @@ const AllVendors = () => {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Live Online Status</label>
                 <div>
-                  {selectedVendor.isOnline ? (
+                  {selectedVendor.isActive !== false && selectedVendor.isOnline ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-[#DCFCE7] text-[#16A34A] border border-[#BBF7D0]">
                       <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse"></span>
                       Currently Online & Available

@@ -16,6 +16,7 @@
     "seed:vendor-bookings": "node scripts/seedVendorBookings.js",
     "seed:vendor-data": "npm run seed:vendors && npm run seed:vendor-bookings",
     "backfill:vendor-zones": "node scripts/backfillVendorZones.js",
+    "migrate:salary-earning-index": "node scripts/fixVendorSalaryEarningIndex.js",
     "upload:category-icons": "node scripts/uploadCategoryImages.js",
     "upload:home-content-images": "node scripts/uploadHomeContentImages.js",
     "update:home-content-images": "node scripts/updateHomeContentImages.js",

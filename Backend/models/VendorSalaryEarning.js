@@ -16,7 +16,8 @@ const vendorSalaryEarningSchema = new mongoose.Schema({
   bookingId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Booking',
-    default: null,
+    // Manual payroll entries do not belong to a booking.
+    default: undefined,
     index: true
   },
   payrollPaymentId: {
@@ -87,6 +88,12 @@ const vendorSalaryEarningSchema = new mongoose.Schema({
 
 vendorSalaryEarningSchema.index({ vendorId: 1, earningDate: -1 });
 vendorSalaryEarningSchema.index({ vendorId: 1, status: 1, earningDate: -1 });
-vendorSalaryEarningSchema.index({ vendorId: 1, bookingId: 1 }, { unique: true, sparse: true });
+vendorSalaryEarningSchema.index(
+  { vendorId: 1, bookingId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { bookingId: { $type: 'objectId' } }
+  }
+);
 
 module.exports = mongoose.model('VendorSalaryEarning', vendorSalaryEarningSchema);

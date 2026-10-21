@@ -34,6 +34,7 @@ import RatingModal from '../../components/booking/RatingModal';
 import PaymentVerificationModal from '../../components/booking/PaymentVerificationModal';
 import HourlyExtraPaymentCard from '../../components/booking/HourlyExtraPaymentCard';
 import { ConfirmDialog } from '../../../../components/common';
+import WorkDoneNote from '../../../../components/common/WorkDoneNote';
 import ReviewCard from '../../components/booking/ReviewCard';
 import InvoiceModal from '../../components/booking/InvoiceModal';
 import NotificationBell from '../../components/common/NotificationBell';
@@ -1200,6 +1201,8 @@ const BookingDetails = () => {
 
               {/* Hourly Service — Extra Time Payment */}
               <HourlyExtraPaymentCard booking={booking} onPaid={loadBooking} />
+
+              <WorkDoneNote booking={booking} className="mb-3" />
 
               {/* Payment Summary */}
               {(['work_done', 'completed'].includes(booking.status?.toLowerCase()) || booking.paymentStatus === 'success' || booking.cashCollected) && (

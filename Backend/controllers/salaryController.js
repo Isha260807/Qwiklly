@@ -468,7 +468,27 @@ const createPayrollPayment = async (req, res) => {
           data: existingPayment
         });
       }
-      return res.status(409).json({ success: false, message: 'Payment for this vendor and period already exists', data: existingPayment });
+
+      // Recover an incomplete attempt that failed before it was marked paid.
+      if (existingPayment.status === 'processing' && !existingPayment.paidAt) {
+        await VendorSalaryEarning.deleteMany({
+          payrollPaymentId: existingPayment._id,
+          type: { $ne: 'booking_earning' }
+        });
+        await VendorSalaryEarning.updateMany(
+          { payrollPaymentId: existingPayment._id, type: 'booking_earning' },
+          {
+            $set: { status: 'accrued' },
+            $unset: { payrollPaymentId: 1 }
+          }
+        );
+        await VendorPayrollPayment.deleteOne({
+          _id: existingPayment._id,
+          status: 'processing'
+        });
+      } else {
+        return res.status(409).json({ success: false, message: 'Payment for this vendor and period already exists', data: existingPayment });
+      }
     }
 
     const bookingEntries = await VendorSalaryEarning.find({
@@ -519,20 +539,29 @@ const createPayrollPayment = async (req, res) => {
       manualEntries.push(['custom', item.amount, item.label, index]);
     });
 
-    for (const [type, amount, label, customIndex] of manualEntries) {
-      if (amount <= 0) continue;
-      const entry = await VendorSalaryEarning.create({
-        vendorId,
-        payrollPaymentId: payment._id,
-        sourceKey: 'payroll:' + payment._id.toString() + ':' + type + (customIndex !== undefined ? ':' + customIndex : ''),
-        type,
-        amount,
-        status: 'paid',
-        earningDate: end,
-        description: label + ' for ' + periodType,
-        metadata: { periodStart: start, periodEnd: end, customField: type === 'custom' }
+    try {
+      for (const [type, amount, label, customIndex] of manualEntries) {
+        if (amount <= 0) continue;
+        const entry = await VendorSalaryEarning.create({
+          vendorId,
+          payrollPaymentId: payment._id,
+          sourceKey: 'payroll:' + payment._id.toString() + ':' + type + (customIndex !== undefined ? ':' + customIndex : ''),
+          type,
+          amount,
+          status: 'paid',
+          earningDate: end,
+          description: label + ' for ' + periodType,
+          metadata: { periodStart: start, periodEnd: end, customField: type === 'custom' }
+        });
+        ledgerEntryIds.push(entry._id);
+      }
+    } catch (error) {
+      await VendorSalaryEarning.deleteMany({ payrollPaymentId: payment._id });
+      await VendorPayrollPayment.deleteOne({
+        _id: payment._id,
+        status: 'processing'
       });
-      ledgerEntryIds.push(entry._id);
+      throw error;
     }
 
     if (bookingEntries.length > 0) {

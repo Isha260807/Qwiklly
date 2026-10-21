@@ -10,6 +10,7 @@ import { paymentService } from '../../../../services/paymentService';
 import { toast } from 'react-hot-toast';
 import { useAppNotifications } from '../../../../hooks/useAppNotifications';
 import LogoLoader from '../../../../components/common/LogoLoader';
+import WorkDoneNote from '../../../../components/common/WorkDoneNote';
 import PaymentVerificationModal from '../../components/booking/PaymentVerificationModal';
 import { toCoordinate, distanceBetweenMeters, buildRouteProgress, hydrateRouteSnapshot, matchRouteProgress, getRemainingPath, formatDistanceMeters, formatRemainingDuration } from '../../../../utils/routeProgress';
 
@@ -855,6 +856,8 @@ const BookingTrack = () => {
             </p>
           </div>
         </div>
+
+        <WorkDoneNote booking={booking} className="mb-3" />
 
         {/* Arrival OTP Display */}
         {(booking?.visitOtp || booking?.arrivalOTP) && ['confirmed', 'assigned', 'journey_started'].includes(booking?.status?.toLowerCase()) && (

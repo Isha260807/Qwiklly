@@ -9,7 +9,35 @@ const { validationResult } = require('express-validator');
 const { VENDOR_STATUS, BOOKING_STATUS, PAYMENT_STATUS, ADMIN_ROLES, ADMIN_PERMISSIONS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { getAdminVendorCityFilter, getAdminBookingCityFilter } = require('../../utils/adminCityScope');
-const { getPresenceDateKey, PRESENCE_TIME_ZONE } = require('../../services/vendorPresenceService');
+const { getPresenceDateKey, PRESENCE_TIME_ZONE, setVendorPresence } = require('../../services/vendorPresenceService');
+
+const forceVendorOffline = async (vendor) => {
+  vendor.isOnline = false;
+  vendor.availability = 'OFFLINE';
+  vendor.currentSocketId = null;
+  await vendor.save();
+
+  try {
+    await setVendorPresence({
+      vendorId: vendor._id,
+      isOnline: false,
+      source: 'logout',
+      eventId: 'admin-deactivate:' + vendor._id.toString() + ':' + Date.now()
+    });
+  } catch (presenceError) {
+    console.error('Failed to sync vendor offline presence:', presenceError.message);
+  }
+
+  try {
+    const { getIO } = require('../../sockets');
+    const sockets = await getIO().in('vendor_' + vendor._id.toString()).fetchSockets();
+    await Promise.all(sockets.map((socket) => socket.disconnect(true)));
+  } catch (socketError) {
+    if (!/not initialized/i.test(socketError?.message || '')) {
+      console.warn('Failed to disconnect vendor sockets:', socketError.message);
+    }
+  }
+};
 
 /**
  * Get all vendors with filters and pagination
@@ -480,7 +508,7 @@ const suspendVendor = async (req, res) => {
 
     vendor.approvalStatus = VENDOR_STATUS.SUSPENDED;
     vendor.isActive = false;
-    await vendor.save();
+    await forceVendorOffline(vendor);
 
     res.status(200).json({
       success: true,
@@ -762,8 +790,16 @@ const toggleVendorStatus = async (req, res) => {
       });
     }
 
-    vendor.isActive = isActive;
-    await vendor.save();
+    const nextIsActive = typeof isActive === 'string'
+      ? isActive === 'true'
+      : isActive !== undefined ? Boolean(isActive) : !vendor.isActive;
+
+    vendor.isActive = nextIsActive;
+    if (nextIsActive) {
+      await vendor.save();
+    } else {
+      await forceVendorOffline(vendor);
+    }
 
     // Log the action (optional but recommended)
     // console.log(`Vendor ${vendor._id} status changed to ${isActive}`);

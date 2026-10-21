@@ -9,6 +9,7 @@ import { CashCollectionModal, ConfirmDialog, WorkCompletionModal } from '../../c
 import vendorWalletService from '../../../../services/vendorWalletService';
 import HourlyServiceTimer from '../../components/booking/HourlyServiceTimer';
 import { toast } from 'react-hot-toast';
+import WorkDoneNote from '../../../../components/common/WorkDoneNote';
 
 const BookingTimeline = () => {
   const { id } = useParams();
@@ -415,6 +416,8 @@ const BookingTimeline = () => {
       <Header title="Timeline" />
 
       <main className="max-w-md mx-auto px-4 pt-3 pb-6">
+        <WorkDoneNote booking={booking} className="mb-4" />
+
         <div className="bg-white rounded-xl p-3.5 shadow-xs">
           {/* Timeline */}
           <div className="relative">

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { FiCreditCard, FiRefreshCw, FiSettings } from 'react-icons/fi';
+import React, { useEffect, useMemo, useState } from 'react';
+import { FiChevronDown, FiChevronUp, FiCreditCard, FiRefreshCw, FiSettings } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { adminSalaryService } from '../../../../services/salaryService';
 
@@ -47,7 +47,6 @@ export default function VendorSalaryWallets() {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const filterCardTitle = 'Filter total earning';
   const [earningFilter, setEarningFilter] = useState({ startDate: '', endDate: '' });
   const [earningPreset, setEarningPreset] = useState('custom');
   const [rate, setRate] = useState({
@@ -64,6 +63,7 @@ export default function VendorSalaryWallets() {
     paymentReference: '',
     notes: ''
   });
+  const [expandedLedgerId, setExpandedLedgerId] = useState(null);
 
   const loadWallets = async () => {
     try {
@@ -197,6 +197,35 @@ export default function VendorSalaryWallets() {
   };
 
   const vendor = detail?.vendor;
+  const ledgerGroups = useMemo(() => {
+    const paymentMap = new Map((detail?.payments || []).map((item) => [String(item._id), item]));
+    const groups = new Map();
+
+    (detail?.earnings || []).forEach((entry) => {
+      const paymentId = entry.payrollPaymentId ? String(entry.payrollPaymentId) : null;
+      const id = paymentId ? 'payment:' + paymentId : 'entry:' + entry._id;
+      if (!groups.has(id)) {
+        groups.set(id, {
+          id,
+          payment: paymentId ? paymentMap.get(paymentId) : null,
+          entries: [],
+          total: 0
+        });
+      }
+      const group = groups.get(id);
+      group.entries.push(entry);
+      group.total += Number(entry.amount || 0);
+    });
+
+    return Array.from(groups.values()).map((group) => ({
+      ...group,
+      total: group.payment?.totalAmount || group.total,
+      latestDate: group.entries.reduce((latest, entry) => (
+        !latest || new Date(entry.earningDate) > new Date(latest) ? entry.earningDate : latest
+      ), null),
+      status: group.entries.every((entry) => entry.status === 'paid') ? 'paid' : 'pending'
+    }));
+  }, [detail?.earnings, detail?.payments]);
 
   return (
     <div className="space-y-5">
@@ -310,13 +339,44 @@ export default function VendorSalaryWallets() {
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-            <div className="p-4 border-b flex justify-between"><h3 className="font-bold">Earning ledger</h3><span className="text-xs text-gray-500">{detail.earnings?.length || 0} records</span></div>
-            {!detail.earnings?.length ? <p className="p-6 text-sm text-gray-400">No earnings yet.</p> : detail.earnings.map((entry) => (
-              <div key={entry._id} className="p-3 border-b flex justify-between gap-3 text-sm">
-                <div><p className="font-semibold">{entry.description}</p><p className="text-xs text-gray-500">{dateText(entry.earningDate)} {entry.durationMinutes ? ' - ' + entry.durationMinutes + ' min' : ''}</p></div>
-                <div className="text-right"><b className="text-emerald-600">{money(entry.amount)}</b><p className="text-[10px] uppercase text-gray-400">{entry.status}</p></div>
-              </div>
-            ))}
+            <div className="p-4 border-b flex justify-between"><h3 className="font-bold">Earning ledger</h3><span className="text-xs text-gray-500">{ledgerGroups.length} records</span></div>
+            {!ledgerGroups.length ? <p className="p-6 text-sm text-gray-400">No earnings yet.</p> : ledgerGroups.map((group) => {
+              const isExpanded = expandedLedgerId === group.id;
+              const paymentPeriod = group.payment
+                ? (group.payment.periodType || 'custom') + ' payment'
+                : (group.entries[0]?.description || 'Earning');
+              const paymentItems = group.payment ? [
+                ['Booking earnings', group.payment.bookingEarningsAmount],
+                ['Salary', group.payment.salaryAmount],
+                ['Bonus', group.payment.bonusAmount],
+                ['Incentive', group.payment.incentiveAmount],
+                ['Adjustment', group.payment.adjustmentAmount],
+                ...(group.payment.customItems || []).map((item) => [item.label, item.amount])
+              ].filter((item) => Number(item[1]) > 0) : [];
+              return (
+                <div key={group.id} className="border-b last:border-b-0">
+                  <button type="button" onClick={() => setExpandedLedgerId(isExpanded ? null : group.id)} className="w-full p-3 flex justify-between items-center gap-3 text-sm text-left hover:bg-gray-50">
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{paymentPeriod}</p>
+                      <p className="text-xs text-gray-500">{group.payment ? dateText(group.payment.periodStart) + ' - ' + dateText(group.payment.periodEnd) : dateText(group.latestDate)}</p>
+                      <p className="text-[10px] text-gray-400">{group.payment ? paymentItems.length : group.entries.length} paid item{(group.payment ? paymentItems.length : group.entries.length) === 1 ? '' : 's'} - Click to view details</p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0"><div className="text-right"><b className="text-emerald-600">{money(group.total)}</b><p className="text-[10px] uppercase text-gray-400">{group.status}</p></div>{isExpanded ? <FiChevronUp /> : <FiChevronDown />}</div>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 bg-gray-50 border-t">
+                      {group.payment && <div className="grid grid-cols-2 md:grid-cols-4 gap-2 py-3 text-xs"><div><span className="text-gray-500 block">Method</span><b className="capitalize">{String(group.payment.paymentMethod || '').replace('_', ' ') || '-'}</b></div><div><span className="text-gray-500 block">Reference</span><b>{group.payment.paymentReference || '-'}</b></div><div><span className="text-gray-500 block">Paid on</span><b>{dateText(group.payment.paidAt)}</b></div><div><span className="text-gray-500 block">Total</span><b className="text-emerald-600">{money(group.payment.totalAmount)}</b></div></div>}
+                      {group.payment && <div className="mt-3"><p className="text-xs font-bold text-gray-700 mb-2">Payment breakdown</p><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{paymentItems.map(([label, amount]) => <div key={label} className="flex justify-between gap-3 bg-white rounded-lg px-3 py-2 text-xs"><span className="text-gray-600">{label}</span><b className="text-emerald-600">{money(amount)}</b></div>)}</div></div>}
+                      <div className="space-y-2 mt-3">
+                        <p className="text-xs font-bold text-gray-700">Ledger entries</p>
+                        {group.entries.map((entry) => <div key={entry._id} className="flex justify-between gap-3 text-xs bg-white rounded-lg px-3 py-2"><div><p className="font-semibold">{entry.description || entry.type}</p><p className="text-gray-500">{dateText(entry.earningDate)}{entry.durationMinutes ? ' - ' + entry.durationMinutes + ' min' : ''}</p></div><div className="text-right"><b className="text-emerald-600">{money(entry.amount)}</b><p className="uppercase text-[10px] text-gray-400">{entry.status}</p></div></div>)}
+                      </div>
+                      {group.payment?.notes && <p className="text-xs text-gray-600 mt-3"><span className="font-semibold">Note:</span> {group.payment.notes}</p>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}

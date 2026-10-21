@@ -1366,6 +1366,13 @@ const completeSelfJob = async (req, res) => {
       booking.userPayableAmount = existingBill.grandTotal;
       booking.vendorBillId = existingBill._id;
       if (photoList.length > 0) booking.workPhotos = photoList;
+      booking.workDoneDetails = {
+        ...(booking.workDoneDetails && typeof booking.workDoneDetails === 'object' ? booking.workDoneDetails : {}),
+        ...(workDoneDetails && typeof workDoneDetails === 'object' ? workDoneDetails : {}),
+        ...(notes ? { notes } : {}),
+        billId: existingBill._id.toString()
+      };
+      booking.markModified('workDoneDetails');
       await booking.save();
       await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId });
 

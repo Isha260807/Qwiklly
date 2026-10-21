@@ -8,6 +8,7 @@ import {
 } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { adminBookingService } from '../../../../services/adminBookingService';
+import WorkDoneNote from '../../../../components/common/WorkDoneNote';
 
 const NOT_YET_ASSIGNABLE_STATUSES = ['AWAITING_PAYMENT', 'COMPLETED', 'CANCELLED', 'REJECTED'];
 
@@ -296,6 +297,8 @@ const BookingDetails = () => {
               </div>
             )}
           </div>
+
+          <WorkDoneNote booking={booking} />
 
           {/* Customer & Address Details */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-4">

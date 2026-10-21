@@ -22,6 +22,7 @@ import vendorBillService from '../../../../services/vendorBillService';
 import { toast } from 'react-hot-toast';
 import { useAppNotifications } from '../../../../hooks/useAppNotifications';
 import { useLocationTracking } from '../../../../hooks/useLocationTracking';
+import WorkDoneNote from '../../../../components/common/WorkDoneNote';
 
 export default function BookingDetails() {
   const { id } = useParams();
@@ -1052,6 +1053,8 @@ export default function BookingDetails() {
             </div>
           )}
         </div>
+
+        <WorkDoneNote booking={booking} className="mb-4" />
 
         {/* Work Photos (after completion) */}
         {booking.workPhotos && booking.workPhotos.length > 0 && booking.assignedTo?.name !== 'You (Self)' && (
