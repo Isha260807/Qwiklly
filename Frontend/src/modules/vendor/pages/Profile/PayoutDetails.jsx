@@ -30,6 +30,7 @@ const PayoutDetails = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isFlutter, setIsFlutter] = useState(flutterBridge.isFlutter);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     flutterBridge.waitForFlutter().then(ready => {
@@ -155,8 +156,87 @@ const PayoutDetails = () => {
     return data.imageUrl;
   };
 
+  const validateBankDetails = () => {
+    const newErrors = {};
+    const holderName = (bankData.accountHolderName || '').trim();
+    const bankName = (bankData.bankName || '').trim();
+    const accNum = (bankData.accountNumber || '').trim();
+    const ifsc = (bankData.ifscCode || '').trim().toUpperCase();
+
+    // 1. Account Holder Name
+    if (!holderName) {
+      newErrors.accountHolderName = 'Account holder name is required';
+    } else if (holderName.length < 2) {
+      newErrors.accountHolderName = 'Name must be at least 2 characters';
+    } else if (holderName.length > 60) {
+      newErrors.accountHolderName = 'Name cannot exceed 60 characters';
+    } else if (!/^[a-zA-Z\s.]+$/.test(holderName)) {
+      newErrors.accountHolderName = 'Name should only contain letters, spaces, and dots';
+    }
+
+    // 2. Bank Name
+    if (!bankName) {
+      newErrors.bankName = 'Bank name is required';
+    } else if (bankName.length < 2) {
+      newErrors.bankName = 'Bank name must be at least 2 characters';
+    } else if (bankName.length > 60) {
+      newErrors.bankName = 'Bank name cannot exceed 60 characters';
+    } else if (!/^[a-zA-Z\s.&()-]+$/.test(bankName)) {
+      newErrors.bankName = 'Please enter a valid bank name';
+    }
+
+    // 3. Account Number
+    if (!accNum) {
+      newErrors.accountNumber = 'Account number is required';
+    } else if (!/^\d+$/.test(accNum)) {
+      newErrors.accountNumber = 'Account number must contain only numbers';
+    } else if (accNum.length < 9 || accNum.length > 18) {
+      newErrors.accountNumber = 'Account number must be 9 to 18 digits';
+    }
+
+    // 4. IFSC Code
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    if (!ifsc) {
+      newErrors.ifscCode = 'IFSC code is required';
+    } else if (ifsc.length !== 11) {
+      newErrors.ifscCode = 'IFSC code must be exactly 11 characters';
+    } else if (!ifscRegex.test(ifsc)) {
+      newErrors.ifscCode = 'Invalid IFSC code (e.g. SBIN0001234 - 5th char must be 0)';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
+
+    if (payoutMethod === 'bank') {
+      const isValid = validateBankDetails();
+      if (!isValid) {
+        toast.error('Please enter valid bank account details');
+        return;
+      }
+    } else if (payoutMethod === 'upi') {
+      const upiErrors = {};
+      const upiId = (bankData.upiId || '').trim();
+      const hasQr = qrFile || bankData.upiQrCode;
+
+      if (!hasQr && !upiId) {
+        toast.error('Please upload a QR code or enter a UPI ID');
+        return;
+      }
+
+      if (upiId && !/^[\w.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId)) {
+        upiErrors.upiId = 'Enter a valid UPI ID (e.g. name@okhdfcbank)';
+        setErrors(upiErrors);
+        toast.error('Please enter a valid UPI ID');
+        return;
+      }
+    }
+
+    setErrors({});
+
     try {
       setSaving(true);
       let qrUrl = bankData.upiQrCode;
@@ -174,6 +254,11 @@ const PayoutDetails = () => {
 
       const updatedBankDetails = {
         ...bankData,
+        accountHolderName: (bankData.accountHolderName || '').trim(),
+        bankName: (bankData.bankName || '').trim(),
+        accountNumber: (bankData.accountNumber || '').trim(),
+        ifscCode: (bankData.ifscCode || '').trim().toUpperCase(),
+        upiId: (bankData.upiId || '').trim().toLowerCase(),
         upiQrCode: qrUrl
       };
 
@@ -230,7 +315,10 @@ const PayoutDetails = () => {
         <div className="bg-white p-1.5 rounded-2xl shadow-xs border border-gray-200/80 flex gap-1.5 mb-4">
           <button
             type="button"
-            onClick={() => setPayoutMethod('upi')}
+            onClick={() => {
+              setPayoutMethod('upi');
+              setErrors({});
+            }}
             className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
               payoutMethod === 'upi'
                 ? 'bg-[#720C3E] text-white shadow-sm'
@@ -246,7 +334,10 @@ const PayoutDetails = () => {
 
           <button
             type="button"
-            onClick={() => setPayoutMethod('bank')}
+            onClick={() => {
+              setPayoutMethod('bank');
+              setErrors({});
+            }}
             className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
               payoutMethod === 'bank'
                 ? 'bg-[#720C3E] text-white shadow-sm'
@@ -346,11 +437,22 @@ const PayoutDetails = () => {
                   <input
                     type="text"
                     value={bankData.upiId}
-                    onChange={(e) => setBankData(prev => ({ ...prev, upiId: e.target.value }))}
+                    onChange={(e) => {
+                      setBankData(prev => ({ ...prev, upiId: e.target.value.trim() }));
+                      if (errors.upiId) setErrors(prev => ({ ...prev, upiId: '' }));
+                    }}
                     placeholder="e.g. 9876543210@paytm, name@okhdfcbank"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs font-medium focus:outline-none focus:ring-2 focus:bg-white transition-all font-mono"
+                    className={`w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border ${
+                      errors.upiId ? 'border-red-400 ring-1 ring-red-400 bg-red-50/20' : 'border-gray-200'
+                    } text-xs font-medium focus:outline-none focus:ring-2 focus:bg-white transition-all font-mono`}
                     style={{ focusRingColor: themeColors.button }}
                   />
+                  {errors.upiId && (
+                    <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
+                      <FiInfo className="w-3 h-3 shrink-0" />
+                      <span>{errors.upiId}</span>
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -358,7 +460,7 @@ const PayoutDetails = () => {
 
           {/* ===================== 2. BANK ACCOUNT SECTION ===================== */}
           {payoutMethod === 'bank' && (
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3.5 animate-in fade-in duration-200">
               <div className="flex items-center gap-2 pb-2.5 border-b border-gray-100">
                 <div className="w-7 h-7 rounded-lg bg-[#FCEBF3] text-[#720C3E] flex items-center justify-center">
                   <FiCreditCard className="w-3.5 h-3.5" />
@@ -372,61 +474,112 @@ const PayoutDetails = () => {
               {/* Account Holder Name */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Account Holder Name
+                  Account Holder Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={bankData.accountHolderName}
-                  onChange={(e) => setBankData(prev => ({ ...prev, accountHolderName: e.target.value }))}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^a-zA-Z\s.]/g, '');
+                    setBankData(prev => ({ ...prev, accountHolderName: val }));
+                    if (errors.accountHolderName) setErrors(prev => ({ ...prev, accountHolderName: '' }));
+                  }}
                   placeholder="Name as per Passbook / Bank"
-                  className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs font-medium focus:outline-none focus:ring-2 focus:bg-white transition-all"
+                  className={`w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border ${
+                    errors.accountHolderName ? 'border-red-400 ring-1 ring-red-400 bg-red-50/20' : 'border-gray-200'
+                  } text-xs font-medium focus:outline-none focus:ring-2 focus:bg-white transition-all`}
                   style={{ focusRingColor: themeColors.button }}
                 />
+                {errors.accountHolderName && (
+                  <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
+                    <FiInfo className="w-3 h-3 shrink-0" />
+                    <span>{errors.accountHolderName}</span>
+                  </p>
+                )}
               </div>
 
               {/* Bank Name */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Bank Name
+                  Bank Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={bankData.bankName}
-                  onChange={(e) => setBankData(prev => ({ ...prev, bankName: e.target.value }))}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^a-zA-Z\s.&()-]/g, '');
+                    setBankData(prev => ({ ...prev, bankName: val }));
+                    if (errors.bankName) setErrors(prev => ({ ...prev, bankName: '' }));
+                  }}
                   placeholder="e.g. State Bank of India, HDFC Bank"
-                  className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs font-medium focus:outline-none focus:ring-2 focus:bg-white transition-all"
+                  className={`w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border ${
+                    errors.bankName ? 'border-red-400 ring-1 ring-red-400 bg-red-50/20' : 'border-gray-200'
+                  } text-xs font-medium focus:outline-none focus:ring-2 focus:bg-white transition-all`}
                   style={{ focusRingColor: themeColors.button }}
                 />
+                {errors.bankName && (
+                  <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
+                    <FiInfo className="w-3 h-3 shrink-0" />
+                    <span>{errors.bankName}</span>
+                  </p>
+                )}
               </div>
 
               {/* Account Number & IFSC Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Account Number
+                    Account Number <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    maxLength={18}
                     value={bankData.accountNumber}
-                    onChange={(e) => setBankData(prev => ({ ...prev, accountNumber: e.target.value }))}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 18);
+                      setBankData(prev => ({ ...prev, accountNumber: val }));
+                      if (errors.accountNumber) setErrors(prev => ({ ...prev, accountNumber: '' }));
+                    }}
                     placeholder="Enter Account Number"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs font-medium font-mono focus:outline-none focus:ring-2 focus:bg-white transition-all"
+                    className={`w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border ${
+                      errors.accountNumber ? 'border-red-400 ring-1 ring-red-400 bg-red-50/20' : 'border-gray-200'
+                    } text-xs font-medium font-mono focus:outline-none focus:ring-2 focus:bg-white transition-all`}
                     style={{ focusRingColor: themeColors.button }}
                   />
+                  {errors.accountNumber && (
+                    <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
+                      <FiInfo className="w-3 h-3 shrink-0" />
+                      <span>{errors.accountNumber}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    IFSC Code
+                    IFSC Code <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
+                    maxLength={11}
                     value={bankData.ifscCode}
-                    onChange={(e) => setBankData(prev => ({ ...prev, ifscCode: e.target.value.toUpperCase() }))}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11);
+                      setBankData(prev => ({ ...prev, ifscCode: val }));
+                      if (errors.ifscCode) setErrors(prev => ({ ...prev, ifscCode: '' }));
+                    }}
                     placeholder="e.g. SBIN0001234"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs font-medium uppercase font-mono focus:outline-none focus:ring-2 focus:bg-white transition-all"
+                    className={`w-full px-3.5 py-2.5 bg-gray-50 rounded-xl border ${
+                      errors.ifscCode ? 'border-red-400 ring-1 ring-red-400 bg-red-50/20' : 'border-gray-200'
+                    } text-xs font-medium uppercase font-mono focus:outline-none focus:ring-2 focus:bg-white transition-all`}
                     style={{ focusRingColor: themeColors.button }}
                   />
+                  {errors.ifscCode && (
+                    <p className="text-[11px] text-red-500 font-medium mt-1 flex items-center gap-1">
+                      <FiInfo className="w-3 h-3 shrink-0" />
+                      <span>{errors.ifscCode}</span>
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

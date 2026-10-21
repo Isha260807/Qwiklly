@@ -172,6 +172,11 @@ const BookingDetails = () => {
   const vendor = booking.vendorId || {};
   const address = booking.address || {};
   const bookedItems = booking.bookedItems || [];
+  const couponDiscount = Math.max(
+    Number(booking.couponDiscount || 0),
+    Number((booking.coupon && booking.coupon.discountAmount) || 0)
+  );
+  const instantBookingCharges = Number(booking.instantBookingCharges || 0);
 
   const formattedDate = booking.scheduledDate
     ? new Date(booking.scheduledDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
@@ -567,6 +572,13 @@ const BookingDetails = () => {
                 <span>₹{booking.basePrice || booking.amount || 0}</span>
               </div>
 
+              {couponDiscount > 0 && (
+                <div className="flex justify-between text-green-600 font-medium">
+                  <span>Coupon Discount</span>
+                  <span>-&#8377;{couponDiscount}</span>
+                </div>
+              )}
+
               {booking.discount > 0 && (
                 <div className="flex justify-between text-green-600 font-medium">
                   <span>Discount</span>
@@ -578,6 +590,13 @@ const BookingDetails = () => {
                 <div className="flex justify-between text-gray-600">
                   <span>Taxes & Fees</span>
                   <span>+₹{booking.tax}</span>
+                </div>
+              )}
+
+              {instantBookingCharges > 0 && (
+                <div className="flex justify-between text-gray-600">
+                  <span>Instant Booking Fee</span>
+                  <span>+&#8377;{instantBookingCharges}</span>
                 </div>
               )}
 

@@ -2,7 +2,10 @@ const { getReferralSummary } = require('../../services/referralService');
 
 const getMyReferralSummary = async (req, res) => {
   try {
-    const summary = await getReferralSummary(req.user.id);
+    const summary = await getReferralSummary(req.user.id, {
+      historyPage: req.query.historyPage,
+      historyLimit: req.query.historyLimit
+    });
     if (!summary) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }

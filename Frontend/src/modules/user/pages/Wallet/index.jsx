@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiLoader } from 'react-icons/fi';
+import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiLoader, FiX } from 'react-icons/fi';
 import { MdAccountBalanceWallet } from 'react-icons/md';
 import { toast } from 'react-hot-toast';
 import { walletService } from '../../../../services/walletService';
@@ -9,6 +9,33 @@ import NotificationBell from '../../components/common/NotificationBell';
 import { themeColors } from '../../../../theme';
 
 const PAGE_SIZE = 8;
+
+const formatTransactionLabel = (value = '') => (
+  value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase())
+);
+
+const formatTransactionAmount = (value) => Number(value || 0).toLocaleString('en-IN');
+
+const formatTransactionDate = (value, includeTime = false) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date unavailable';
+
+  return date.toLocaleString('en-IN', includeTime
+    ? {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      }
+    : {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+};
 
 const Wallet = () => {
   const navigate = useNavigate();
@@ -19,6 +46,7 @@ const Wallet = () => {
   const [dateFilter, setDateFilter] = useState({ startDate: '', endDate: '' });
   const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, pages: 0 });
   const [transactionSummary, setTransactionSummary] = useState(null);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
 
   useEffect(() => {
     const loadWalletData = async () => {
@@ -64,7 +92,7 @@ const Wallet = () => {
   };
 
   const totalSpent = transactionSummary?.totalSpent ?? transactions
-    .filter(t => ['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected'].includes(t.type))
+    .filter(t => ['payment', 'debit', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected'].includes(t.type))
     .reduce((sum, t) => sum + t.amount, 0);
 
   const totalEarned = transactionSummary?.totalEarned ?? transactions
@@ -249,9 +277,12 @@ const Wallet = () => {
                   }
 
                   return (
-                    <div
+                    <button
                       key={item.id || index}
-                      className="flex items-center justify-between p-2.5 bg-white border border-gray-100 rounded-xl shadow-2xs hover:shadow-xs transition-shadow"
+                      type="button"
+                      onClick={() => setSelectedTransaction(item)}
+                      aria-label="View transaction details"
+                      className="flex w-full items-center justify-between p-2.5 bg-white border border-gray-100 rounded-xl text-left shadow-2xs transition-shadow hover:shadow-xs"
                     >
                       <div className="flex items-center gap-2.5 flex-1 min-w-0">
                         <div
@@ -262,7 +293,7 @@ const Wallet = () => {
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-gray-900 truncate">
+                          <p className="text-xs font-semibold text-gray-900 break-words whitespace-normal text-left">
                             {item.description || item.title || 'Transaction'}
                           </p>
                           <div className="flex items-center gap-1.5 mt-0.5">
@@ -285,7 +316,7 @@ const Wallet = () => {
                           </p>
                         )}
                       </div>
-                    </div>
+                    </button>
                   );
                 })
               )}
@@ -316,6 +347,118 @@ const Wallet = () => {
               </div>
             )}
           </div>
+          {selectedTransaction && (
+            <div
+              className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 p-3 backdrop-blur-sm sm:items-center"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Transaction details"
+              onClick={() => setSelectedTransaction(null)}
+            >
+              <div
+                className="max-h-[88vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">Transaction Details</p>
+                    <p className="mt-0.5 text-[10px] text-gray-400">Complete wallet transaction information</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTransaction(null)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500"
+                    aria-label="Close transaction details"
+                  >
+                    <FiX className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 p-4">
+                  <div className="rounded-xl bg-gray-50 p-3 text-center">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                      {formatTransactionLabel(selectedTransaction.type || 'transaction')}
+                    </p>
+                    <p className={[
+                      'mt-1 text-2xl font-bold',
+                      ['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected', 'penalty', 'fine', 'cancellation_fee', 'debit'].includes(selectedTransaction.type)
+                        ? 'text-red-600'
+                        : 'text-green-600'
+                    ].join(' ')}>
+                      {['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected', 'penalty', 'fine', 'cancellation_fee', 'debit'].includes(selectedTransaction.type) ? '-' : '+'}
+                      ₹{formatTransactionAmount(selectedTransaction.amount)}
+                    </p>
+                    <span className={[
+                      'mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold',
+                      selectedTransaction.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                    ].join(' ')}>
+                      {formatTransactionLabel(selectedTransaction.status || 'unknown')}
+                    </span>
+                  </div>
+
+                  <div className="divide-y divide-gray-100 rounded-xl border border-gray-100">
+                    <div className="px-3 py-2.5">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Description</p>
+                      <p className="mt-1 break-words text-xs font-semibold leading-5 text-gray-800">
+                        {selectedTransaction.description || selectedTransaction.title || 'Transaction'}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 px-3 py-2.5">
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Date & time</p>
+                        <p className="mt-1 text-xs font-medium text-gray-700">{formatTransactionDate(selectedTransaction.date, true)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Payment method</p>
+                        <p className="mt-1 text-xs font-medium text-gray-700">{formatTransactionLabel(selectedTransaction.paymentMethod || 'Not available')}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 px-3 py-2.5">
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Balance before</p>
+                        <p className="mt-1 text-xs font-semibold text-gray-700">
+                          {selectedTransaction.balanceBefore === undefined || selectedTransaction.balanceBefore === null
+                            ? 'Not available'
+                            : '₹' + formatTransactionAmount(selectedTransaction.balanceBefore)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Balance after</p>
+                        <p className="mt-1 text-xs font-semibold text-gray-700">
+                          {selectedTransaction.balanceAfter === undefined || selectedTransaction.balanceAfter === null
+                            ? 'Not available'
+                            : '₹' + formatTransactionAmount(selectedTransaction.balanceAfter)}
+                        </p>
+                      </div>
+                    </div>
+                    {selectedTransaction.bookingId && (
+                      <div className="px-3 py-2.5">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Booking ID</p>
+                        <p className="mt-1 break-all font-mono text-[11px] text-gray-700">
+                          {String(selectedTransaction.bookingId)}
+                        </p>
+                      </div>
+                    )}
+                    {selectedTransaction.referenceId && (
+                      <div className="px-3 py-2.5">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Reference ID</p>
+                        <p className="mt-1 break-all font-mono text-[11px] text-gray-700">{selectedTransaction.referenceId}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedTransaction.metadata && Object.keys(selectedTransaction.metadata).length > 0 && (
+                    <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Additional details</p>
+                      <pre className="mt-2 whitespace-pre-wrap break-words text-[10px] leading-4 text-gray-600">
+                        {JSON.stringify(selectedTransaction.metadata, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

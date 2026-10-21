@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiStar, FiUser, FiCalendar, FiMessageSquare, FiFilter, FiLoader } from 'react-icons/fi';
+import { FiStar, FiUser, FiCalendar, FiMessageSquare, FiLoader } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { vendorTheme as themeColors } from '../../../../theme';
 import { getRatings } from '../../services/bookingService';
@@ -131,11 +131,8 @@ const MyRatings = () => {
 
         {/* Reviews List */}
         <div className="space-y-2.5">
-          <div className="flex items-center justify-between px-1">
+          <div className="px-1">
             <h3 className="text-sm font-bold text-gray-900">Recent Feedback</h3>
-            <button className="p-1.5 bg-white rounded-lg shadow-xs hover:bg-gray-50 text-gray-600 cursor-pointer">
-              <FiFilter className="w-3.5 h-3.5" />
-            </button>
           </div>
 
           {ratings.length > 0 ? (

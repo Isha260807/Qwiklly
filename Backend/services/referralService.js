@@ -145,17 +145,32 @@ const captureReferralForNewUser = async ({ referredUserId, referralCode }) => {
     throw error;
   }
 };
-const getReferralSummary = async (userId) => {
+const getReferralSummary = async (userId, options = {}) => {
   const user = await ensureReferralCode(userId);
   if (!user) return null;
 
-  const [settings, total, pending, rewarded] = await Promise.all([
+  const historyPage = Math.max(parseInt(options.historyPage, 10) || 1, 1);
+  const historyLimit = Math.min(Math.max(parseInt(options.historyLimit, 10) || 10, 1), 50);
+  const historyFilter = {
+    $or: [{ referrerId: userId }, { referredUserId: userId }]
+  };
+
+  const [settings, total, pending, rewarded, history, historyTotal] = await Promise.all([
     Settings.findOne({ type: 'global' })
       .select('referralEnabled referrerRewardAmount referredRewardAmount')
       .lean(),
     Referral.countDocuments({ referrerId: userId }),
     Referral.countDocuments({ referrerId: userId, status: 'pending' }),
-    Referral.countDocuments({ referrerId: userId, status: 'rewarded' })
+    Referral.countDocuments({ referrerId: userId, status: 'rewarded' }),
+    Referral.find(historyFilter)
+      .populate('referrerId', 'name phone')
+      .populate('referredUserId', 'name phone')
+      .populate('qualifyingBookingId', 'bookingNumber')
+      .sort({ createdAt: -1 })
+      .skip((historyPage - 1) * historyLimit)
+      .limit(historyLimit)
+      .lean(),
+    Referral.countDocuments(historyFilter)
   ]);
 
   return {
@@ -163,7 +178,35 @@ const getReferralSummary = async (userId) => {
     referralEnabled: settings?.referralEnabled !== false,
     referrerRewardAmount: Math.max(0, Number(settings?.referrerRewardAmount ?? 100) || 0),
     referredRewardAmount: Math.max(0, Number(settings?.referredRewardAmount ?? 100) || 0),
-    stats: { total, pending, rewarded }
+    stats: { total, pending, rewarded },
+    history: history.map((item) => {
+      const isReferrer = String(item.referrerId?._id || item.referrerId) === String(userId);
+      const relatedUser = isReferrer ? item.referredUserId : item.referrerId;
+
+      return {
+        id: item._id,
+        status: item.status,
+        role: isReferrer ? 'referrer' : 'referred_user',
+        title: isReferrer ? 'Referral sent' : 'Referral welcome reward',
+        createdAt: item.createdAt,
+        rewardedAt: item.rewardedAt,
+        rewardAmount: isReferrer ? item.referrerRewardAmount : item.referredRewardAmount,
+        relatedUser: relatedUser
+          ? {
+              id: relatedUser._id,
+              name: relatedUser.name || (isReferrer ? 'Referred user' : 'Referrer'),
+              phone: relatedUser.phone || null
+            }
+          : null,
+        qualifyingBookingNumber: item.qualifyingBookingId?.bookingNumber || null
+      };
+    }),
+    historyPagination: {
+      page: historyPage,
+      limit: historyLimit,
+      total: historyTotal,
+      pages: Math.ceil(historyTotal / historyLimit)
+    }
   };
 };
 

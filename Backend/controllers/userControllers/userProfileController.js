@@ -121,9 +121,13 @@ const updateProfile = async (req, res) => {
       }
     }
 
-    // Update addresses - ENFORCE SINGLE ADDRESS POLICY
+    // Update addresses - ENFORCE SINGLE ADDRESS POLICY.
+    // The one saved address must always be the user's default address.
     if (addresses && Array.isArray(addresses)) {
-      updateData.addresses = addresses.slice(-1); // Only save the last one
+      updateData.addresses = addresses.slice(-1).map((address) => ({
+        ...address,
+        isDefault: true
+      }));
     }
 
     // Update settings

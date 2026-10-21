@@ -112,7 +112,8 @@ const ManageAddresses = () => {
         ...addressData,
         lat: locationObj.lat,
         lng: locationObj.lng,
-        isDefault: addresses.length === 0 // Make first address default
+        // The app keeps one saved address, so it must always be the default.
+        isDefault: true
       };
 
       // ENFORCE SINGLE ADDRESS: Replace existing if adding new

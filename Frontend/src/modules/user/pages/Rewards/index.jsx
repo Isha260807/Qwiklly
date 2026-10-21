@@ -7,21 +7,44 @@ import { FaWhatsapp } from 'react-icons/fa';
 import NotificationBell from '../../components/common/NotificationBell';
 import referralService from '../../../../services/referralService';
 
+const REFERRAL_HISTORY_PAGE_SIZE = 10;
+
+const formatReferralDate = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date unavailable';
+
+  return date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+};
+
 const Rewards = () => {
   const navigate = useNavigate();
   const [referral, setReferral] = useState(null);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPagination, setHistoryPagination] = useState(null);
 
   useEffect(() => {
-    referralService.getSummary()
+    referralService.getSummary({
+      historyPage,
+      historyLimit: REFERRAL_HISTORY_PAGE_SIZE
+    })
       .then(response => {
-        if (response.success) setReferral(response.data);
+        if (response.success) {
+          setReferral(response.data);
+          setHistoryPagination(response.data.historyPagination || null);
+        }
       })
       .catch(() => toast.error('Failed to load referral details'));
-  }, []);
+  }, [historyPage]);
 
   const shareUrl = referral?.referralCode
     ? `${window.location.origin}/user/login?ref=${encodeURIComponent(referral.referralCode)}`
     : '';
+
+  const historyTotal = historyPagination?.total ?? referral?.history?.length ?? 0;
 
   const handleCopyLink = () => {
     if (!shareUrl) return toast.error('Referral link is not ready yet');
@@ -188,6 +211,91 @@ const Rewards = () => {
               Earn INR {referral?.referrerRewardAmount ?? 0} on every successful referral
             </p>
           </div>
+        </div>
+
+        {/* Referral History */}
+        <div className="px-4 py-4 bg-white border-t border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold text-gray-800">Referral History</h2>
+            {historyTotal > 0 && (
+              <span className="text-[10px] font-semibold text-gray-400">
+                {historyTotal} referral{historyTotal === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
+
+          {!referral?.history?.length ? (
+            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-5 text-center">
+              <p className="text-xs font-semibold text-gray-600">No referral history yet</p>
+              <p className="mt-1 text-[11px] text-gray-400">Share your referral link to invite friends.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {referral.history.map((item) => {
+                const isRewarded = item.status === 'rewarded';
+                const isReceived = item.role === 'referred_user';
+
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-2.5 rounded-xl border border-gray-100 bg-gray-50/70 p-2.5"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#720C3E]/10 text-xs font-bold text-[#720C3E]">
+                      {(item.relatedUser?.name || (isReceived ? 'R' : 'U')).slice(0, 1).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-gray-800">
+                        {isReceived
+                          ? (item.title || 'Referral welcome reward')
+                          : (item.relatedUser?.name || 'Referred user')}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-gray-400">
+                        {formatReferralDate(item.createdAt)}
+                        {item.qualifyingBookingNumber && (
+                          <> • Booking {item.qualifyingBookingNumber}</>
+                        )}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <span className={[
+                        'inline-flex rounded-full px-2 py-1 text-[9px] font-semibold',
+                        isRewarded ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                      ].join(' ')}>
+                        {isReceived && isRewarded ? 'Received' : (isRewarded ? 'Rewarded' : 'Pending')}
+                      </span>
+                      <p className="mt-1 text-[10px] font-semibold text-[#720C3E]">
+                        INR {item.rewardAmount || 0} {isReceived ? 'received' : 'reward'}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {historyPagination?.pages > 1 && (
+            <div className="mt-3 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setHistoryPage((page) => Math.max(page - 1, 1))}
+                disabled={historyPage <= 1}
+                className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="text-[10px] font-medium text-gray-500">
+                Page {historyPagination.page} of {historyPagination.pages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setHistoryPage((page) => Math.min(page + 1, historyPagination.pages))}
+                disabled={historyPage >= historyPagination.pages}
+                className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[10px] font-semibold text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
       </main>
 

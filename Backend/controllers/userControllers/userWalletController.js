@@ -213,7 +213,9 @@ const getWalletTransactions = async (req, res) => {
 
     const Transaction = require('../../models/Transaction');
     const skip = (parsedPage - 1) * parsedLimit;
-    const spentTypes = ['payment', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected'];
+    // A wallet-only payment is recorded as debit, while online payments use
+    // payment. Include both so Total Spent reflects the actual amount paid.
+    const spentTypes = ['payment', 'debit', 'withdrawal', 'platform_fee', 'convenience_fee', 'gst', 'worker_payment', 'cash_collected'];
     const earnedTypes = ['credit', 'referral', 'refund', 'topup', 'cashback'];
 
     const [transactions, total, summaryResult] = await Promise.all([
@@ -245,7 +247,12 @@ const getWalletTransactions = async (req, res) => {
       description: txn.description,
       date: txn.createdAt,
       status: txn.status,
-      balanceAfter: txn.balanceAfter
+      paymentMethod: txn.paymentMethod,
+      balanceBefore: txn.balanceBefore,
+      balanceAfter: txn.balanceAfter,
+      bookingId: txn.bookingId,
+      referenceId: txn.referenceId,
+      metadata: txn.metadata
     }));
     const summary = summaryResult[0] || { totalSpent: 0, totalEarned: 0 };
 

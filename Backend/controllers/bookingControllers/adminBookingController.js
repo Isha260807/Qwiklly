@@ -1,9 +1,12 @@
 const Booking = require('../../models/Booking');
 const Vendor = require('../../models/Vendor');
+const User = require('../../models/User');
+const Transaction = require('../../models/Transaction');
 const Zone = require('../../models/Zone');
 const { validationResult } = require('express-validator');
-const { BOOKING_STATUS, VENDOR_STATUS } = require('../../utils/constants');
+const { BOOKING_STATUS, PAYMENT_STATUS, VENDOR_STATUS } = require('../../utils/constants');
 const { findQualifiedVendors } = require('../../services/vendorMatchService');
+const { cancelCouponUsage } = require('../../services/couponUsageService');
 const { getAdminBookingCityFilter, getAdminVendorCityFilter } = require('../../utils/adminCityScope');
 
 /**
@@ -191,44 +194,236 @@ const cancelBooking = async (req, res) => {
 
     const { id } = req.params;
     const { cancellationReason } = req.body;
+    const now = new Date();
+    const reason = cancellationReason || 'Cancelled by admin';
+    const cityFilter = getAdminBookingCityFilter(req);
 
-    const booking = await Booking.findOne({ _id: id, ...getAdminBookingCityFilter(req) });
+    // Atomically claim the cancellation. This prevents two admin requests from
+    // both refunding the same paid booking.
+    const previous = await Booking.findOneAndUpdate(
+      {
+        _id: id,
+        ...cityFilter,
+        status: { $nin: [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.COMPLETED] }
+      },
+      {
+        $set: {
+          status: BOOKING_STATUS.CANCELLED,
+          cancelledAt: now,
+          cancelledBy: 'admin',
+          cancellationReason: reason
+        }
+      },
+      { new: false }
+    ).lean();
 
-    if (!booking) {
-      return res.status(404).json({
+    if (!previous) {
+      const existing = await Booking.findOne({ _id: id, ...cityFilter }).lean();
+
+      if (!existing) {
+        return res.status(404).json({
+          success: false,
+          message: 'Booking not found'
+        });
+      }
+
+      if (existing.status === BOOKING_STATUS.CANCELLED) {
+        return res.status(400).json({
+          success: false,
+          message: 'Booking is already cancelled'
+        });
+      }
+
+      if (existing.status === BOOKING_STATUS.COMPLETED) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot cancel completed booking'
+        });
+      }
+
+      return res.status(409).json({
         success: false,
-        message: 'Booking not found'
+        message: 'Booking could not be cancelled. Please refresh and try again.'
       });
     }
 
-    if (booking.status === BOOKING_STATUS.CANCELLED) {
-      return res.status(400).json({
-        success: false,
-        message: 'Booking is already cancelled'
+    // Paid bookings are refunded in full to the user's wallet. Unpaid and
+    // plan-covered bookings are only cancelled and do not receive a refund.
+    const isPaid = previous.paymentStatus === PAYMENT_STATUS.SUCCESS;
+    const refundAmount = isPaid ? Number(previous.finalAmount || 0) : 0;
+    let refundMessage = 'Booking cancelled successfully.';
+
+    if (refundAmount > 0) {
+      try {
+        const user = await User.findByIdAndUpdate(
+          previous.userId,
+          { $inc: { 'wallet.balance': refundAmount } },
+          { new: true }
+        );
+
+        if (!user) {
+          throw new Error('User not found for refund');
+        }
+
+        const balanceAfter = Number(user.wallet?.balance || 0);
+        await Transaction.create({
+          userId: user._id,
+          type: 'refund',
+          amount: refundAmount,
+          status: 'completed',
+          paymentMethod: 'wallet',
+          description: `Refund for booking #${previous.bookingNumber} cancelled by admin`,
+          bookingId: previous._id,
+          balanceBefore: balanceAfter - refundAmount,
+          balanceAfter,
+          metadata: {
+            cancelledBy: 'admin',
+            cancellationReason: reason
+          }
+        });
+
+        await Booking.updateOne(
+          { _id: previous._id, status: BOOKING_STATUS.CANCELLED, cancelledBy: 'admin' },
+          { $set: { paymentStatus: PAYMENT_STATUS.REFUNDED } }
+        );
+
+        refundMessage = `Booking cancelled successfully. ₹${refundAmount} has been added to the user's wallet.`;
+      } catch (refundError) {
+        console.error('[AdminCancelBooking] Refund failed, reverting cancellation:', refundError);
+        await Booking.updateOne(
+          { _id: previous._id, status: BOOKING_STATUS.CANCELLED, cancelledBy: 'admin' },
+          {
+            $set: { status: previous.status },
+            $unset: { cancelledAt: '', cancelledBy: '', cancellationReason: '' }
+          }
+        );
+
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to refund the user payment, so the booking was not cancelled. Please try again.'
+        });
+      }
+    }
+
+    // Release the scheduled slot after the refund succeeds.
+    if (previous.bookingType === 'scheduled' && previous.slotAssignment) {
+      await Booking.updateOne(
+        { _id: previous._id },
+        { $set: { 'slotAssignment.state': 'RELEASED' } }
+      );
+    }
+
+    // Remove pending vendor offers and make the vendor available when no other
+    // active job is keeping them busy.
+    try {
+      const BookingRequest = require('../../models/BookingRequest');
+      await BookingRequest.deleteMany({ bookingId: previous._id });
+
+      if (previous.vendorId) {
+        const stillBusy = await Booking.exists({
+          _id: { $ne: previous._id },
+          vendorId: previous.vendorId,
+          $or: [
+            {
+              status: {
+                $in: [
+                  BOOKING_STATUS.JOURNEY_STARTED,
+                  BOOKING_STATUS.VISITED,
+                  BOOKING_STATUS.IN_PROGRESS,
+                  BOOKING_STATUS.WORK_DONE
+                ]
+              }
+            },
+            {
+              bookingType: { $ne: 'scheduled' },
+              status: {
+                $in: [
+                  BOOKING_STATUS.CONFIRMED,
+                  BOOKING_STATUS.ACCEPTED,
+                  BOOKING_STATUS.ASSIGNED,
+                  BOOKING_STATUS.AWAITING_PAYMENT
+                ]
+              }
+            }
+          ]
+        });
+
+        if (!stillBusy) {
+          await Vendor.findByIdAndUpdate(previous.vendorId, { availability: 'AVAILABLE' });
+        }
+      }
+    } catch (releaseError) {
+      console.error('[AdminCancelBooking] Error releasing vendor/requests:', releaseError);
+    }
+
+    // Restore coupon capacity exactly once if a coupon was used.
+    if (previous.coupon?.couponId) {
+      try {
+        await cancelCouponUsage(previous._id);
+      } catch (couponError) {
+        console.error('[AdminCancelBooking] Error restoring coupon usage:', couponError);
+      }
+    }
+
+    // Inform the affected parties without allowing a notification failure to
+    // turn a successful cancellation/refund into a failed API response.
+    try {
+      const { createNotification } = require('../notificationControllers/notificationController');
+      await createNotification({
+        userId: previous.userId,
+        type: 'booking_cancelled',
+        title: 'Booking Cancelled by Admin',
+        message: refundMessage,
+        relatedId: previous._id,
+        relatedType: 'booking',
+        pushData: {
+          type: 'booking_cancelled',
+          bookingId: previous._id.toString(),
+          link: `/user/booking/${previous._id}`
+        }
       });
+
+      if (previous.vendorId) {
+        await createNotification({
+          vendorId: previous.vendorId,
+          type: 'booking_cancelled',
+          title: 'Booking Cancelled by Admin',
+          message: `Booking ${previous.bookingNumber} has been cancelled by admin.`,
+          relatedId: previous._id,
+          relatedType: 'booking',
+          pushData: {
+            type: 'booking_cancelled',
+            bookingId: previous._id.toString(),
+            link: `/vendor/bookings/${previous._id}`
+          }
+        });
+      }
+
+      if (previous.workerId) {
+        await createNotification({
+          workerId: previous.workerId,
+          type: 'booking_cancelled',
+          title: 'Booking Cancelled by Admin',
+          message: `Job ${previous.bookingNumber} has been cancelled by admin.`,
+          relatedId: previous._id,
+          relatedType: 'booking',
+          pushData: {
+            type: 'job_cancelled',
+            bookingId: previous._id.toString(),
+            link: `/worker/job/${previous._id}`
+          }
+        });
+      }
+    } catch (notificationError) {
+      console.error('[AdminCancelBooking] Notification error:', notificationError);
     }
 
-    if (booking.status === BOOKING_STATUS.COMPLETED) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot cancel completed booking'
-      });
-    }
-
-    // Update booking
-    booking.status = BOOKING_STATUS.CANCELLED;
-    booking.cancelledAt = new Date();
-    booking.cancelledBy = 'admin';
-    booking.cancellationReason = cancellationReason || 'Cancelled by admin';
-
-    if (booking.bookingType === 'scheduled' && booking.slotAssignment) {
-      booking.slotAssignment.state = 'RELEASED';
-    }
-    await booking.save();
+    const booking = await Booking.findById(previous._id);
 
     res.status(200).json({
       success: true,
-      message: 'Booking cancelled successfully',
+      message: refundMessage,
+      refundAmount,
       data: booking
     });
   } catch (error) {

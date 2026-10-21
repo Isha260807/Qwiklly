@@ -322,7 +322,7 @@ const AddressManagement = () => {
       <Header
         title="Service Zone & Location"
         showBack={true}
-        onBack={() => navigate('/vendor/settings')}
+        onBack={() => navigate(-1)}
       />
 
       <main className="max-w-md mx-auto px-3.5 pt-2 pb-6 space-y-3">
