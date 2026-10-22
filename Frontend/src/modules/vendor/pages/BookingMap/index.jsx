@@ -1,6 +1,6 @@
 // BookingMap component for tracking vendor journey and arrival verification
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleMap, useJsApiLoader, DirectionsRenderer, OverlayView, PolylineF } from '@react-google-maps/api';
 import { FiArrowLeft, FiNavigation, FiMapPin, FiCrosshair, FiPhone, FiClock, FiCheckCircle, FiX, FiMaximize, FiMinimize, FiWifiOff, FiAlertTriangle, FiRefreshCw } from 'react-icons/fi';
@@ -10,6 +10,7 @@ import VisitVerificationModal from '../../components/common/VisitVerificationMod
 import vendorService from '../../../../services/vendorService';
 import { toast } from 'react-hot-toast';
 import { useAppNotifications } from '../../../../hooks/useAppNotifications';
+import { toCoordinate, buildRouteProgress, serializeRouteProgress, matchRouteProgress, getRemainingPath, formatDistanceMeters, formatRemainingDuration } from '../../../../utils/routeProgress';
 
 // Simple toggle for the simulation button (Controlled via .env)
 const SHOW_SIMULATION_BUTTON = import.meta.env.VITE_ENABLE_MAP_SIMULATION === 'true';
@@ -41,15 +42,30 @@ const libraries = ['places', 'geometry'];
 const BookingMap = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [booking, setBooking] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [coords, setCoords] = useState(null);
+  const location = useLocation();
+  const initialBooking = location.state?.booking || null;
+
+  const [booking, setBooking] = useState(initialBooking);
+  const [loading, setLoading] = useState(!initialBooking);
+
+  // Initial coords from passed state if available
+  const initialCoords = useMemo(() => {
+    const bAddr = initialBooking?.address || {};
+    const point = toCoordinate(bAddr.lat, bAddr.lng);
+    if (point) {
+      return point;
+    }
+    return null;
+  }, [initialBooking]);
+
+  const [coords, setCoords] = useState(initialCoords);
   const [map, setMap] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [directions, setDirections] = useState(null);
   const [distance, setDistance] = useState('');
   const [duration, setDuration] = useState('');
   const [routePath, setRoutePath] = useState([]);
+  const [routeRefreshTick, setRouteRefreshTick] = useState(0);
   const [isAutoCenter, setIsAutoCenter] = useState(true);
   const [isNavigationMode, setIsNavigationMode] = useState(false);
   const [heading, setHeading] = useState(0);
@@ -59,6 +75,7 @@ const BookingMap = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [routeError, setRouteError] = useState(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const isTrackingActive = ['journey_started', 'visited', 'in_progress'].includes(String(booking?.status || '').toLowerCase());
 
   // Network Status Listener
   useEffect(() => {
@@ -97,9 +114,10 @@ const BookingMap = () => {
         // 1. Destination: Fixed Booking Address from DB
         const bAddr = data.address || {};
 
-        if (bAddr.lat && bAddr.lng) {
-          setCoords({ lat: parseFloat(bAddr.lat), lng: parseFloat(bAddr.lng) });
-        } else {
+        const storedPoint = toCoordinate(bAddr.lat, bAddr.lng);
+        if (storedPoint) {
+          setCoords(storedPoint);
+        } else if (window.google?.maps?.Geocoder) {
           const addressStr = typeof bAddr === 'string' ? bAddr : `${bAddr.addressLine1 || ''}, ${bAddr.city || ''}, ${bAddr.state || ''} ${bAddr.pincode || ''}`;
           if (addressStr.replaceAll(',', '').trim() && !addressStr.toLowerCase().includes('current location')) {
             const geocoder = new window.google.maps.Geocoder();
@@ -117,43 +135,65 @@ const BookingMap = () => {
         setLoading(false);
       }
     };
-    if (isLoaded) fetchBooking();
-  }, [id, isLoaded]);
+    fetchBooking();
+  }, [id]);
 
-  // Watch Location
+  // Geocode address fallback if coordinates were not stored and Google Maps just loaded
   useEffect(() => {
-    // START CHANGE: If simulating, do NOT watch real GPS position
-    if (isSimulating) return;
-    // END CHANGE
-
-    if (navigator.geolocation) {
-      const watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          // START CHANGE: Double check simulating state inside callback
-          if (isSimulating) return;
-          // END CHANGE
-          const { latitude, longitude, heading: gpsHeading } = position.coords;
-          setCurrentLocation({ lat: latitude, lng: longitude });
-
-          // Use GPS heading if available (more accurate for movement)
-          if (gpsHeading !== null && !isNaN(gpsHeading)) {
-            setHeading(gpsHeading);
+    if (isLoaded && booking && (!coords || (!coords.lat && !coords.lng))) {
+      const bAddr = booking.address || {};
+      const addressStr = typeof bAddr === 'string' ? bAddr : `${bAddr.addressLine1 || ''}, ${bAddr.city || ''}, ${bAddr.state || ''} ${bAddr.pincode || ''}`;
+      if (addressStr.replaceAll(',', '').trim() && !addressStr.toLowerCase().includes('current location') && window.google?.maps?.Geocoder) {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ address: addressStr }, (results, status) => {
+          if (status === 'OK' && results[0]) {
+            setCoords(results[0].geometry.location.toJSON());
           }
-        },
-        (error) => {
-          // GPS Tracking Error
-          if (error.code === 1) { // PERMISSION_DENIED
-            // toast.error("Location permission denied. Map cannot track you.");
-          }
-        },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-      );
-      return () => navigator.geolocation.clearWatch(watchId);
-    } else {
-      toast.error("Geolocation not supported on this device");
+        });
+      }
     }
-  }, [isSimulating]); // Add isSimulating to dependency array
+  }, [isLoaded, booking, coords]);
 
+  // Watch the vendor GPS only while this booking is actively being tracked.
+  useEffect(() => {
+    if (isSimulating || !isTrackingActive) {
+      if (!isTrackingActive && !isSimulating) setCurrentLocation(null);
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      toast.error('Geolocation not supported on this device');
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (isSimulating) return;
+        const point = toCoordinate(position.coords.latitude, position.coords.longitude);
+        if (!point) return;
+        const accuracy = Number(position.coords.accuracy);
+        const timestamp = Number(position.timestamp) || Date.now();
+        if (timestamp < Date.now() - 60000) return;
+
+        setCurrentLocation({
+          ...point,
+          accuracy: Number.isFinite(accuracy) && accuracy >= 0 ? accuracy : null,
+          timestamp
+        });
+
+        if (position.coords.heading !== null && Number.isFinite(Number(position.coords.heading))) {
+          setHeading(Number(position.coords.heading));
+        }
+      },
+      (error) => {
+        if (error.code === 1) toast.error('Location permission is required to track this booking.', { id: 'vendor-location-permission' });
+        else if (error.code === 2) toast.error('Vendor GPS is currently unavailable.', { id: 'vendor-location-unavailable' });
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [isSimulating, isTrackingActive]);
   const socket = useAppNotifications('vendor'); // Get socket instance 
 
   // ... 
@@ -210,13 +250,13 @@ const BookingMap = () => {
 
   // Sync Location to Backend (Periodic)
   useEffect(() => {
-    if (socket && id) {
+    if (socket && id && isTrackingActive) {
       socket.emit('join_tracking', id);
     }
-  }, [socket, id]);
+  }, [socket, id, isTrackingActive]);
 
   useEffect(() => {
-    if (currentLocation && socket && id) {
+    if (currentLocation && socket && id && isTrackingActive) {
       const syncInterval = setInterval(() => {
         // START CHANGE: If simulating, do NOT emit periodic updates here (simulation loop does it)
         if (isSimulating) return;
@@ -227,14 +267,16 @@ const BookingMap = () => {
             bookingId: id,
             lat: currentLocation.lat,
             lng: currentLocation.lng,
-            heading: heading
+            heading: heading,
+            accuracy: currentLocation.accuracy,
+            timestamp: currentLocation.timestamp || Date.now()
           });
         }
       }, 5000);
 
       return () => clearInterval(syncInterval);
     }
-  }, [currentLocation, socket, id, heading, isSimulating]); // Add isSimulating to dependency array
+  }, [currentLocation, socket, id, heading, isSimulating, isTrackingActive]); // Add isSimulating to dependency array
 
   // DEBUG: Location Simulator Functions
   const startSimulation = () => {
@@ -347,99 +389,241 @@ const BookingMap = () => {
   // ... existing code ...
 
   const prevLocationRef = useRef(null);
-  const directionsCalculatedRef = useRef(false);
-
   const fullRoutePathRef = useRef([]);
+  const routeProgressRef = useRef(null);
+  const routeProgressDistanceRef = useRef(0);
+  const lastSuccessfulRouteOriginRef = useRef(null);
+  const lastSuccessfulRouteDestinationRef = useRef(null);
+  const pendingRouteRef = useRef(null);
+  const routeRequestInFlightRef = useRef(false);
+  const routeRequestSequenceRef = useRef(0);
+  const routeLastRequestedAtRef = useRef(0);
+  const routeOffRouteRef = useRef(false);
+  const offRouteCountRef = useRef(0);
+  const hasFittedRouteRef = useRef(false);
+  const mountedRef = useRef(true);
+  const latestLocationRef = useRef(null);
+  const latestDestinationRef = useRef(null);
 
-  // Calculate Route ONCE on initial load only
+  latestLocationRef.current = currentLocation;
+  latestDestinationRef.current = coords;
+
   useEffect(() => {
-    if (isLoaded && currentLocation && coords && map && !directionsCalculatedRef.current) {
-      directionsCalculatedRef.current = true; // Prevent recalculation
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      routeRequestSequenceRef.current += 1;
+      pendingRouteRef.current = null;
+    };
+  }, []);
 
-      const directionsService = new window.google.maps.DirectionsService();
-      directionsService.route(
-        {
-          origin: currentLocation,
-          destination: coords,
-          travelMode: window.google.maps.TravelMode.DRIVING,
-        },
-        (result, status) => {
-          if (status === window.google.maps.DirectionsStatus.OK) {
-            setDirections(result);
-            setRouteError(null);
-            const leg = result.routes[0].legs[0];
-            setDistance(leg.distance.text);
-            setDuration(leg.duration.text);
+  const handleRetryRoute = () => {
+    lastSuccessfulRouteOriginRef.current = null;
+    lastSuccessfulRouteDestinationRef.current = null;
+    routeOffRouteRef.current = true;
+    setRouteError(null);
+    setRouteRefreshTick(value => value + 1);
+  };
 
-            // Store full path and set initial state
-            fullRoutePathRef.current = result.routes[0].overview_path;
-            setRoutePath(result.routes[0].overview_path);
+  // Directions is requested only for the initial route, destination changes, or a real off-route event.
+  // GPS movement itself updates the remaining geometry locally and does not create a billable request.
+  useEffect(() => {
+    const googleMaps = window.google?.maps;
+    const origin = toCoordinate(currentLocation?.lat, currentLocation?.lng);
+    const destination = toCoordinate(coords?.lat, coords?.lng);
+    if (!isTrackingActive || !isLoaded || !map || !googleMaps || !origin || !destination || !googleMaps.geometry?.spherical) return;
 
-            // Center on current location
-            map.setCenter(currentLocation);
-            map.setZoom(15);
+    const lastOrigin = lastSuccessfulRouteOriginRef.current;
+    const lastDestination = lastSuccessfulRouteDestinationRef.current;
+    const destinationChanged = !lastDestination || googleMaps.geometry.spherical.computeDistanceBetween(
+      new googleMaps.LatLng(destination), new googleMaps.LatLng(lastDestination)
+    ) > 1;
+    const shouldRefresh = !lastOrigin || destinationChanged || routeOffRouteRef.current;
+    if (!shouldRefresh) return;
+
+    const isInitialRequest = !lastOrigin;
+    if (!isInitialRequest && !destinationChanged && Date.now() - routeLastRequestedAtRef.current < 60000) return;
+
+    pendingRouteRef.current = {
+      origin,
+      destination,
+      shouldFit: !hasFittedRouteRef.current || destinationChanged
+    };
+    if (routeRequestInFlightRef.current) return;
+
+    const requestNextRoute = () => {
+      const nextRoute = pendingRouteRef.current;
+      if (!nextRoute || routeRequestInFlightRef.current || !mountedRef.current) return;
+
+      pendingRouteRef.current = null;
+      routeRequestInFlightRef.current = true;
+      routeLastRequestedAtRef.current = Date.now();
+      const requestSequence = ++routeRequestSequenceRef.current;
+      const directionsService = new googleMaps.DirectionsService();
+
+      const tryRoute = (mode) => {
+        directionsService.route({
+          origin: nextRoute.origin,
+          destination: nextRoute.destination,
+          travelMode: mode
+        }, (result, status) => {
+          if (!mountedRef.current || requestSequence !== routeRequestSequenceRef.current) return;
+
+          const latestDestination = toCoordinate(latestDestinationRef.current?.lat, latestDestinationRef.current?.lng);
+          const responseIsCurrent = latestDestination && googleMaps.geometry.spherical.computeDistanceBetween(
+            new googleMaps.LatLng(nextRoute.destination), new googleMaps.LatLng(latestDestination)
+          ) <= 1;
+
+          if (status === googleMaps.DirectionsStatus.OK && result?.routes?.[0]?.legs?.[0] && responseIsCurrent) {
+            routeRequestInFlightRef.current = false;
+            const route = result.routes[0];
+            const leg = route.legs[0];
+            const nextProgress = buildRouteProgress({
+              route,
+              distanceText: leg.distance?.text || '',
+              distanceValue: leg.distance?.value || 0,
+              durationText: leg.duration?.text || '',
+              durationValue: leg.duration?.value || 0,
+              origin: nextRoute.origin,
+              destination: nextRoute.destination
+            });
+
+            if (nextProgress) {
+              routeProgressRef.current = nextProgress;
+              routeProgressDistanceRef.current = 0;
+              fullRoutePathRef.current = nextProgress.path;
+              setRoutePath(nextProgress.path);
+              setDirections(result);
+              setRouteError(null);
+              setDistance(leg.distance?.text || '');
+              setDuration(leg.duration?.text || '');
+              lastSuccessfulRouteOriginRef.current = nextRoute.origin;
+              lastSuccessfulRouteDestinationRef.current = nextRoute.destination;
+              routeOffRouteRef.current = false;
+              offRouteCountRef.current = 0;
+              pendingRouteRef.current = null;
+
+              if (socket && id && isTrackingActive) {
+                socket.emit('update_location', {
+                  bookingId: id,
+                  lat: nextRoute.origin.lat,
+                  lng: nextRoute.origin.lng,
+                  heading: heading,
+                  accuracy: currentLocation?.accuracy,
+                  timestamp: Date.now(),
+                  routeSnapshot: serializeRouteProgress(nextProgress)
+                });
+              }
+
+              if (nextRoute.shouldFit) {
+                const bounds = new googleMaps.LatLngBounds();
+                nextProgress.path.forEach(point => bounds.extend(point));
+                map.fitBounds(bounds, { top: 80, right: 40, bottom: 250, left: 40 });
+                hasFittedRouteRef.current = true;
+              }
+            }
+            requestNextRoute();
+          } else if (mode === googleMaps.TravelMode.DRIVING) {
+            // Driving route not found, try walking fallback
+            tryRoute(googleMaps.TravelMode.WALKING);
           } else {
-            setRouteError('Could not calculate a driving route to this location.');
-          }
-        }
-      );
-    }
-  }, [isLoaded, coords, map, currentLocation]);
+            routeRequestInFlightRef.current = false;
+            // Both DRIVING and WALKING failed: Fallback to direct path
+            const straightPath = [nextRoute.origin, nextRoute.destination];
+            const p1 = new googleMaps.LatLng(nextRoute.origin);
+            const p2 = new googleMaps.LatLng(nextRoute.destination);
+            const distM = googleMaps.geometry?.spherical?.computeDistanceBetween(p1, p2) || 0;
 
-  // Update distance, ETA, and Clear Traveled Path as vendor moves
-  useEffect(() => {
-    if (isLoaded && currentLocation && coords && window.google && directionsCalculatedRef.current) {
-      // 1. Calculate straight-line distance
-      const riderPoint = new window.google.maps.LatLng(currentLocation);
-      const destPoint = new window.google.maps.LatLng(coords);
-      const distanceMeters = window.google.maps.geometry.spherical.computeDistanceBetween(riderPoint, destPoint);
+            const fallbackProgress = buildRouteProgress({
+              path: straightPath,
+              distanceText: distM < 1000 ? `${Math.round(distM)} m` : `${(distM / 1000).toFixed(1)} km`,
+              distanceValue: distM,
+              durationText: distM < 1000 ? '< 1 min' : `${Math.max(1, Math.round((distM / 1000 / 30) * 60))} min`,
+              durationValue: Math.round((distM / 1000 / 30) * 3600),
+              origin: nextRoute.origin,
+              destination: nextRoute.destination
+            });
 
-      // Convert to km
-      const distanceKm = distanceMeters / 1000;
+            if (fallbackProgress) {
+              routeProgressRef.current = fallbackProgress;
+              routeProgressDistanceRef.current = 0;
+              fullRoutePathRef.current = straightPath;
+              setRoutePath(straightPath);
+              setDirections(null);
+              setDistance(fallbackProgress.totalDistanceText);
+              setDuration(fallbackProgress.totalDurationText);
+              lastSuccessfulRouteOriginRef.current = nextRoute.origin;
+              lastSuccessfulRouteDestinationRef.current = nextRoute.destination;
+              routeOffRouteRef.current = false;
+              offRouteCountRef.current = 0;
+              pendingRouteRef.current = null;
 
-      // Format distance
-      if (distanceKm < 1) {
-        setDistance(`${Math.round(distanceMeters)} m`);
-      } else {
-        setDistance(`${distanceKm.toFixed(1)} km`);
-      }
+              if (socket && id && isTrackingActive) {
+                socket.emit('update_location', {
+                  bookingId: id,
+                  lat: nextRoute.origin.lat,
+                  lng: nextRoute.origin.lng,
+                  heading: heading,
+                  accuracy: currentLocation?.accuracy,
+                  timestamp: Date.now(),
+                  routeSnapshot: serializeRouteProgress(fallbackProgress)
+                });
+              }
 
-      // Estimate time (assuming average speed of 30 km/h in city)
-      const avgSpeedKmh = 30;
-      const timeHours = distanceKm / avgSpeedKmh;
-      const timeMinutes = Math.round(timeHours * 60);
+              if (nextRoute.shouldFit) {
+                const bounds = new googleMaps.LatLngBounds();
+                bounds.extend(nextRoute.origin);
+                bounds.extend(nextRoute.destination);
+                map.fitBounds(bounds, { top: 80, right: 40, bottom: 250, left: 40 });
+                hasFittedRouteRef.current = true;
+              }
 
-      if (timeMinutes < 1) {
-        setDuration('< 1 min');
-      } else if (timeMinutes < 60) {
-        setDuration(`${timeMinutes} min`);
-      } else {
-        const hours = Math.floor(timeMinutes / 60);
-        const mins = timeMinutes % 60;
-        setDuration(`${hours} hr ${mins} min`);
-      }
+              if (distM > 50) {
+                setRouteError('Road navigation route unavailable. Showing direct path.');
+              } else {
+                setRouteError(null);
+              }
+            } else if (!lastSuccessfulRouteOriginRef.current && !pendingRouteRef.current) {
+              setRouteError('Could not calculate a driving route to this location.');
+            }
 
-      // 2. Clear Traveled Path Visualization
-      if (fullRoutePathRef.current && fullRoutePathRef.current.length > 0) {
-        let closestIndex = -1;
-        let minDist = Infinity;
-
-        fullRoutePathRef.current.forEach((p, idx) => {
-          const d = window.google.maps.geometry.spherical.computeDistanceBetween(riderPoint, p);
-          if (d < minDist) {
-            minDist = d;
-            closestIndex = idx;
+            requestNextRoute();
           }
         });
+      };
 
-        if (closestIndex !== -1) {
-          const remaining = fullRoutePathRef.current.slice(closestIndex + 1);
-          setRoutePath([currentLocation, ...remaining]);
-        }
+      tryRoute(googleMaps.TravelMode.DRIVING);
+    };
+
+    requestNextRoute();
+  }, [isLoaded, coords, map, currentLocation, isTrackingActive, socket, id, routeRefreshTick, heading]);
+
+  // Match GPS to the stored road geometry and remove only the completed route behind the vendor.
+  useEffect(() => {
+    const progress = routeProgressRef.current;
+    const current = toCoordinate(currentLocation?.lat, currentLocation?.lng);
+    if (!progress || !current || !isLoaded) return;
+
+    const accuracy = Number(currentLocation?.accuracy) || 50;
+    const match = matchRouteProgress(progress, current, routeProgressDistanceRef.current, accuracy);
+    if (!match) return;
+
+    routeProgressDistanceRef.current = Math.max(routeProgressDistanceRef.current, match.progressMeters);
+    setRoutePath(getRemainingPath(progress, match));
+    setDistance(formatDistanceMeters(Math.max(0, progress.totalDistanceMeters - routeProgressDistanceRef.current)));
+    setDuration(formatRemainingDuration(progress, Math.max(0, progress.totalDistanceMeters - routeProgressDistanceRef.current)));
+
+    const offRouteThreshold = Math.max(75, accuracy + 25);
+    if (match.distanceToRouteMeters > offRouteThreshold) {
+      offRouteCountRef.current += 1;
+      if (offRouteCountRef.current >= 2 && !routeOffRouteRef.current) {
+        routeOffRouteRef.current = true;
+        setRouteRefreshTick(value => value + 1);
       }
+    } else {
+      offRouteCountRef.current = 0;
     }
-  }, [currentLocation, coords, isLoaded]);
-
+  }, [currentLocation, isLoaded]);
   // Calculate Heading based on movement (Direction Sense)
   useEffect(() => {
     if (isLoaded && currentLocation && window.google) {
@@ -467,7 +651,7 @@ const BookingMap = () => {
   useEffect(() => {
     if (map && currentLocation && heading && isAutoCenter) {
       map.setHeading(heading);
-      map.setTilt(45); // 45 degree tilt for 3D feel
+      map.setTilt(0); // Keep custom markers aligned with the road route
     }
   }, [map, heading, isAutoCenter, currentLocation]);
 
@@ -516,6 +700,15 @@ const BookingMap = () => {
     </OverlayView>
   ), [animatedLocation, heading]);
 
+  useEffect(() => {
+    if (!map || !isFullScreen || !window.google?.maps?.event) return;
+    const center = map.getCenter();
+    const frame = requestAnimationFrame(() => {
+      window.google.maps.event.trigger(map, 'resize');
+      if (center) map.setCenter(center);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [map, isFullScreen]);
   const mapOptions = useMemo(() => ({
     disableDefaultUI: true,
     zoomControl: false,
@@ -524,10 +717,11 @@ const BookingMap = () => {
     rotateControl: true,
     tiltControl: true,
     isFractionalZoomEnabled: true,
-    mapId: mapId || '8e0a97af9386fefc',
+    styles: mapStyles,
+    ...(mapId ? { mapId } : {}),
   }), [mapId]);
 
-  if (!isLoaded || loading) return <div className="h-screen bg-gray-100 flex items-center justify-center"><div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (loading && !booking) return <div className="h-screen bg-gray-100 flex items-center justify-center"><div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
   return (
     <div className="h-screen flex flex-col relative bg-white overflow-hidden">
@@ -571,17 +765,24 @@ const BookingMap = () => {
             exit={{ opacity: 0, scale: 0.9 }}
             className="absolute inset-x-4 top-[20%] z-40 bg-white p-5 rounded-2xl shadow-xl flex flex-col items-center text-center max-w-sm mx-auto border border-gray-100"
           >
+            <button
+              onClick={() => setRouteError(null)}
+              className="absolute top-3 right-3 p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+              title="Close"
+            >
+              <FiX className="w-4 h-4" />
+            </button>
             <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center mb-3">
               <FiAlertTriangle className="w-6 h-6 text-orange-500" />
             </div>
-            <h3 className="text-base font-bold text-gray-800 mb-1">Route Not Found</h3>
+            <h3 className="text-base font-bold text-gray-800 mb-1">Route Notice</h3>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              We couldn't calculate a driving path to this location. The destination might be unreachable by road.
+              {routeError}
             </p>
             <div className="flex gap-2 w-full">
               <button
-                onClick={() => window.location.reload()}
-                className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                onClick={handleRetryRoute}
+                className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <FiRefreshCw className="w-3.5 h-3.5" /> Retry
               </button>
@@ -590,7 +791,7 @@ const BookingMap = () => {
                   const dest = coords ? `${coords.lat},${coords.lng}` : encodeURIComponent(booking?.address?.addressLine1 || '');
                   window.open(`https://www.google.com/maps/dir/?api=1&destination=${dest}`, '_blank');
                 }}
-                className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 Open Maps
               </button>
@@ -636,41 +837,64 @@ const BookingMap = () => {
       </AnimatePresence>
 
       <div className="flex-1 w-full h-full relative">
-        <GoogleMap
-          mapContainerStyle={{ width: '100%', height: '100%' }}
-          defaultCenter={defaultCenter}
-          defaultZoom={14}
-          onLoad={map => {
-            setMap(map);
-            map.setTilt(0);
-          }}
-          onDragStart={() => setIsAutoCenter(false)}
-          options={mapOptions}
-        >
-          {directions && (
-            <>
-              <DirectionsRenderer
-                directions={directions}
-                options={{
-                  suppressMarkers: true,
-                  suppressPolylines: true
-                }}
-              />
-              <PolylineF
-                path={routePath}
-                options={{
-                  strokeColor: "#0F766E", // Dark Teal
-                  strokeWeight: 8,
-                  strokeOpacity: 1,
-                  zIndex: 50
-                }}
-              />
-            </>
-          )}
+        {!isLoaded ? (
+          <div className="w-full h-full bg-slate-50 flex flex-col items-center justify-center gap-2">
+            <div className="w-7 h-7 border-3 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-[11px] text-gray-400 font-medium">Loading Map...</p>
+          </div>
+        ) : (
+          <GoogleMap
+            mapContainerStyle={{ width: '100%', height: '100%' }}
+            defaultCenter={defaultCenter}
+            defaultZoom={14}
+            onLoad={map => {
+              setMap(map);
+              map.setTilt(0);
+              if (currentLocation && coords) {
+                const bounds = new window.google.maps.LatLngBounds();
+                bounds.extend(currentLocation);
+                bounds.extend(coords);
+                map.fitBounds(bounds, 60);
+              } else if (currentLocation) {
+                map.setCenter(currentLocation);
+                map.setZoom(16);
+              } else if (coords) {
+                map.setCenter(coords);
+                map.setZoom(16);
+              }
+            }}
+            onDragStart={() => setIsAutoCenter(false)}
+            options={mapOptions}
+          >
+            {(directions || (routePath && routePath.length > 1)) && (
+              <>
+                {directions && (
+                  <DirectionsRenderer
+                    directions={directions}
+                    options={{
+                      suppressMarkers: true,
+                      suppressPolylines: true
+                    }}
+                  />
+                )}
+                {routePath && routePath.length > 1 && (
+                  <PolylineF
+                    path={routePath}
+                    options={{
+                      strokeColor: "#0F766E", // Dark Teal
+                      strokeWeight: 8,
+                      strokeOpacity: 1,
+                      zIndex: 50
+                    }}
+                  />
+                )}
+              </>
+            )}
 
-          {destinationMarker}
-          {riderMarker}
-        </GoogleMap>
+            {destinationMarker}
+            {riderMarker}
+          </GoogleMap>
+        )}
 
         {/* Full Screen Toggle Button */}
         <button
@@ -789,7 +1013,11 @@ const BookingMap = () => {
         isOpen={isVisitModalOpen}
         onClose={() => setIsVisitModalOpen(false)}
         bookingId={id}
-        onSuccess={() => navigate(`/vendor/booking/${id}`)}
+        onSuccess={() => {
+          setIsVisitModalOpen(false);
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          navigate(`/vendor/booking/${id}/timeline`);
+        }}
       />
     </div>
   );

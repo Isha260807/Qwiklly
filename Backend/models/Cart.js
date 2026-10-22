@@ -61,11 +61,49 @@ const cartItemSchema = new mongoose.Schema({
     default: 1,
     min: 1
   },
-  // Selected hours for HOURLY-priced services (null for FIXED items)
-  hours: {
+  // Pricing Type: FIXED or DURATION
+  pricingType: {
+    type: String,
+    enum: ['FIXED', 'DURATION', 'HOURLY'],
+    default: 'FIXED'
+  },
+  // Duration in minutes for DURATION-priced services.
+  durationMinutes: {
+    type: Number,
+    default: null
+  },
+  estimatedDurationMinutes: {
     type: Number,
     default: null,
     min: 1
+  },
+  // Generic duration pricing snapshot. Legacy 30-minute fields remain below
+  // so existing carts and UI consumers continue to work.
+  pricePerUnit: {
+    type: Number,
+    default: null
+  },
+  billingUnitMinutes: {
+    type: Number,
+    default: 30
+  },
+  pricePer30Minutes: {
+    type: Number,
+    default: null
+  },
+  minDurationMinutes: {
+    type: Number,
+    default: 30
+  },
+  maxDurationMinutes: {
+    type: Number,
+    default: 480
+  },
+  // Selected hours for legacy HOURLY-priced services (null for FIXED items)
+  hours: {
+    type: Number,
+    default: null,
+    min: 0
   },
   rating: {
     type: String,
@@ -95,6 +133,7 @@ const cartItemSchema = new mongoose.Schema({
     price: Number,
     originalPrice: Number,
     duration: String,
+    estimatedDurationMinutes: Number,
     description: String,
     imageUrl: String,
     features: [String]
@@ -130,4 +169,3 @@ cartSchema.pre('save', function (next) {
 });
 
 module.exports = mongoose.model('Cart', cartSchema);
-

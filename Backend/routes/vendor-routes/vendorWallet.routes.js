@@ -7,22 +7,13 @@ const {
   getWallet,
   getTransactions,
   recordCashCollection,
-  requestSettlement,
-  getSettlements,
-  getWalletSummary,
-  requestWithdrawal,
-  getWithdrawals
+  getWalletSummary
 } = require('../../controllers/vendorControllers/vendorWalletController');
 
 // Validation rules
 const cashCollectionValidation = [
   body('bookingId').notEmpty().withMessage('Booking ID is required'),
   body('amount').isFloat({ min: 1 }).withMessage('Valid amount is required')
-];
-
-const settlementValidation = [
-  body('amount').isFloat({ min: 1 }).withMessage('Valid amount is required'),
-  body('paymentMethod').optional().isIn(['upi', 'bank_transfer', 'cash', 'other'])
 ];
 
 // Routes
@@ -37,20 +28,5 @@ router.get('/wallet/transactions', authenticate, isVendor, getTransactions);
 
 // Record cash collection (creates negative entry - vendor owes admin)
 router.post('/wallet/cash-collection', authenticate, isVendor, cashCollectionValidation, recordCashCollection);
-
-// Request settlement (vendor pays admin)
-router.post('/wallet/settlement', authenticate, isVendor, settlementValidation, requestSettlement);
-
-// Get settlement history
-router.get('/wallet/settlements', authenticate, isVendor, getSettlements);
-
-// Request withdrawal (vendor withdraws earnings)
-router.post('/withdraw', authenticate, isVendor, [
-  body('amount').isFloat({ min: 1 }).withMessage('Valid amount is required'),
-  body('bankDetails').optional().isObject()
-], requestWithdrawal);
-
-// Get withdrawal history
-router.get('/wallet/withdrawals', authenticate, isVendor, getWithdrawals);
 
 module.exports = router;

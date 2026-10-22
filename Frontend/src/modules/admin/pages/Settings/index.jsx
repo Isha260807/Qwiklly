@@ -1,32 +1,37 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiClock, FiCheck, FiSlash, FiCalendar } from 'react-icons/fi';
+import { FiSettings, FiGrid, FiDollarSign, FiSave, FiUser, FiMail, FiTrash2, FiPlus, FiUsers, FiShield, FiFileText, FiMapPin, FiPhone, FiHeadphones, FiMessageCircle, FiEdit, FiLock, FiUnlock, FiX, FiClock, FiCheck, FiSlash, FiCalendar, FiGift, FiCreditCard } from 'react-icons/fi';
 import { getSettings, updateSettings, updateAdminProfile, getAdminProfile, getAllAdmins, createAdmin, deleteAdmin, updateAdminDetails, toggleAdminStatus } from '../../services/settingsService';
-import { cityService } from '../../services/cityService';
-import CityManagement from '../Cities';
+import { ADMIN_PERMISSION_OPTIONS, SETTINGS_PERMISSION_OPTIONS } from '../../../../components/auth/adminAccess';
+import ZoneManagement from '../Zones';
+import VendorSalaryWallets from '../Vendors/VendorSalaryWallets';
+import VendorSlotAvailabilityPanel from './VendorSlotAvailabilityPanel';
 import { toast } from 'react-hot-toast';
 
-const AdminSettings = () => {
-  const [settings, setSettings] = useState({
-    workerAutoAssignment: true,
-  });
+const getLegalDocumentFromPath = (pathname = '') => {
+  if (pathname.endsWith('/legal/terms')) return 'terms';
+  if (pathname.endsWith('/legal/privacy')) return 'privacy';
+  return null;
+};
 
+const AdminSettings = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const legalDocumentFromPath = getLegalDocumentFromPath(location.pathname);
   const [financialSettings, setFinancialSettings] = useState({
     visitedCharges: 0,
     instantBookingCharges: 0,
     serviceGstPercentage: 0,
-    partsGstPercentage: 0,
-    servicePayoutPercentage: 0,
-    partsPayoutPercentage: 0,
-    vendorCashLimit: 0,
     cancellationPenalty: 0,
-    tdsPercentage: 1,
-    platformFeePercentage: 0,
     maxSearchTime: 5,
-    waveDuration: 60,
-    searchRadius: 5,
     paymentTimeoutMinutes: 15,
     isOnlinePaymentEnabled: true
+  });
+  const [referralSettings, setReferralSettings] = useState({
+    referralEnabled: true,
+    referrerRewardAmount: 100,
+    referredRewardAmount: 100
   });
 
   // Dynamic Booking Slots State
@@ -35,7 +40,7 @@ const AdminSettings = () => {
     slotEndHour: 21,
     slotIntervalMins: 60,
     maxDaysInAdvance: 7,
-    leadTimeHours: 1,
+    leadTimeHours: 0.5,
     slotServiceDurationMins: 45,
     disabledSlots: []
   });
@@ -64,12 +69,18 @@ const AdminSettings = () => {
     supportWhatsapp: ''
   });
   const [supportLoading, setSupportLoading] = useState(false);
+  const [legalSettings, setLegalSettings] = useState({
+    termsOfService: '',
+    privacyPolicy: ''
+  });
+  const [legalLoading, setLegalLoading] = useState(false);
+  const [referralLoading, setReferralLoading] = useState(false);
 
   const [profile, setProfile] = useState({
     name: '',
     email: '',
-    role: 'admin',
-    assignedCity: '',
+    role: 'sub_admin',
+    permissions: [],
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
@@ -77,17 +88,51 @@ const AdminSettings = () => {
 
   // Admin Management State
   const [admins, setAdmins] = useState([]);
-  const [cities, setCities] = useState([]); // State for cities
   const [showAddAdmin, setShowAddAdmin] = useState(false);
-  const [newAdmin, setNewAdmin] = useState({ name: '', email: '', password: '', role: 'admin', cityId: '' }); // Added cityId
+  const [newAdmin, setNewAdmin] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'sub_admin',
+    permissions: []
+  });
   const [adminLoading, setAdminLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [activeView, setActiveView] = useState('main'); // 'main', 'profile', 'financial', 'system', 'admins'
+  const [activeView, setActiveView] = useState(() => legalDocumentFromPath ? 'legal' : 'main'); // 'main', 'profile', 'legal', 'financial', 'referral', 'system', 'admins'
+  const [activeLegalDocument, setActiveLegalDocument] = useState(legalDocumentFromPath);
 
   const isSuperAdmin = profile.role === 'super_admin';
+  const hasSettingsSection = (permission) => {
+    if (isSuperAdmin || profile.permissions?.includes(permission)) return true;
 
+    // Financial Info now also controls the billing/company details section.
+    // Keep the reverse compatibility check for admins created with the old
+    // Billing permission before the access options were consolidated.
+    if (permission === 'settings_billing') {
+      return profile.permissions?.includes('settings_financial');
+    }
+    if (permission === 'settings_financial') {
+      return profile.permissions?.includes('settings_billing');
+    }
+
+    return false;
+  };
+
+  useEffect(() => {
+    const legalDocument = getLegalDocumentFromPath(location.pathname);
+    if (legalDocument) {
+      setActiveView('legal');
+      setActiveLegalDocument(legalDocument);
+      return;
+    }
+
+    if (location.pathname === '/admin/settings' || location.pathname === '/admin/settings/') {
+      setActiveView('main');
+      setActiveLegalDocument(null);
+    }
+  }, [location.pathname]);
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -97,28 +142,19 @@ const AdminSettings = () => {
             ...prev,
             email: res.data.email,
             name: res.data.name || 'Admin',
-            role: res.data.role || 'admin',
-            assignedCity: res.data.cityName || res.data.cityId?.name || ''
+            role: res.data.role || 'sub_admin',
+            permissions: Array.isArray(res.data.permissions) ? res.data.permissions : []
           }));
-          const adminData = JSON.parse(localStorage.getItem('adminData') || '{}');
+          const storage = sessionStorage.getItem('adminAccessToken') ? sessionStorage : localStorage;
+          const adminData = JSON.parse(storage.getItem('adminData') || '{}');
           const newData = { ...adminData, ...res.data };
-          localStorage.setItem('adminData', JSON.stringify(newData));
+          storage.setItem('adminData', JSON.stringify(newData));
         }
       } catch (error) {
         console.error('Error loading admin profile:', error);
       }
     };
 
-    const loadSettings = () => {
-      try {
-        const adminSettings = JSON.parse(localStorage.getItem('adminSettings') || '{}');
-        if (Object.keys(adminSettings).length > 0) {
-          setSettings(prev => ({ ...prev, ...adminSettings }));
-        }
-      } catch (error) {
-        console.error('Error loading admin settings:', error);
-      }
-    };
 
     const loadFinancialSettings = async () => {
       try {
@@ -127,19 +163,16 @@ const AdminSettings = () => {
           setFinancialSettings({
             visitedCharges: res.settings.visitedCharges || 0,
             instantBookingCharges: res.settings.instantBookingCharges !== undefined ? res.settings.instantBookingCharges : 0,
-            serviceGstPercentage: res.settings.serviceGstPercentage ?? 0,
-            partsGstPercentage: res.settings.partsGstPercentage ?? 0,
-            servicePayoutPercentage: res.settings.servicePayoutPercentage ?? 0,
-            partsPayoutPercentage: res.settings.partsPayoutPercentage ?? 0,
-            tdsPercentage: res.settings.tdsPercentage || 1,
-            platformFeePercentage: res.settings.platformFeePercentage ?? 0,
-            vendorCashLimit: res.settings.vendorCashLimit ?? 0,
+            serviceGstPercentage: res.settings.serviceGstPercentage !== undefined ? res.settings.serviceGstPercentage : 0,
             cancellationPenalty: res.settings.cancellationPenalty !== undefined ? res.settings.cancellationPenalty : 0,
             maxSearchTime: res.settings.maxSearchTime || 5,
-            waveDuration: res.settings.waveDuration || 60,
-            searchRadius: res.settings.searchRadius || 5,
             paymentTimeoutMinutes: res.settings.paymentTimeoutMinutes || 15,
             isOnlinePaymentEnabled: res.settings.isOnlinePaymentEnabled !== undefined ? res.settings.isOnlinePaymentEnabled : true
+          });
+          setReferralSettings({
+            referralEnabled: res.settings.referralEnabled !== undefined ? res.settings.referralEnabled : true,
+            referrerRewardAmount: res.settings.referrerRewardAmount ?? 100,
+            referredRewardAmount: res.settings.referredRewardAmount ?? 100
           });
           // Load billing settings
           setBillingSettings({
@@ -161,13 +194,17 @@ const AdminSettings = () => {
             supportPhone: res.settings.supportPhone || '',
             supportWhatsapp: res.settings.supportWhatsapp || ''
           });
+          setLegalSettings({
+            termsOfService: res.settings.termsOfService || '',
+            privacyPolicy: res.settings.privacyPolicy || ''
+          });
           // Load slot settings
           setSlotSettings({
             slotStartHour: res.settings.slotStartHour ?? 9,
             slotEndHour: res.settings.slotEndHour ?? 21,
             slotIntervalMins: res.settings.slotIntervalMins ?? 60,
             maxDaysInAdvance: res.settings.maxDaysInAdvance ?? 7,
-            leadTimeHours: res.settings.leadTimeHours ?? 1,
+            leadTimeHours: res.settings.leadTimeHours ?? 0.5,
             slotServiceDurationMins: res.settings.slotServiceDurationMins ?? 45,
             disabledSlots: res.settings.disabledSlots || []
           });
@@ -178,7 +215,6 @@ const AdminSettings = () => {
     };
 
     loadProfile();
-    loadSettings();
     loadFinancialSettings();
   }, []);
 
@@ -195,36 +231,25 @@ const AdminSettings = () => {
     }
   };
 
-  // Fetch cities for dropdown
-  const loadCities = async () => {
-    try {
-      const res = await cityService.getAll();
-      if (res.success) {
-        setCities(res.cities || []);
-      }
-    } catch (error) {
-      console.error('Error loading cities:', error);
-    }
-  };
-
-  // Load admins and cities when entering admin view
+  // Load admins when entering admin view
   useEffect(() => {
-    if (isSuperAdmin && (activeView === 'admins' || admins.length === 0)) {
+    if (hasSettingsSection('settings_admins') && (activeView === 'admins' || admins.length === 0)) {
       loadAdmins();
-      loadCities(); // Fetch cities as well
     }
-  }, [isSuperAdmin, activeView]);
+  }, [isSuperAdmin, profile.permissions, activeView]);
 
-  const handleToggle = (key) => {
-    const updated = { ...settings, [key]: !settings[key] };
-    setSettings(updated);
-    localStorage.setItem('adminSettings', JSON.stringify(updated));
-    window.dispatchEvent(new Event('adminSettingsUpdated'));
-  };
 
   const handleFinancialChange = (e) => {
     const { name, value } = e.target;
     setFinancialSettings(prev => ({
+      ...prev,
+      [name]: Number(value)
+    }));
+  };
+
+  const handleReferralChange = (e) => {
+    const { name, value } = e.target;
+    setReferralSettings(prev => ({
       ...prev,
       [name]: Number(value)
     }));
@@ -245,6 +270,19 @@ const AdminSettings = () => {
       toast.error('Failed to update settings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReferralSave = async (e) => {
+    e.preventDefault();
+    setReferralLoading(true);
+    try {
+      await updateSettings(referralSettings);
+      toast.success('Referral settings updated');
+    } catch {
+      toast.error('Failed to update referral settings');
+    } finally {
+      setReferralLoading(false);
     }
   };
 
@@ -435,9 +473,10 @@ const AdminSettings = () => {
       }
 
       await updateAdminProfile(updateData);
-      const adminData = JSON.parse(localStorage.getItem('adminUser') || '{}');
+      const storage = sessionStorage.getItem('adminAccessToken') ? sessionStorage : localStorage;
+      const adminData = JSON.parse(storage.getItem('adminData') || '{}');
       adminData.email = profile.email;
-      localStorage.setItem('adminUser', JSON.stringify(adminData));
+      storage.setItem('adminData', JSON.stringify(adminData));
 
       toast.success('Profile updated');
       setProfile(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
@@ -458,18 +497,16 @@ const AdminSettings = () => {
     if (!isEdit && !newAdmin.password) {
       return toast.error('Password is required for new admin');
     }
+    if (newAdmin.permissions.includes('settings') && !SETTINGS_PERMISSION_OPTIONS.some(item => newAdmin.permissions.includes(item.value))) {
+      return toast.error('Select at least one Settings section');
+    }
 
     setAdminLoading(true);
     try {
-      // Prepare payload
-      const payload = { ...newAdmin };
-      if (payload.cityId) {
-        const cityObj = cities.find(c => (c._id || c.id) === payload.cityId);
-        if (cityObj) payload.cityName = cityObj.name;
-      } else {
-        delete payload.cityId;
-        payload.cityName = '';
-      }
+      const payload = {
+        ...newAdmin,
+        permissions: newAdmin.permissions
+      };
 
       if (isEdit) {
         await updateAdminDetails(newAdmin.id, payload);
@@ -478,7 +515,7 @@ const AdminSettings = () => {
         await createAdmin(payload);
         toast.success('Admin created successfully');
       }
-      setNewAdmin({ name: '', email: '', password: '', role: 'admin', cityId: '' });
+      setNewAdmin({ name: '', email: '', password: '', role: 'sub_admin', permissions: [] });
       setShowAddAdmin(false);
       loadAdmins();
     } catch (error) {
@@ -495,9 +532,44 @@ const AdminSettings = () => {
       email: admin.email,
       role: admin.role,
       password: '',
-      cityId: admin.cityId?._id || admin.cityId || '' // Handle populated or raw ID
+      permissions: Array.isArray(admin.permissions) ? admin.permissions : []
     });
     setShowAddAdmin(true);
+  };
+
+  const handleLegalChange = (e) => {
+    const { name, value } = e.target;
+    setLegalSettings(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleLegalSave = async (e) => {
+    e.preventDefault();
+    setLegalLoading(true);
+    try {
+      await updateSettings(legalSettings);
+      toast.success('Terms and privacy content updated');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update legal content');
+    } finally {
+      setLegalLoading(false);
+    }
+  };
+
+  const toggleAdminPermission = (permission) => {
+    setNewAdmin(prev => {
+      const hasPermission = prev.permissions.includes(permission);
+      const settingsPermissionValues = SETTINGS_PERMISSION_OPTIONS.map(item => item.value);
+      const nextPermissions = hasPermission
+        ? prev.permissions.filter(item => item !== permission)
+        : [...prev.permissions, permission];
+
+      return {
+        ...prev,
+        permissions: permission === 'settings' && hasPermission
+          ? nextPermissions.filter(item => !settingsPermissionValues.includes(item))
+          : nextPermissions
+      };
+    });
   };
 
   const handleBlockAdmin = async (id, currentStatus) => {
@@ -534,41 +606,54 @@ const AdminSettings = () => {
   const renderMainMenu = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {/* Profile Settings Card */}
-      <div onClick={() => setActiveView('profile')}
+      {hasSettingsSection('settings_profile') && <div onClick={() => setActiveView('profile')}
         className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
         <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
           <FiUser className="w-6 h-6 text-blue-600" />
         </div>
         <h3 className="text-lg font-bold text-gray-800 mb-2">Profile Settings</h3>
         <p className="text-sm text-gray-500">Manage your personal account details and password</p>
-      </div>
+      </div>}
 
       {/* Financial Settings Card - Super Admin Only */}
-      {isSuperAdmin && (
+      {hasSettingsSection('settings_financial') && (
         <div onClick={() => setActiveView('financial')}
           className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
           <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-100 transition-colors">
             <FiDollarSign className="w-6 h-6 text-green-600" />
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">Financial Info</h3>
-          <p className="text-sm text-gray-500">Configure charges, commissions, and billing details</p>
+          <p className="text-sm text-gray-500">Configure booking charges and billing details</p>
         </div>
       )}
 
-      {/* System Settings Card - Super Admin Only */}
+      {/* Vendor Wallets - Super Admin only */}
       {isSuperAdmin && (
-        <div onClick={() => setActiveView('system')}
+        <div onClick={() => setActiveView('vendorWallets')}
           className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-100 transition-colors">
-            <FiSettings className="w-6 h-6 text-purple-600" />
+          <div className="w-12 h-12 bg-emerald-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition-colors">
+            <FiCreditCard className="w-6 h-6 text-emerald-600" />
           </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">System & Support</h3>
-          <p className="text-sm text-gray-500">Manage auto-assignment and help contact info</p>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Vendor Wallets</h3>
+          <p className="text-sm text-gray-500">Manage vendor earnings, salary rates, and wallet payouts</p>
         </div>
       )}
+
+      {/* Referral Settings Card - Super Admin Only */}
+      {hasSettingsSection('settings_referral') && (
+        <div onClick={function () { setActiveView('referral'); }}
+          className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
+          <div className="w-12 h-12 bg-pink-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-pink-100 transition-colors">
+            <FiGift className="w-6 h-6 text-pink-600" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Referral Settings</h3>
+          <p className="text-sm text-gray-500">Manage referral rewards and invite benefits</p>
+        </div>
+      )}
+
 
       {/* Booking Slots & Timing Card - Super Admin Only */}
-      {isSuperAdmin && (
+      {hasSettingsSection('settings_slots') && (
         <div onClick={() => setActiveView('slots')}
           className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
           <div className="w-12 h-12 bg-indigo-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-indigo-100 transition-colors">
@@ -579,20 +664,20 @@ const AdminSettings = () => {
         </div>
       )}
 
-      {/* City Management Card - Super Admin Only */}
-      {isSuperAdmin && (
-        <div onClick={() => setActiveView('cities')}
+      {/* Zone Management Card - Super Admin Only */}
+      {hasSettingsSection('settings_zones') && (
+        <div onClick={() => setActiveView('zones')}
           className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
-          <div className="w-12 h-12 bg-teal-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-teal-100 transition-colors">
-            <FiMapPin className="w-6 h-6 text-teal-600" />
+          <div className="w-12 h-12 bg-rose-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-rose-100 transition-colors">
+            <FiMapPin className="w-6 h-6 text-rose-600" />
           </div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">City Management</h3>
-          <p className="text-sm text-gray-500">Manage operational cities and default location</p>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">Zone Management</h3>
+          <p className="text-sm text-gray-500">Draw serviceable-area polygons and control zone status</p>
         </div>
       )}
 
       {/* Admin Management Card - Super Admin Only */}
-      {isSuperAdmin && (
+      {hasSettingsSection('settings_admins') && (
         <div onClick={() => setActiveView('admins')}
           className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer group">
           <div className="w-12 h-12 bg-amber-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-amber-100 transition-colors">
@@ -610,7 +695,7 @@ const AdminSettings = () => {
 
       {/* Header / Breadcrumb */}
       {activeView !== 'main' && (
-        <button onClick={() => setActiveView('main')}
+        <button onClick={() => { setActiveView('main'); setActiveLegalDocument(null); if (location.pathname !== '/admin/settings') navigate('/admin/settings'); }}
           className="flex items-center gap-2 text-gray-500 hover:text-gray-800 mb-4 transition-colors">
           <span className="text-lg">←</span> Back to Settings
         </button>
@@ -622,7 +707,7 @@ const AdminSettings = () => {
 
         {/* Profile View */}
         {activeView === 'profile' && (
-          <motion.div key="profile" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+          <motion.div key="profile" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="space-y-8">
             <div className="max-w-2xl mx-auto bg-white rounded-xl p-8 shadow-sm border border-gray-100">
               <div className="flex items-center gap-4 mb-8">
                 <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-2xl">
@@ -633,18 +718,11 @@ const AdminSettings = () => {
                   <div className="flex flex-wrap items-center gap-2 mt-1">
                     <p className="text-sm text-gray-500 flex items-center gap-1">
                       {isSuperAdmin && <FiShield className="text-amber-500" />}
-                      {isSuperAdmin ? 'Super Admin' : 'Admin'} • {profile.email}
+                      {isSuperAdmin ? 'Super Admin' : 'Sub Admin'} • {profile.email}
                     </p>
-                    {profile.role !== 'super_admin' ? (
-                      <span className="px-2 py-0.5 bg-teal-50 text-teal-700 text-[10px] font-bold rounded-lg border border-teal-100 flex items-center gap-1">
-                        <FiMapPin className="w-2.5 h-2.5" />
-                        {profile.assignedCity || 'Restricted Access'}
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-lg border border-amber-100">
-                        Global Access
-                      </span>
-                    )}
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded-lg border border-amber-100">
+                      Global Access
+                    </span>
                   </div>
                 </div>
               </div>
@@ -680,14 +758,114 @@ const AdminSettings = () => {
                     Update Profile
                   </button>
                 </div>
+                        </form>
+            </div>
+                          {/* Support Settings */}
+              {hasSettingsSection('settings_support') && (
+              <div className="max-w-2xl mx-auto bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-fit">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <FiHeadphones className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <h2 className="text-lg font-bold text-gray-800">Contact & Support</h2>
+                </div>
+
+                <form onSubmit={handleSupportSave} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Support Email</label>
+                    <div className="relative">
+                      <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input type="email" name="supportEmail" value={supportSettings.supportEmail} onChange={handleSupportChange}
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Support Phone</label>
+                    <div className="relative">
+                      <FiPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input type="tel" name="supportPhone" value={supportSettings.supportPhone} onChange={handleSupportChange}
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">WhatsApp Support</label>
+                    <div className="relative">
+                      <FiMessageCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input type="tel" name="supportWhatsapp" value={supportSettings.supportWhatsapp} onChange={handleSupportChange}
+                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-2">
+                    <button type="submit" disabled={supportLoading}
+                      className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 flex items-center gap-2 disabled:opacity-60 shadow-lg shadow-blue-200">
+                      {supportLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiSave className="w-4 h-4" />}
+                      Save Details
+                    </button>
+                  </div>
+                </form>
+              </div>
+              )}
+          </motion.div >
+        )}
+
+        {/* Legal Content View */}
+        {activeView === 'legal' && hasSettingsSection('settings_legal') && (
+          <motion.div key="legal" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+            <div className="max-w-4xl mx-auto bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <FiFileText className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800">{activeLegalDocument === 'terms' ? 'Terms & Conditions' : activeLegalDocument === 'privacy' ? 'Privacy Policy' : 'Terms & Privacy Content'}</h2>
+                  <p className="text-sm text-gray-500">This content will be visible on both user and vendor sides.</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleLegalSave} className="space-y-6 mt-6">
+                {(!activeLegalDocument || activeLegalDocument === 'terms') && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Terms of Service</label>
+                  <textarea
+                    name="termsOfService"
+                    value={legalSettings.termsOfService}
+                    onChange={handleLegalChange}
+                    rows="12"
+                    placeholder="Enter the Terms of Service shown to users and vendors..."
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all resize-y"
+                  />
+                </div>
+                )}
+
+                {(!activeLegalDocument || activeLegalDocument === 'privacy') && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Privacy Policy</label>
+                  <textarea
+                    name="privacyPolicy"
+                    value={legalSettings.privacyPolicy}
+                    onChange={handleLegalChange}
+                    rows="12"
+                    placeholder="Enter the Privacy Policy shown to users and vendors..."
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all resize-y"
+                  />
+                </div>
+                )}
+
+                <div className="flex justify-end">
+                  <button type="submit" disabled={legalLoading}
+                    className="px-6 py-2.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 flex items-center gap-2 disabled:opacity-60 shadow-lg shadow-purple-200">
+                    {legalLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiSave className="w-4 h-4" />}
+                    Save Legal Content
+                  </button>
+                </div>
               </form>
             </div>
-          </motion.div >
+          </motion.div>
         )}
 
         {/* Financial View */}
         {
-          activeView === 'financial' && (
+          activeView === 'financial' && hasSettingsSection('settings_financial') && (
             <motion.div key="financial" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}
               className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
@@ -717,48 +895,11 @@ const AdminSettings = () => {
                       <p className="text-[10px] text-gray-400 mt-1">Extra fee charged when customer selects Instant / ASAP booking</p>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Vendor Cash Limit (₹)</label>
-                      <input type="number" name="vendorCashLimit" value={financialSettings.vendorCashLimit} onChange={handleFinancialChange}
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                    </div>
-                    <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Service GST (%)</label>
                       <input type="number" name="serviceGstPercentage" value={financialSettings.serviceGstPercentage} onChange={handleFinancialChange}
-                        min="0" max="100"
+                        min="0" max="100" step="0.01"
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">GST rate applied to services</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Parts GST (%)</label>
-                      <input type="number" name="partsGstPercentage" value={financialSettings.partsGstPercentage} onChange={handleFinancialChange}
-                        min="0" max="100"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">GST rate applied to parts &amp; materials</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Service Payout (%)</label>
-                      <input type="number" name="servicePayoutPercentage" value={financialSettings.servicePayoutPercentage} onChange={handleFinancialChange}
-                        min="0" max="100"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">Vendor keeps this % of service charges</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Parts Payout (%)</label>
-                      <input type="number" name="partsPayoutPercentage" value={financialSettings.partsPayoutPercentage} onChange={handleFinancialChange}
-                        min="0" max="100"
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">Vendor keeps this % of parts charges</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">TDS Percentage (%)</label>
-                      <input type="number" name="tdsPercentage" value={financialSettings.tdsPercentage} onChange={handleFinancialChange}
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Platform Fee (%)</label>
-                      <input type="number" name="platformFeePercentage" value={financialSettings.platformFeePercentage} onChange={handleFinancialChange}
-                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                      <p className="text-[10px] text-gray-400 mt-1">Fee charged on vendor withdrawals</p>
+                      <p className="text-[10px] text-gray-400 mt-1">GST applied to the service amount in every user booking</p>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Cancellation Penalty (₹)</label>
@@ -766,25 +907,13 @@ const AdminSettings = () => {
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
                     </div>
                     <div className="pt-4 border-t border-gray-100 md:col-span-2">
-                      <h4 className="text-xs font-bold text-gray-700 uppercase mb-3">Booking Timing & Waves</h4>
+                      <h4 className="text-xs font-bold text-gray-700 uppercase mb-3">Booking Search Settings</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div>
                           <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Max Global Search Time (Mins)</label>
                           <input type="number" name="maxSearchTime" value={financialSettings.maxSearchTime} onChange={handleFinancialChange}
                             className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
                           <p className="text-[10px] text-gray-400 mt-1">Total time to find a vendor before search is auto-cancelled</p>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Wave Alert Threshold (Secs)</label>
-                          <input type="number" name="waveDuration" value={financialSettings.waveDuration} onChange={handleFinancialChange}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                          <p className="text-[10px] text-gray-400 mt-1">Time waited before alerting the next batch of vendors</p>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Global Search Radius (Km)</label>
-                          <input type="number" name="searchRadius" value={financialSettings.searchRadius} onChange={handleFinancialChange}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-green-500 transition-all" />
-                          <p className="text-[10px] text-gray-400 mt-1">Default distance to hunt for vendors around booking location</p>
                         </div>
                         <div>
                           <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Payment Timeout (Mins)</label>
@@ -806,7 +935,7 @@ const AdminSettings = () => {
               </div>
 
               {/* Billing Information - Super Admin Only */}
-              {isSuperAdmin && (
+              {hasSettingsSection('settings_billing') && (
                 <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-fit">
                   <div className="flex items-center gap-3 mb-6">
                     <div className="p-2 bg-indigo-100 rounded-lg">
@@ -905,90 +1034,57 @@ const AdminSettings = () => {
           )
         }
 
-        {/* System & Support View */}
+        {/* Referral Settings View */}
         {
-          activeView === 'system' && (
-            <motion.div key="system" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}
-              className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-              {/* System Settings */}
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-fit">
+          activeView === 'referral' && hasSettingsSection('settings_referral') && (
+            <motion.div key="referral" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+              <div className="max-w-3xl mx-auto bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 bg-gray-100 rounded-lg">
-                    <FiSettings className="w-5 h-5 text-gray-600" />
+                  <div className="p-2 bg-pink-100 rounded-lg">
+                    <FiGift className="w-5 h-5 text-pink-600" />
                   </div>
-                  <h2 className="text-lg font-bold text-gray-800">System Preferences</h2>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-800">Referral Settings</h2>
+                    <p className="text-xs text-gray-500">Configure Refer &amp; Earn rewards for users</p>
+                  </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-800">Auto-Assign Workers</p>
-                      <p className="text-xs text-gray-500 mt-1">Automatically find new worker if booking is rejected</p>
+                <form onSubmit={handleReferralSave} className="space-y-6">
+                  <div className="flex items-center justify-between gap-4 p-4 bg-pink-50/50 rounded-xl border border-pink-100">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">Enable referral rewards</p>
+                      <p className="text-xs text-gray-500 mt-1">Reward users after a referred user's first completed and paid booking.</p>
                     </div>
-                    <button onClick={() => handleToggle('workerAutoAssignment')}
-                      className={`relative w-12 h-7 rounded-full transition-all duration-300 ${settings.workerAutoAssignment ? 'bg-blue-600' : 'bg-gray-200'}`}>
-                      <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${settings.workerAutoAssignment ? 'translate-x-5' : 'translate-x-0'}`} />
+                    <button
+                      type="button"
+                      onClick={() => setReferralSettings(prev => ({ ...prev, referralEnabled: !prev.referralEnabled }))}
+                      className={`relative inline-flex w-12 h-7 shrink-0 rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#720C3E]/30 ${referralSettings.referralEnabled ? 'bg-[#720C3E]' : 'bg-gray-300'}`}
+                      aria-label="Toggle referral rewards" aria-pressed={referralSettings.referralEnabled}
+                    >
+                      <span className={`absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${referralSettings.referralEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-800">Online Payments</p>
-                      <p className="text-xs text-gray-500 mt-1">Enable digital payment methods for users</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Referrer Reward (INR)</label>
+                      <input type="number" name="referrerRewardAmount" value={referralSettings.referrerRewardAmount} onChange={handleReferralChange} min="0"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-pink-500 transition-all" />
+                      <p className="text-[10px] text-gray-400 mt-1">Amount earned by the user who invites a friend.</p>
                     </div>
-                    <button onClick={() => {
-                        const newValue = !financialSettings.isOnlinePaymentEnabled;
-                        setFinancialSettings(prev => ({ ...prev, isOnlinePaymentEnabled: newValue }));
-                        updateSettings({ isOnlinePaymentEnabled: newValue });
-                      }}
-                      className={`relative w-12 h-7 rounded-full transition-all duration-300 ${financialSettings.isOnlinePaymentEnabled ? 'bg-green-600' : 'bg-gray-200'}`}>
-                      <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${financialSettings.isOnlinePaymentEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Referred User Reward (INR)</label>
+                      <input type="number" name="referredRewardAmount" value={referralSettings.referredRewardAmount} onChange={handleReferralChange} min="0"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-pink-500 transition-all" />
+                      <p className="text-[10px] text-gray-400 mt-1">Welcome reward for the new referred user.</p>
+                    </div>
                   </div>
 
-                </div>
-              </div>
-
-              {/* Support Settings */}
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-fit">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <FiHeadphones className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <h2 className="text-lg font-bold text-gray-800">Contact & Support</h2>
-                </div>
-
-                <form onSubmit={handleSupportSave} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Support Email</label>
-                    <div className="relative">
-                      <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <input type="email" name="supportEmail" value={supportSettings.supportEmail} onChange={handleSupportChange}
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Support Phone</label>
-                    <div className="relative">
-                      <FiPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <input type="tel" name="supportPhone" value={supportSettings.supportPhone} onChange={handleSupportChange}
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">WhatsApp Support</label>
-                    <div className="relative">
-                      <FiMessageCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <input type="tel" name="supportWhatsapp" value={supportSettings.supportWhatsapp} onChange={handleSupportChange}
-                        className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 transition-all" />
-                    </div>
-                  </div>
                   <div className="flex justify-end pt-2">
-                    <button type="submit" disabled={supportLoading}
-                      className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 flex items-center gap-2 disabled:opacity-60 shadow-lg shadow-blue-200">
-                      {supportLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiSave className="w-4 h-4" />}
-                      Save Details
+                    <button type="submit" disabled={referralLoading}
+                      className="px-6 py-2.5 bg-pink-600 text-white rounded-lg font-medium hover:bg-pink-700 flex items-center gap-2 disabled:opacity-60 shadow-lg shadow-pink-200">
+                      {referralLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiSave className="w-4 h-4" />}
+                      Save Referral Settings
                     </button>
                   </div>
                 </form>
@@ -997,18 +1093,28 @@ const AdminSettings = () => {
           )
         }
 
-        {/* City Management View */}
+
+        {/* Zone Management View */}
         {
-          activeView === 'cities' && (
-            <motion.div key="cities" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-              <CityManagement />
+          activeView === 'zones' && hasSettingsSection('settings_zones') && (
+            <motion.div key="zones" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+              <ZoneManagement />
+            </motion.div>
+          )
+        }
+
+        {/* Vendor Wallets View - Super Admin only */}
+        {
+          activeView === 'vendorWallets' && isSuperAdmin && (
+            <motion.div key="vendor-wallets" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+              <VendorSalaryWallets />
             </motion.div>
           )
         }
 
         {/* Admin Management View - Super Admin Only */}
         {
-          activeView === 'admins' && isSuperAdmin && (
+          activeView === 'admins' && hasSettingsSection('settings_admins') && (
             <motion.div key="admins" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-6 border-b border-gray-100 flex items-center justify-between">
@@ -1021,7 +1127,7 @@ const AdminSettings = () => {
                       <p className="text-sm text-gray-500">Total {admins.length} administrators found</p>
                     </div>
                   </div>
-                  <button onClick={() => { setNewAdmin({ name: '', email: '', password: '', role: 'admin', cityId: '' }); setShowAddAdmin(!showAddAdmin); }}
+                  <button onClick={() => { setNewAdmin({ name: '', email: '', password: '', role: 'sub_admin', permissions: [] }); setShowAddAdmin(!showAddAdmin); }}
                     className={`px-5 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg transition-all ${showAddAdmin ? 'bg-gray-100 text-gray-600' : 'bg-amber-600 text-white hover:bg-amber-700 shadow-amber-100'}`}>
                     {showAddAdmin ? <FiX className="w-4 h-4" /> : <FiPlus className="w-4 h-4" />}
                     {showAddAdmin ? 'Cancel' : 'Add New Admin'}
@@ -1031,10 +1137,20 @@ const AdminSettings = () => {
                 {/* Add/Edit Admin Form */}
                 <AnimatePresence>
                   {showAddAdmin && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-gray-100 bg-amber-50/50">
-                      <form onSubmit={handleCreateAdmin} className="p-6">
-                        <h3 className="text-sm font-bold text-gray-800 mb-4">{newAdmin.id ? 'Edit Administrator' : 'Create New Administrator'}</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4"> {/* Increased columns */}
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setShowAddAdmin(false)}>
+                      <motion.div initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.97 }} transition={{ duration: 0.2 }} className="w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-amber-600">Administrator access</p>
+                            <h2 className="text-xl font-bold text-gray-900">{newAdmin.id ? 'Edit Administrator' : 'Create New Administrator'}</h2>
+                          </div>
+                          <button type="button" onClick={() => setShowAddAdmin(false)} className="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700" aria-label="Close">
+                            <FiX className="h-5 w-5" />
+                          </button>
+                        </div>
+                        <form onSubmit={handleCreateAdmin} className="max-h-[calc(92vh-82px)] overflow-y-auto p-6">
+                        <h3 className="sr-only">{newAdmin.id ? 'Edit Administrator' : 'Create New Administrator'}</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                           <input type="text" placeholder="Full Name" value={newAdmin.name} onChange={e => setNewAdmin(p => ({ ...p, name: e.target.value }))}
                             className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200" />
                           <input type="email" placeholder="Email Address" value={newAdmin.email} onChange={e => setNewAdmin(p => ({ ...p, email: e.target.value }))}
@@ -1043,23 +1159,55 @@ const AdminSettings = () => {
                             className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200" />
 
                           {/* Role Selection */}
-                          <select value={newAdmin.role} onChange={e => setNewAdmin(p => ({ ...p, role: e.target.value }))}
+                          <select value={newAdmin.role} onChange={e => setNewAdmin(p => ({
+                            ...p,
+                            role: e.target.value,
+                            permissions: []
+                          }))}
                             className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200">
-                            <option value="admin">Admin</option>
+                            <option value="sub_admin">Sub Admin</option>
+                            <option value="admin">Legacy Admin</option>
                             <option value="super_admin">Super Admin</option>
                           </select>
 
-                          {/* City Selection */}
-                          <select value={newAdmin.cityId} onChange={e => setNewAdmin(p => ({ ...p, cityId: e.target.value }))}
-                            className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200">
-                            <option value="">All Cities (Global)</option>
-                            {cities.map(city => (
-                              <option key={city._id} value={city._id}>
-                                {city.name}
-                              </option>
-                            ))}
-                          </select>
                         </div>
+
+                        <div className="mt-5">
+                              <div className="mb-2">
+                                <p className="text-sm font-semibold text-gray-800">Module access</p>
+                                <p className="text-xs text-gray-500">Choose exactly which sidebar modules this user can access.</p>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {ADMIN_PERMISSION_OPTIONS.map(permission => {
+                                  const isChecked = newAdmin.role === 'super_admin' || newAdmin.permissions.includes(permission.value);
+                                  return (
+                                    <React.Fragment key={permission.value}>
+                                      <label className={isChecked ? 'flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors bg-blue-50 border-blue-300 text-blue-800' : 'flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors bg-white border-gray-200 text-gray-600 hover:border-blue-200'}>
+                                        <input type="checkbox" checked={isChecked} disabled={newAdmin.role === 'super_admin'} onChange={() => toggleAdminPermission(permission.value)} className="accent-blue-600" />
+                                        <span className="text-sm">{permission.label}</span>
+                                      </label>
+                                      {permission.value === 'settings' && isChecked && (
+                                        <div className="col-span-2 sm:col-span-4 rounded-lg border border-blue-100 bg-blue-50/40 p-3">
+                                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-700">Settings sections</p>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                                            {SETTINGS_PERMISSION_OPTIONS.map(section => {
+                                              const sectionChecked = newAdmin.role === 'super_admin' || newAdmin.permissions.includes(section.value);
+                                              return (
+                                                <label key={section.value} className={sectionChecked ? 'flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer bg-white border-blue-300 text-blue-800' : 'flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer bg-white border-gray-200 text-gray-600 hover:border-blue-200'}>
+                                                  <input type="checkbox" checked={sectionChecked} disabled={newAdmin.role === 'super_admin'} onChange={() => toggleAdminPermission(section.value)} className="accent-blue-600" />
+                                                  <span className="text-xs">{section.label}</span>
+                                                </label>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </div>
+                              {newAdmin.role === 'super_admin' && <p className="mt-2 text-xs text-amber-700">Super Admins automatically have access to every sidebar module.</p>}
+                            </div>
 
                         <div className="flex justify-end mt-4">
                           <button type="submit" disabled={adminLoading}
@@ -1069,6 +1217,7 @@ const AdminSettings = () => {
                         </div>
                       </form>
                     </motion.div>
+                  </motion.div>
                   )}
                 </AnimatePresence>
 
@@ -1079,7 +1228,7 @@ const AdminSettings = () => {
                       <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider border-b border-gray-100">
                         <th className="px-6 py-4 font-semibold">Administrator</th>
                         <th className="px-6 py-4 font-semibold">Role</th>
-                        <th className="px-6 py-4 font-semibold">Assigned City</th>
+                        <th className="px-6 py-4 font-semibold">Access Scope</th>
                         <th className="px-6 py-4 font-semibold">Status</th>
                         <th className="px-6 py-4 font-semibold text-right">Actions</th>
                       </tr>
@@ -1103,17 +1252,13 @@ const AdminSettings = () => {
                               ? 'bg-amber-50 text-amber-700 border-amber-100'
                               : 'bg-blue-50 text-blue-700 border-blue-100'
                               }`}>
-                              {admin.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                              {admin.role === 'super_admin' ? 'Super Admin' : 'Sub Admin'}
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            {admin.cityId ? (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
-                                {admin.cityId.name || 'Unknown City'}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-gray-400">All Cities</span>
-                            )}
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+                              Global
+                            </span>
                           </td>
                           <td className="px-6 py-4">
                             <span className={`flex items-center gap-1.5 text-xs font-medium ${admin.isActive !== false ? 'text-green-600' : 'text-red-500'}`}>
@@ -1149,7 +1294,7 @@ const AdminSettings = () => {
                       ))}
                       {admins.length === 0 && (
                         <tr>
-                          <td colSpan="4" className="px-6 py-12 text-center text-gray-400">
+                          <td colSpan="5" className="px-6 py-12 text-center text-gray-400">
                             <FiUsers className="w-12 h-12 mx-auto mb-3 opacity-20" />
                             <p>No administrators found</p>
                           </td>
@@ -1164,7 +1309,7 @@ const AdminSettings = () => {
         }
         {/* Booking Slots & Timing View - Super Admin Only */}
         {
-          activeView === 'slots' && isSuperAdmin && (
+          activeView === 'slots' && hasSettingsSection('settings_slots') && (
             <motion.div key="slots" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}
               className="space-y-6">
               
@@ -1237,6 +1382,7 @@ const AdminSettings = () => {
                       onChange={handleSlotChange}
                       className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
                     >
+                      <option value={15}>15 Minutes</option>
                       <option value={30}>30 Minutes</option>
                       <option value={45}>45 Minutes</option>
                       <option value={60}>60 Minutes (1 Hour)</option>
@@ -1244,41 +1390,6 @@ const AdminSettings = () => {
                       <option value={120}>120 Minutes (2 Hours)</option>
                     </select>
                     <p className="text-[11px] text-gray-400 mt-1">Time difference between consecutive slots</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Advance Booking Window (Days)</label>
-                    <select
-                      name="maxDaysInAdvance"
-                      value={slotSettings.maxDaysInAdvance}
-                      onChange={handleSlotChange}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                    >
-                      <option value={3}>3 Days Ahead</option>
-                      <option value={5}>5 Days Ahead</option>
-                      <option value={7}>7 Days (1 Week - Default)</option>
-                      <option value={10}>10 Days Ahead</option>
-                      <option value={14}>14 Days (2 Weeks)</option>
-                      <option value={30}>30 Days (1 Month)</option>
-                    </select>
-                    <p className="text-[11px] text-gray-400 mt-1">Number of dates visible in user calendar</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Same-Day Minimum Notice (Hours)</label>
-                    <select
-                      name="leadTimeHours"
-                      value={slotSettings.leadTimeHours}
-                      onChange={handleSlotChange}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                    >
-                      <option value={0}>0 Hours (Immediate)</option>
-                      <option value={1}>1 Hour Notice (Default)</option>
-                      <option value={2}>2 Hours Notice</option>
-                      <option value={3}>3 Hours Notice</option>
-                      <option value={4}>4 Hours Notice</option>
-                    </select>
-                    <p className="text-[11px] text-gray-400 mt-1">Buffer before user can book a slot today</p>
                   </div>
 
                   <div>
@@ -1368,6 +1479,9 @@ const AdminSettings = () => {
                   })}
                 </div>
               </div>
+
+              {/* Per-vendor availability - driven by the slot setup above */}
+              <VendorSlotAvailabilityPanel slotSettings={slotSettings} />
             </motion.div>
           )
         }

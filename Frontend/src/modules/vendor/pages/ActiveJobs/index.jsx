@@ -9,11 +9,24 @@ import LogoLoader from '../../../../components/common/LogoLoader';
 
 import { getBookings, assignWorker as assignWorkerApi } from '../../services/bookingService';
 import { ConfirmDialog } from '../../components/common';
+const JOBS_CACHE_TTL = 30000;
+const jobsPageCache = new Map();
+
+const getJobsCacheKey = (filter, searchQuery) => `${filter}::${searchQuery}`;
+
+const getCachedJobs = (filter, searchQuery) => {
+  const entry = jobsPageCache.get(getJobsCacheKey(filter, searchQuery));
+  if (entry && Date.now() - entry.fetchedAt < JOBS_CACHE_TTL) {
+    return entry.jobs;
+  }
+  return null;
+};
 
 const ActiveJobs = memo(() => {
   const navigate = useNavigate();
-  const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const initialJobs = getCachedJobs('in_progress', '');
+  const [jobs, setJobs] = useState(initialJobs || []);
+  const [loading, setLoading] = useState(() => !initialJobs);
   const [filter, setFilter] = useState('in_progress'); // Default to showing active jobs
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDialog, setConfirmDialog] = useState({
@@ -41,9 +54,19 @@ const ActiveJobs = memo(() => {
   }, []);
 
   // Memoize loadJobs to prevent recreation
-  const loadJobs = useCallback(async (currentFilter, currentSearch) => {
+  const loadJobs = useCallback(async (currentFilter, currentSearch, forceRefresh = false) => {
+    const cacheKey = getJobsCacheKey(currentFilter, currentSearch);
+    const cachedEntry = jobsPageCache.get(cacheKey);
+    const cachedJobs = getCachedJobs(currentFilter, currentSearch);
+
+    if (!forceRefresh && cachedJobs) {
+      setJobs(cachedJobs);
+      setLoading(false);
+      return;
+    }
+
     try {
-      setLoading(true);
+      if (!cachedEntry) setLoading(true);
       const response = await getBookings({
         status: currentFilter,
         q: currentSearch,
@@ -53,21 +76,23 @@ const ActiveJobs = memo(() => {
       // Map API response to Component State structure
       const mappedJobs = jobsData.map(job => ({
         id: job._id || job.id,
-        serviceType: job.serviceName || 'Service',
+        serviceType: job.serviceName?.trim() || job.serviceId?.title || job.serviceType || 'Service',
         user: {
           name: job.userId?.name || 'Customer'
         },
         location: {
           address: job.address?.addressLine1 || 'Address not available'
         },
-        price: (job.finalAmount ? job.finalAmount * 0.9 : 0).toFixed(2),
+        price: Number(job.finalAmount || 0).toFixed(2),
         status: job.status,
         assignedTo: job.workerId ? { name: job.workerId.name } : (job.assignedAt ? { name: 'You (Self)' } : null),
+        bookingType: job.bookingType,
         timeSlot: {
           date: job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString() : 'Date',
           time: job.scheduledTime || 'Time'
         }
       }));
+      jobsPageCache.set(cacheKey, { jobs: mappedJobs, fetchedAt: Date.now() });
       setJobs(mappedJobs);
     } catch (error) {
       console.error('Error loading jobs:', error);
@@ -87,9 +112,10 @@ const ActiveJobs = memo(() => {
   }, [filter, searchQuery, loadJobs]);
 
   useEffect(() => {
-    window.addEventListener('vendorJobsUpdated', () => loadJobs(filter, searchQuery));
+    const handleJobsUpdated = () => loadJobs(filter, searchQuery, true);
+    window.addEventListener('vendorJobsUpdated', handleJobsUpdated);
     return () => {
-      window.removeEventListener('vendorJobsUpdated', () => loadJobs(filter, searchQuery));
+      window.removeEventListener('vendorJobsUpdated', handleJobsUpdated);
     };
   }, [loadJobs, filter, searchQuery]);
 
@@ -107,7 +133,7 @@ const ActiveJobs = memo(() => {
           if (response && response.success) {
             toast.success("Assigned to yourself!");
             // Refresh jobs list instead of full page reload
-            loadJobs(filter, searchQuery);
+            loadJobs(filter, searchQuery, true);
           }
         } catch (error) {
           console.error("Error assigning to self:", error);
@@ -237,13 +263,19 @@ const ActiveJobs = memo(() => {
                   />
 
                   <div className="relative z-10 pl-2">
+                    {/* Service Name */}
+                    <div className="flex items-center gap-2 mb-2 min-w-0">
+                      <div className="p-1 rounded-md flex-shrink-0" style={{ background: `${statusColor}15` }}>
+                        <FiBriefcase className="w-3.5 h-3.5" style={{ color: statusColor }} />
+                      </div>
+                      <h3 className="font-bold text-gray-800 text-sm leading-tight break-words">
+                        {job.serviceType}
+                      </h3>
+                    </div>
+
                     {/* Header Row */}
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <div className="p-1 rounded-md flex-shrink-0" style={{ background: `${statusColor}15` }}>
-                          <FiBriefcase className="w-3.5 h-3.5" style={{ color: statusColor }} />
-                        </div>
-                        <h3 className="font-bold text-gray-800 text-sm truncate">{job.serviceType}</h3>
                         <span
                           className="text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0"
                           style={{
@@ -252,6 +284,13 @@ const ActiveJobs = memo(() => {
                           }}
                         >
                           {job.status.replace('_', ' ')}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex-shrink-0 ${job.bookingType === 'scheduled'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                            : 'bg-orange-50 text-orange-700 border border-orange-100'}`}
+                        >
+                          {job.bookingType === 'scheduled' ? 'SLOT BOOKING' : 'INSTANT BOOKING'}
                         </span>
                       </div>
                       <div

@@ -107,7 +107,7 @@ app.use('/api', rateLimiter);
 app.get('/health', (req, res) => {
   res.json({
     success: true,
-    message: 'Homster API is running',
+    message: 'Qwiklly API is running',
     timestamp: new Date().toISOString()
   });
 });
@@ -165,15 +165,18 @@ app.get('/api/test/redis', async (req, res) => {
 // API Routes
 
 app.use('/api/public/cities', require('./routes/public-routes/city.routes.js'));
+app.use('/api/public/zones', require('./routes/public-routes/zone.routes.js'));
 
 
 // User routes
 app.use('/api/users/auth', require('./routes/user-routes/auth.routes'));
 app.use('/api/users', require('./routes/user-routes/profile.routes'));
 app.use('/api/user/wallet', require('./routes/user-routes/userWallet.routes'));
+app.use('/api/user/referral', require('./routes/user-routes/referral.routes'));
 app.use('/api/users/bookings', require('./routes/user-routes/booking.routes'));
 app.use('/api/users', require('./routes/user-routes/cart.routes'));
 app.use('/api/users/fcm-tokens', require('./routes/user-routes/fcmToken.routes'));
+app.use('/api/users/support-tickets', require('./routes/user-routes/supportTicket.routes'));
 app.use('/api/coupons', require('./routes/user-routes/coupon.routes'));
 
 // API Routes
@@ -189,13 +192,21 @@ app.use('/api/vendors/bookings', require('./routes/vendor-routes/booking.routes'
 app.use('/api/vendors/fcm-tokens', require('./routes/vendor-routes/fcmToken.routes'));
 app.use('/api/vendors', require('./routes/vendor-routes/vendorBill.routes'));
 app.use('/api/vendors/catalog', require('./routes/vendor-routes/catalog.routes'));
+app.use('/api/vendors/salary', require('./routes/vendor-routes/salary.routes'));
 
 // Admin routes
 app.use('/api/admin/auth', require('./routes/admin-routes/adminAuth.routes'));
+// Central admin authorization boundary. The route-level auth middleware is
+// kept for compatibility, while this layer enforces selected module
+// permissions before any admin module can be reached. Admin data access is global.
+app.use('/api/admin', require('./middleware/adminAuthorization').adminAccessControl);
 app.use('/api/admin', require('./routes/admin-routes/cityManagement.routes.js'));
+app.use('/api/admin', require('./routes/admin-routes/zoneManagement.routes.js'));
 app.use('/api/admin', require('./routes/admin-routes/dashboard.routes'));
 app.use('/api/admin', require('./routes/admin-routes/userManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/vendorManagement.routes'));
+app.use('/api/admin', require('./routes/admin-routes/salaryManagement.routes'));
+app.use('/api/admin', require('./routes/admin-routes/vendorSlotAvailability.routes'));
 app.use('/api/admin', require('./routes/admin-routes/categoryManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/brandManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/serviceManagement.routes'));
@@ -206,12 +217,13 @@ app.use('/api/admin', require('./routes/admin-routes/bookingManagement.routes'))
 app.use('/api/admin/coupons', require('./routes/admin-routes/couponManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/paymentManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/transactionManagement.routes'));
+app.use('/api/admin/settlements', require('./routes/admin-routes/settlementManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/upload.routes'));
 app.use('/api/admin', require('./routes/admin-routes/planManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/settings.routes'));
 app.use('/api/admin', require('./routes/admin-routes/reviewManagement.routes'));
 app.use('/api/admin', require('./routes/admin-routes/reportManagement.routes'));
-app.use('/api/admin/settlements', require('./routes/admin-routes/settlementManagement.routes'));
+app.use('/api/admin/support-tickets', require('./routes/admin-routes/supportTicket.routes'));
 app.use('/api/admin/admins', require('./routes/admin-routes/adminManagement.routes'));
 app.use('/api/image', require('./routes/admin-routes/image.routes'));
 app.use('/api', require('./routes/admin-routes/upload.routes')); // Generic upload access
@@ -236,6 +248,7 @@ app.use('/api/notifications', require('./routes/notification.routes'));
 app.use('/api/public', require('./routes/public-routes/catalog.routes'));
 app.use('/api/public', require('./routes/public-routes/plan.routes'));
 app.use('/api/public', require('./routes/public-routes/config.routes'));
+app.use('/api/public', require('./routes/public-routes/slotAvailability.routes'));
 
 // 404 handler
 app.use((req, res) => {
@@ -273,7 +286,7 @@ if (process.env.VERCEL !== '1' && !process.env.VERCEL_ENV) {
   // Make io instance available in request
   app.set('io', getIO());
 
-  // Initialize Booking Scheduler for Wave-Based Alerting
+  // Initialize Booking Scheduler for zone-broadcast expiry and payment recovery
   const { initializeScheduler } = require('./services/bookingScheduler');
   initializeScheduler(getIO());
   console.log('[Server] Booking Scheduler initialized for wave-based alerting');

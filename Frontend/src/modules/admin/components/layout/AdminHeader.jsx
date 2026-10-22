@@ -6,7 +6,7 @@ import Button from '../Button';
 import NotificationWindow from './NotificationWindow';
 import { adminAuthService } from '../../../../services/authService';
 
-const AdminHeader = ({ onMenuClick }) => {
+const AdminHeader = ({ onMenuClick, sidebarCollapsed = false }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -41,7 +41,9 @@ const AdminHeader = ({ onMenuClick }) => {
       { path: '/admin/users/transactions', title: 'User Transactions', description: 'Monitor customer financial transactions' },
       { path: '/admin/users', title: 'Users', description: 'Manage platform customers and their activity' },
       { path: '/admin/vendors/all', title: 'All Vendors', description: 'Manage platform vendors and their activity' },
+      { path: '/admin/vendors/attendance', title: 'Daily Attendance', description: 'Track vendor duty hours and attendance by date' },
       { path: '/admin/vendors/analytics', title: 'Vendor Analytics', description: 'Analyze vendor performance' },
+      { path: '/admin/vendors/wallets', title: 'Vendor Salary Wallets', description: 'Manage vendor hourly earnings and salary payments' },
       { path: '/admin/vendors', title: 'Vendors', description: 'Manage vendor registrations and performance' },
       { path: '/admin/workers/all', title: 'All Workers', description: 'Manage platform workers and their activity' },
       { path: '/admin/workers/analytics', title: 'Worker Analytics', description: 'Analyze worker performance' },
@@ -50,22 +52,20 @@ const AdminHeader = ({ onMenuClick }) => {
       { path: '/admin/bookings/notifications', title: 'Order Notifications', description: 'Track booking alerts and updates' },
       { path: '/admin/user-categories', title: 'User Catalog', description: 'Manage platform services and categories' },
       { path: '/admin/payments/users', title: 'User Transactions', description: 'Monitor customer financial transactions' },
-      { path: '/admin/payments/vendors', title: 'Vendor Transactions', description: 'Monitor vendor earnings and payouts' },
+      { path: '/admin/payments/vendors', title: 'Vendor Salary Payroll', description: 'Monitor salary earnings and admin payroll payments' },
       { path: '/admin/payments/workers', title: 'Worker Payments', description: 'Monitor and manage worker earnings and payouts' },
-      { path: '/admin/payments/revenue', title: 'Admin Revenue', description: 'Track platform commissions and income' },
+      { path: '/admin/payments/revenue', title: 'Booking Revenue', description: 'Track full booking payments and salary expenses' },
       { path: '/admin/payments/reports', title: 'Payment Report', description: 'Analyze payment data and financial insights' },
-      { path: '/admin/payments', title: 'Payments & Settlements', description: 'Monitor transactions and revenue' },
+      { path: '/admin/payments', title: 'Payments', description: 'Monitor transactions and revenue' },
       { path: '/admin/reports', title: 'Reports', description: 'Analyze platform performance with data insights' },
       { path: '/admin/notifications', title: 'Notifications', description: 'Stay updated with platform activities' },
+      { path: '/admin/support', title: 'Support & SOS', description: 'Manage emergency alerts and user support tickets' },
+      { path: '/admin/settings/legal/terms', title: 'Terms & Conditions', description: 'Manage the terms shown to users and vendors' },
+      { path: '/admin/settings/legal/privacy', title: 'Privacy Policy', description: 'Manage the privacy policy shown to users and vendors' },
       { path: '/admin/settings', title: 'Settings', description: 'Configure platform preferences' },
       { path: '/admin/plans', title: 'Subscription Plans', description: 'Manage service subscription plans' },
       { path: '/admin/services', title: 'Services', description: 'Manage platform service categories' },
       { path: '/admin/services', title: 'Services', description: 'Manage platform service categories' },
-      { path: '/admin/settlements/pending', title: 'Pending Settlements', description: 'Review and approve vendor cash settlements' },
-      { path: '/admin/settlements/withdrawals', title: 'Withdrawal Requests', description: 'Manage vendor payout requests' },
-      { path: '/admin/settlements/vendors', title: 'Vendor Balances', description: 'Monitor vendor dues and credit limits' },
-      { path: '/admin/settlements/history', title: 'Settlement History', description: 'View past transaction records' },
-      { path: '/admin/settlements', title: 'Settlements', description: 'Manage financial settlements' },
       { path: '/admin/reviews', title: 'Reviews', description: 'Manage platform reviews and ratings' },
     ];
 
@@ -154,7 +154,7 @@ const AdminHeader = ({ onMenuClick }) => {
 
   return (
     <header
-      className="bg-white fixed top-0 left-0 right-0 z-30 transition-all duration-300 lg:left-[315px] border-b border-gray-100 shadow-sm"
+      className={`bg-white fixed top-0 left-0 right-0 z-30 transition-all duration-300 border-b border-gray-100 shadow-sm ${sidebarCollapsed ? "lg:left-[104px]" : "lg:left-[315px]"}`}
       style={{
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}

@@ -37,6 +37,12 @@ export const userAuthService = {
     return response.data;
   },
 
+  // Validate an optional referral code before requesting OTP
+  validateReferralCode: async (referralCode) => {
+    const response = await api.post('/users/auth/validate-referral', { referralCode });
+    return response.data;
+  },
+
   // Verify Login (Unified Flow)
   verifyLogin: async (data) => {
     const response = await api.post('/users/auth/verify-login', data);
@@ -125,6 +131,16 @@ export const vendorAuthService = {
     return response.data;
   },
 
+  // Change mobile number (OTP protected)
+  sendPhoneChangeOTP: async (phone) => {
+    const response = await api.post('/vendors/auth/change-phone/send-otp', { phone });
+    return response.data;
+  },
+
+  verifyPhoneChangeOTP: async (phone, otp) => {
+    const response = await api.post('/vendors/auth/change-phone/verify-otp', { phone, otp });
+    return response.data;
+  },
   // Verify Login (Unified Flow)
   verifyLogin: async (data) => {
     const response = await api.post('/vendors/auth/verify-login', data);
@@ -211,15 +227,20 @@ export const adminAuthService = {
   login: async (email, password, rememberMe = false) => {
     const response = await api.post('/admin/auth/login', { email, password });
     if (response.data.accessToken) {
-      // Clear any session storage to prevent conflicts
+      // Clear both stores so switching the Remember me choice cannot leave a
+      // stale admin session behind.
       sessionStorage.removeItem('adminAccessToken');
       sessionStorage.removeItem('adminRefreshToken');
       sessionStorage.removeItem('adminData');
+      localStorage.removeItem('adminAccessToken');
+      localStorage.removeItem('adminRefreshToken');
+      localStorage.removeItem('adminData');
 
-      // Always use localStorage for consistency
-      localStorage.setItem('adminAccessToken', response.data.accessToken);
-      localStorage.setItem('adminRefreshToken', response.data.refreshToken);
-      localStorage.setItem('adminData', JSON.stringify(response.data.admin));
+      const storage = rememberMe ? localStorage : sessionStorage;
+      storage.setItem('adminAccessToken', response.data.accessToken);
+      storage.setItem('adminRefreshToken', response.data.refreshToken);
+      storage.setItem('adminData', JSON.stringify(response.data.admin));
+      window.dispatchEvent(new Event('admin_session_authenticated'));
     }
     return response.data;
   },
@@ -234,6 +255,10 @@ export const adminAuthService = {
     localStorage.removeItem('adminAccessToken');
     localStorage.removeItem('adminRefreshToken');
     localStorage.removeItem('adminData');
+    sessionStorage.removeItem('adminAccessToken');
+    sessionStorage.removeItem('adminRefreshToken');
+    sessionStorage.removeItem('adminData');
+    window.dispatchEvent(new Event('admin_session_authenticated'));
   }
 };
 

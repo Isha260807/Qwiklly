@@ -8,7 +8,7 @@ const StatsCards = memo(({ stats }) => {
 
   const cards = [
     {
-      title: "Today's Earnings",
+      title: 'Earning',
       value: `₹${stats.todayEarnings.toLocaleString()}`,
       icon: FaWallet,
       onClick: () => navigate('/vendor/wallet')
@@ -50,7 +50,7 @@ const StatsCards = memo(({ stats }) => {
                   <p className="text-[10px] sm:text-[11px] font-bold text-[#6F5A64] uppercase tracking-wider leading-tight min-h-[26px] flex items-center">
                     {card.title}
                   </p>
-                  <p className="text-lg sm:text-xl font-black text-[#24151D] leading-none mt-1 truncate">
+                  <p className="text-base sm:text-lg font-black text-[#24151D] leading-tight tracking-tight mt-1 whitespace-nowrap">
                     {card.value}
                   </p>
                 </div>

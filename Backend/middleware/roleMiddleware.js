@@ -1,4 +1,14 @@
-const { USER_ROLES } = require('../utils/constants');
+const { USER_ROLES, ADMIN_ROLES } = require('../utils/constants');
+
+const ADMIN_ROLE_VALUES = new Set([
+  USER_ROLES.ADMIN,
+  ADMIN_ROLES.SUPER_ADMIN,
+  ADMIN_ROLES.SUB_ADMIN,
+  ADMIN_ROLES.LEGACY_ADMIN,
+  'ADMIN'
+]);
+
+const isAdminRole = (role) => ADMIN_ROLE_VALUES.has(role);
 
 /**
  * Role-based authorization middleware
@@ -34,7 +44,7 @@ const isWorker = (req, res, next) => {
 };
 
 const isAdmin = (req, res, next) => {
-  if (req.userRole !== USER_ROLES.ADMIN && req.userRole !== 'super_admin' && req.userRole !== 'admin' && req.userRole !== 'ADMIN') {
+  if (!isAdminRole(req.userRole) && !isAdminRole(req.user?.role)) {
     return res.status(403).json({
       success: false,
       message: 'Access denied. Admin role required.'
@@ -44,7 +54,7 @@ const isAdmin = (req, res, next) => {
 };
 
 const isAdminOrVendor = (req, res, next) => {
-  if (req.userRole !== USER_ROLES.ADMIN && req.userRole !== 'super_admin' && req.userRole !== USER_ROLES.VENDOR) {
+  if ((!isAdminRole(req.userRole) && !isAdminRole(req.user?.role)) && req.userRole !== USER_ROLES.VENDOR) {
     return res.status(403).json({
       success: false,
       message: 'Access denied. Admin or Vendor role required.'
@@ -59,22 +69,12 @@ const isAdminOrVendor = (req, res, next) => {
  */
 const isSuperAdmin = async (req, res, next) => {
   try {
-    /* if (req.userRole !== USER_ROLES.ADMIN && req.userRole !== 'super_admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Admin role required.'
-      });
-    }
-
-    const Admin = require('../models/Admin');
-    const admin = await Admin.findById(req.user.id);
-
-    if (!admin || admin.role !== 'super_admin') {
+    if (req.user?.role !== ADMIN_ROLES.SUPER_ADMIN) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Super Admin role required.'
       });
-    } */
+    }
 
     next();
   } catch (error) {
@@ -89,6 +89,7 @@ module.exports = {
   isWorker,
   isAdmin,
   isAdminOrVendor,
-  isSuperAdmin
+  isSuperAdmin,
+  isAdminRole
 };
 

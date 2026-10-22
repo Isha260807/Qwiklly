@@ -19,6 +19,24 @@ const userSchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    uppercase: true,
+    trim: true,
+    index: true
+  },
+  referredBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    index: true
+  },
+  referralAppliedAt: {
+    type: Date,
+    default: null
+  },
   role: {
     type: String,
     enum: ['user', 'admin'],
@@ -52,6 +70,14 @@ const userSchema = new mongoose.Schema({
     state: String,
     pincode: String,
     landmark: String,
+    lat: {
+      type: Number,
+      default: null
+    },
+    lng: {
+      type: Number,
+      default: null
+    },
     isDefault: {
       type: Boolean,
       default: false

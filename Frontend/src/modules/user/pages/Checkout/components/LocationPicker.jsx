@@ -98,60 +98,78 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, isLoaded = f
     reverseGeocode(newPos);
   }, []);
 
+  const getLocationErrorMessage = (error) => {
+    if (Number(error?.code) === 1) {
+      return 'Please allow location access to fetch your current location.';
+    }
+
+    if (Number(error?.code) === 2) {
+      return 'Please turn on your device location/GPS and try again.';
+    }
+
+    if (Number(error?.code) === 3) {
+      return 'Location request timed out. Please turn on GPS and try again.';
+    }
+
+    if (/permission|denied/i.test(error?.message || '')) {
+      return 'Please allow location access to fetch your current location.';
+    }
+
+    return 'Please turn on your device location/GPS and try again.';
+  };
+
   // Handle Detect Current Location
   const handleCurrentLocation = async () => {
+    if (loadingRef.current) return;
+
+    // Let the bridge try native Flutter location even when the WebView has
+    // no browser geolocation API available.
+    // Show a quick toast only for an already-blocked browser permission.
+    if (navigator.geolocation && !flutterBridge.isFlutter && navigator.permissions?.query) {
+      try {
+        const permission = await navigator.permissions.query({ name: 'geolocation' });
+        if (permission.state === 'denied') {
+          toast.error('Please enable location permission in your device/browser settings.', {
+            id: 'location-picker-error',
+            duration: 3500
+          });
+          return;
+        }
+      } catch {
+        // Older browsers may not support querying geolocation permission.
+      }
+    }
+
     setLoading(true);
     loadingRef.current = true;
 
     try {
       const pos = await flutterBridge.getCurrentLocation();
-      setLoading(false);
-      loadingRef.current = false;
+      const latitude = Number(pos?.latitude ?? pos?.coords?.latitude);
+      const longitude = Number(pos?.longitude ?? pos?.coords?.longitude);
 
-      const newPos = {
-        lat: pos?.latitude || pos?.coords?.latitude,
-        lng: pos?.longitude || pos?.coords?.longitude
-      };
-
-      if (newPos.lat && newPos.lng) {
-        setMarker(newPos);
-        if (map) {
-          map.panTo(newPos);
-          map.setZoom(17);
-        }
-        reverseGeocode(newPos);
-        return;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new Error('Current location coordinates are unavailable');
       }
-    } catch (e) {
-      // silent
-    }
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (p) => {
-          setLoading(false);
-          loadingRef.current = false;
-          const newPos = {
-            lat: p.coords.latitude,
-            lng: p.coords.longitude
-          };
-          setMarker(newPos);
-          if (map) {
-            map.panTo(newPos);
-            map.setZoom(17);
-          }
-          reverseGeocode(newPos);
-        },
-        (err) => {
-          setLoading(false);
-          loadingRef.current = false;
-          toast.error('Unable to get GPS location. Please select manually on map.');
-        }
-      );
-    } else {
+      const newPos = { lat: latitude, lng: longitude };
+      setMarker(newPos);
+
+      if (map) {
+        map.panTo(newPos);
+        map.setZoom(17);
+      }
+
       setLoading(false);
       loadingRef.current = false;
-      toast.error('Location service not supported.');
+      reverseGeocode(newPos);
+    } catch (error) {
+      setLoading(false);
+      loadingRef.current = false;
+      toast.error(getLocationErrorMessage(error), {
+        id: 'location-picker-error',
+        duration: 3500
+      });
     }
   };
 
@@ -195,10 +213,15 @@ const LocationPicker = ({ onLocationSelect, initialPosition = null, isLoaded = f
         <button
           type="button"
           onClick={handleCurrentLocation}
-          className="absolute bottom-3 right-3 p-2.5 bg-white rounded-xl shadow-lg flex items-center justify-center hover:bg-gray-50 active:scale-95 transition-all z-10 border border-gray-200 cursor-pointer"
-          title="Detect Current Location"
+          disabled={loading}
+          className="absolute bottom-3 right-3 h-10 px-3 bg-white rounded-xl shadow-lg flex items-center justify-center gap-2 hover:bg-gray-50 active:scale-95 transition-all z-10 border border-gray-200 cursor-pointer disabled:opacity-70 disabled:cursor-wait"
+          title="Use Current Location"
+          aria-label="Use Current Location"
         >
-          <FiCrosshair className="w-5 h-5 text-[#720C3E]" />
+          <FiCrosshair className="w-4 h-4 text-[#720C3E]" />
+          <span className="text-xs font-semibold text-[#720C3E] whitespace-nowrap">
+            {loading ? 'Locating...' : 'Use Current Location'}
+          </span>
         </button>
       </div>
     </div>

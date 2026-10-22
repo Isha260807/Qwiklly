@@ -70,6 +70,7 @@ const _buildVendorQuery = (filters = {}) => {
   delete queryFilters.checkCashLimit;
   delete queryFilters.service;
   delete queryFilters.city;
+  delete queryFilters.vendorIds;
 
   const baseQuery = {
     approvalStatus: VENDOR_STATUS.APPROVED,
@@ -81,17 +82,15 @@ const _buildVendorQuery = (filters = {}) => {
     baseQuery['address.city'] = { $regex: new RegExp(filters.city, 'i') };
   }
 
-  if (serviceCategory) {
-    const escaped = serviceCategory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const reg = new RegExp(escaped, 'i');
-    baseQuery.$or = [
-      { categories: { $in: [serviceCategory] } },
-      { service: { $in: [serviceCategory] } },
-      { categories: { $regex: reg } },
-      { service: { $regex: reg } },
-      { skills: { $regex: reg } }
-    ];
+  // Zone-scoped matching: restrict to vendors already resolved as assigned
+  // to the booking's zone (see zoneService/vendorMatchService). This is
+  // applied BEFORE radius filtering below, never instead of it.
+  if (filters.vendorIds) {
+    baseQuery._id = { $in: filters.vendorIds };
   }
+
+  // Universal Service Model: All approved vendors provide all platform services
+  // No restrictive serviceCategory filtering applied
 
   if (checkCashLimit) {
     baseQuery.$expr = { $lte: ["$wallet.dues", "$wallet.cashLimit"] };
@@ -301,10 +300,35 @@ const findVendorsByCity = async (city, filters = {}) => {
   }
 };
 
+/**
+ * Straight-line distance (km) from a vendor's last synced location to
+ * a booking address. Display-only: vendor matching stays zone-based and never
+ * uses this. Returns null when either side has no usable coordinates.
+ */
+const getVendorBookingDistanceKm = (vendor, address) => {
+  const toNum = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+
+  let vLat = toNum(vendor?.location?.lat);
+  let vLng = toNum(vendor?.location?.lng);
+  if ((vLat === null || vLng === null) && Array.isArray(vendor?.geoLocation?.coordinates)) {
+    vLng = toNum(vendor.geoLocation.coordinates[0]);
+    vLat = toNum(vendor.geoLocation.coordinates[1]);
+  }
+  const bLat = toNum(address?.lat);
+  const bLng = toNum(address?.lng);
+
+  // [0, 0] is the schema default for "never synced", not a real position.
+  if (vLat === null || vLng === null || bLat === null || bLng === null) return null;
+  if (vLat === 0 && vLng === 0) return null;
+
+  return Math.round(calculateDistance({ lat: vLat, lng: vLng }, { lat: bLat, lng: bLng }) * 1000) / 1000;
+};
+
 module.exports = {
   geocodeAddress,
   findNearbyVendors,
   findVendorsByCity,
   calculateDistance,
+  getVendorBookingDistanceKm,
   getDistanceMatrix
 };

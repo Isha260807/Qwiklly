@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase } from 'react-icons/fi';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiCreditCard, FiSmartphone } from 'react-icons/fi';
 import { vendorAuthService } from '../../../../services/authService';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
@@ -25,6 +25,13 @@ const ProfileDetails = () => {
     address: '',
     serviceCategory: '',
     profilePhoto: '',
+    bankDetails: {
+      upiId: '',
+      accountHolderName: '',
+      accountNumber: '',
+      ifscCode: '',
+      bankName: ''
+    }
   });
 
   useLayoutEffect(() => {
@@ -73,7 +80,14 @@ const ProfileDetails = () => {
             email: storedData.email || '',
             address: addressString || 'Not set',
             serviceCategory: storedData.serviceCategory || storedData.service || '',
-            profilePhoto: storedData.profilePhoto || ''
+            profilePhoto: storedData.profilePhoto || '',
+            bankDetails: {
+              upiId: storedData.bankDetails?.upiId || '',
+              accountHolderName: storedData.bankDetails?.accountHolderName || '',
+              accountNumber: storedData.bankDetails?.accountNumber || '',
+              ifscCode: storedData.bankDetails?.ifscCode || '',
+              bankName: storedData.bankDetails?.bankName || ''
+            }
           }));
         }
 
@@ -99,7 +113,14 @@ const ProfileDetails = () => {
             email: apiData.email,
             address: formattedAddress,
             serviceCategory: Array.isArray(apiData.service) ? apiData.service.join(', ') : (apiData.service || ''),
-            profilePhoto: apiData.profilePhoto
+            profilePhoto: apiData.profilePhoto,
+            bankDetails: apiData.bankDetails || {
+              upiId: '',
+              accountHolderName: '',
+              accountNumber: '',
+              ifscCode: '',
+              bankName: ''
+            }
           };
 
           setProfile(prev => ({ ...prev, ...newProfile }));
@@ -230,6 +251,77 @@ const ProfileDetails = () => {
               </div>
             </div>
           </div>
+
+          {/* Payout & Bank Details Group */}
+          <div className="bg-white rounded-xl p-3.5 shadow-xs">
+            <div className="flex items-center justify-between mb-2.5">
+              <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bank & UPI Details (Payouts)</h4>
+              <button
+                onClick={() => navigate('/vendor/profile/payout')}
+                className="text-[10px] font-bold text-[#720C3E] hover:underline flex items-center gap-1"
+              >
+                <FiEdit2 className="w-2.5 h-2.5" />
+                {profile.bankDetails?.upiId || profile.bankDetails?.accountNumber || profile.bankDetails?.upiQrCode ? 'Manage' : '+ Add Details'}
+              </button>
+            </div>
+            
+            <div className="space-y-2.5">
+              {/* QR Code */}
+              {profile.bankDetails?.upiQrCode && (
+                <div className="flex items-center gap-3 p-2 bg-pink-50/50 rounded-xl border border-pink-100/60">
+                  <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 bg-white p-0.5 shrink-0">
+                    <img
+                      src={profile.bankDetails.upiQrCode}
+                      alt="UPI QR Code"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-500 font-medium leading-none mb-1">Scanner QR Code</p>
+                    <p className="text-emerald-700 font-bold text-xs leading-none">QR Code Configured</p>
+                  </div>
+                </div>
+              )}
+
+              {/* UPI ID */}
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-emerald-50 text-emerald-700">
+                  <FiSmartphone className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-gray-500 font-medium leading-none mb-1">UPI ID (Google Pay / PhonePe)</p>
+                  <p className="text-gray-900 font-bold text-xs truncate leading-none">
+                    {profile.bankDetails?.upiId || <span className="text-gray-400 font-normal italic">Not configured</span>}
+                  </p>
+                </div>
+              </div>
+
+              {/* Bank Account */}
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-[#FCEBF3] text-[#720C3E] mt-0.5">
+                  <FiCreditCard className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-gray-500 font-medium leading-none mb-1">Bank Account</p>
+                  {profile.bankDetails?.accountNumber ? (
+                    <div className="space-y-0.5">
+                      <p className="text-gray-900 font-bold text-xs leading-none">
+                        {profile.bankDetails.bankName ? `${profile.bankDetails.bankName} - ` : ''}
+                        A/C {profile.bankDetails.accountNumber}
+                      </p>
+                      <p className="text-[10px] text-gray-500 font-medium leading-tight">
+                        {profile.bankDetails.accountHolderName && `Holder: ${profile.bankDetails.accountHolderName}`}
+                        {profile.bankDetails.ifscCode && ` | IFSC: ${profile.bankDetails.ifscCode}`}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-gray-400 text-xs italic">No bank account added</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </main>
     </div>

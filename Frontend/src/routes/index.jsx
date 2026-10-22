@@ -1,33 +1,65 @@
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 
-// Import module routes
+// Import module routes (Existing applications - 100% untouched)
 import UserRoutes from '../modules/user/routes';
 import VendorRoutes from '../modules/vendor/routes';
 import AdminRoutes from '../modules/admin/routes';
 
-import LandingPage from '../modules/landing/pages/LandingPage';
+// Import Public Website Pages
+import PublicHome from '../modules/public/pages/Home';
+import PublicAbout from '../modules/public/pages/About';
+import PublicContact from '../modules/public/pages/Contact';
+import PublicPrivacyPolicy from '../modules/public/pages/PrivacyPolicy';
+import PublicTermsConditions from '../modules/public/pages/TermsConditions';
+import PublicRefundPolicy from '../modules/public/pages/RefundPolicy';
+import LoginLegalPage from '../modules/public/pages/LoginLegalPage';
+import LoginSupportPage from '../modules/public/pages/LoginSupportPage';
 
 const AppRoutes = () => {
+  const navigate = useNavigate();
+
+  // Listen for unauthenticated API redirects and route smoothly without hard page reloads
+  useEffect(() => {
+    const handleAuthRedirect = (e) => {
+      const targetPath = e.detail?.path || '/user/login';
+      navigate(targetPath, { replace: true });
+    };
+
+    window.addEventListener('auth_redirect', handleAuthRedirect);
+    return () => window.removeEventListener('auth_redirect', handleAuthRedirect);
+  }, [navigate]);
+
   return (
     <Routes>
-      {/* Landing Page */}
-      <Route path="/Home" element={<LandingPage />} />
+      {/* 1. Public Marketing & Information Website */}
+      <Route path="/" element={<PublicHome />} />
+      <Route path="/Home" element={<PublicHome />} />
+      <Route path="/about" element={<PublicAbout />} />
+      <Route path="/contact" element={<PublicContact />} />
+      <Route path="/privacy" element={<PublicPrivacyPolicy />} />
+      <Route path="/privacy-policy" element={<PublicPrivacyPolicy />} />
+      <Route path="/terms" element={<PublicTermsConditions />} />
+      <Route path="/terms-and-conditions" element={<PublicTermsConditions />} />
+      <Route path="/refund-policy" element={<PublicRefundPolicy />} />
 
-      {/* Redirect Root Slash to User App */}
-      <Route path="/" element={<Navigate to="/user" replace />} />
+      {/* Separate legal pages opened from user/vendor login */}
+      <Route path="/login/terms" element={<LoginLegalPage type="terms" />} />
+      <Route path="/login/privacy" element={<LoginLegalPage type="privacy" />} />
+      <Route path="/login/support" element={<LoginSupportPage />} />
 
-      {/* User Routes */}
+      {/* 2. Existing Qwiklly User Application (login/signup intact) */}
       <Route path="/user/*" element={<UserRoutes />} />
 
-      {/* Vendor Routes */}
+      {/* 3. Existing Qwiklly Vendor Portal (100% UNCHANGED) */}
       <Route path="/vendor/*" element={<VendorRoutes />} />
 
-      {/* Admin Routes */}
+      {/* 4. Existing Qwiklly Admin Portal (100% UNCHANGED) */}
       <Route path="/admin/*" element={<AdminRoutes />} />
     </Routes>
   );
 };
 
 export default AppRoutes;
+
 

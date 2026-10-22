@@ -247,6 +247,19 @@ const homeContentSchema = new mongoose.Schema({
     }
   }],
 
+  // Trust/CTA section rendered at the end of the user home page
+  trustSection: {
+    isVisible: { type: Boolean, default: true },
+    title: { type: String, default: 'Relax, your home is in professional hands' },
+    trustedBy: { type: String, default: '15 lakh' },
+    trustedLabel: { type: String, default: 'Families' },
+    rating: { type: String, default: '' },
+    ratingLabel: { type: String, default: '3 Lakh+ Ratings' },
+    imageUrl: { type: String, default: '/Homster xpert .png' },
+    cartCta: { type: String, default: 'Go to cart' },
+    emptyCartCta: { type: String, default: 'Browse services' }
+  },
+
   // Status
   isActive: {
     type: Boolean,

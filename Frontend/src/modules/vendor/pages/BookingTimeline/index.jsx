@@ -28,6 +28,9 @@ const BookingTimeline = () => {
   const [workPhotos, setWorkPhotos] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isWorkApproved, setIsWorkApproved] = useState(false);
+  const isTerminalBooking = ['cancelled', 'rejected'].includes(
+    String(booking?.status || '').toLowerCase()
+  );
 
   useLayoutEffect(() => {
     const html = document.documentElement;
@@ -86,6 +89,8 @@ const BookingTimeline = () => {
           'in_progress': 5,
           'work_done': 7,
           'completed': 8,
+          'cancelled': 2,
+          'rejected': 1,
         };
 
         const isActuallyPaid = apiData.isWorkerPaid || apiData.workerPaymentStatus === 'PAID' || apiData.workerPaymentStatus === 'SUCCESS';
@@ -93,6 +98,9 @@ const BookingTimeline = () => {
 
         // Custom logic for later stages
         let stage = statusMap[apiData.status] || 2;
+        // Scheduled (slot) bookings are assigned to the vendor at creation, so they
+        // skip the "Assign Worker" step and go straight to starting the journey.
+        if (apiData.status === 'confirmed' && isSelfJob) stage = 3;
         if (apiData.status === 'completed') {
           if (isSettled) stage = 10; // Booking Complete
           else if (isActuallyPaid || isSelfJob) stage = 9; // Final Settlement (Skip Pay Worker for self)
@@ -140,7 +148,8 @@ const BookingTimeline = () => {
           setActionLoading(true);
           await payWorker(id);
           toast.success('Worker payment processed successfully');
-          window.location.reload();
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          await loadBooking();
         } catch (e) {
           toast.error(e.response?.data?.message || 'Payment failed');
         } finally {
@@ -161,9 +170,32 @@ const BookingTimeline = () => {
           setActionLoading(true);
           await updateBookingStatus(id, 'completed');
           toast.success('Work approved successfully');
-          window.location.reload();
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          await loadBooking();
         } catch (e) {
           toast.error(e.response?.data?.message || 'Approval failed');
+        } finally {
+          setActionLoading(false);
+        }
+      }
+    });
+  };
+
+  const handleCompleteBooking = async () => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Complete Booking',
+      message: 'Confirm and finalize booking completion?',
+      type: 'info',
+      onConfirm: async () => {
+        try {
+          setActionLoading(true);
+          await updateBookingStatus(id, 'completed');
+          toast.success('Booking completed successfully');
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          await loadBooking();
+        } catch (e) {
+          toast.error(e.response?.data?.message || 'Failed to complete booking');
         } finally {
           setActionLoading(false);
         }
@@ -183,7 +215,8 @@ const BookingTimeline = () => {
           // Using existing updateBookingStatus to mark settlement
           await updateBookingStatus(id, booking.status, { finalSettlementStatus: 'DONE' });
           toast.success('Final settlement completed!');
-          window.location.reload();
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          await loadBooking();
         } catch (e) {
           toast.error(e.response?.data?.message || 'Final settlement failed');
         } finally {
@@ -208,7 +241,8 @@ const BookingTimeline = () => {
       setActionLoading(true);
       await startSelfJob(id);
       toast.success('Journey Started');
-      navigate(`/vendor/booking/${id}/map`);
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
+      navigate(`/vendor/booking/${id}/map`, { state: { booking: { ...booking, status: 'journey_started' } } });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to start journey');
     } finally {
@@ -222,7 +256,10 @@ const BookingTimeline = () => {
 
     setActionLoading(true);
     // Location check for vendor? Optional or same as worker.
-    if (!navigator.geolocation) return toast.error('Geolocation required');
+    if (!navigator.geolocation) {
+      setActionLoading(false);
+      return toast.error('Geolocation required');
+    }
 
     navigator.geolocation.getCurrentPosition(async (position) => {
       try {
@@ -230,12 +267,18 @@ const BookingTimeline = () => {
         await verifySelfVisit(id, otp, location);
         toast.success('Visit Verified');
         setIsVisitModalOpen(false);
-        window.location.reload();
+        setOtpInput(['', '', '', '']);
+        window.dispatchEvent(new Event('vendorJobsUpdated'));
+        await loadBooking();
       } catch (err) {
         toast.error(err.response?.data?.message || 'Verification failed');
       } finally {
         setActionLoading(false);
       }
+    }, (geoErr) => {
+      console.error('Geo error:', geoErr);
+      toast.error('Location permission is required to verify visit');
+      setActionLoading(false);
     });
   };
 
@@ -247,7 +290,8 @@ const BookingTimeline = () => {
       await completeSelfJob(id, { workPhotos: photos, workDoneDetails: { notes } });
       toast.success('Work marked done');
       setIsWorkDoneModalOpen(false);
-      window.location.reload();
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
+      await loadBooking();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to complete work');
     } finally {
@@ -274,8 +318,10 @@ const BookingTimeline = () => {
       id: 3,
       title: 'Assigned',
       icon: FiUser,
-      action: currentStage === 2 ? () => navigate(`/vendor/booking/${id}/assign-worker`) : null,
-      description: booking?.assignedTo ? `Assigned to ${booking.assignedTo.name}` : 'Assign worker or start yourself',
+      action: !isTerminalBooking && currentStage === 2 ? () => navigate(`/vendor/booking/${id}/assign-worker`) : null,
+      description: isTerminalBooking
+        ? 'No worker assignment allowed for this booking'
+        : booking?.assignedTo ? `Assigned to ${booking.assignedTo.name}` : 'Assign worker or start yourself',
     },
     {
       id: 4,
@@ -308,7 +354,7 @@ const BookingTimeline = () => {
         if (booking?.status === 'completed' || booking?.status === 'COMPLETED') return null;
 
         if (booking?.isSelfJob && currentStage === 7) {
-          return () => navigate(`/vendor/booking/${id}/billing`);
+          return handleCompleteBooking;
         }
 
         if (!booking?.isSelfJob && currentStage === 7) {
@@ -379,13 +425,15 @@ const BookingTimeline = () => {
 
   async function handleWorkDone() {
     try {
-      // Try to mark as completed or work_done if backend supports it
+      setActionLoading(true);
       await updateBookingStatus(id, 'work_done');
-      setCurrentStage(5); // Update to stage 5
-      window.location.reload();
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
+      await loadBooking();
     } catch (error) {
       console.error('Error updating status to work done:', error);
       toast.error('Failed to update status. Please follow valid status flow.');
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -465,7 +513,7 @@ const BookingTimeline = () => {
                       <p className="text-[11px] text-gray-500 mb-1 leading-snug">{stage.description}</p>
 
                       {/* Hourly Service Timer / End Service — replaces "Mark Work Done" for hourly bookings */}
-                      {stage.id === 6 && booking?.hourlyTracking?.isHourly && (currentStage === 5 || currentStage === 6) &&
+                      {!isTerminalBooking && stage.id === 6 && booking?.hourlyTracking?.isHourly && (currentStage === 5 || currentStage === 6) &&
                         !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed) && (
                           <div className="my-1">
                             <HourlyServiceTimer
@@ -478,7 +526,7 @@ const BookingTimeline = () => {
                         )}
 
                       {/* Action Button */}
-                      {stage.action && !isSkipped &&
+                      {stage.action && !isTerminalBooking && !isSkipped &&
                         !(stage.id === 6 && booking?.hourlyTracking?.isHourly && !(booking.hourlyTracking.phase === 'ENDED' && booking.hourlyTracking.workDoneAllowed)) &&
                         (() => {
                         const isJourneyPaymentBlocked = stage.id === 4 && booking?.isSelfJob && !isPaymentComplete;

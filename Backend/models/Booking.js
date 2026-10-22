@@ -4,6 +4,7 @@ require('./User');
 require('./Vendor');
 require('./UserService');
 require('./Category');
+require('./Zone');
 
 /**
  * Booking Model
@@ -36,8 +37,18 @@ const bookingSchema = new mongoose.Schema({
     ref: 'Vendor'
   }],
 
+  // Zone-only dispatch state. A booking is broadcast once to all currently
+  // available vendors in its resolved zone; this prevents payment retries or
+  // background jobs from broadcasting the same booking again.
+  dispatchState: {
+    type: String,
+    enum: ['PENDING', 'DISPATCHING', 'DISPATCHED'],
+    default: 'PENDING',
+    index: true
+  },
+
   // ==========================================
-  // WAVE-BASED ALERTING
+  // ZONE-BROADCAST ALERTING
   // ==========================================
   potentialVendors: [{
     vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor' },
@@ -71,6 +82,25 @@ const bookingSchema = new mongoose.Schema({
     required: false,
     index: true
   },
+  // Zone resolved server-side from the booking address coordinates.
+  // This is a permanent record of WHERE this booking was made - it never
+  // changes even if the user later edits/replaces their saved address.
+  zoneId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Zone',
+    default: null,
+    index: true
+  },
+  zoneName: {
+    type: String,
+    default: null
+  },
+  // Diagnostic reason set when zone/radius/availability matching could not
+  // dispatch a vendor automatically (see MATCH_FAILURE_REASONS in constants.js)
+  matchFailureReason: {
+    type: String,
+    default: null
+  },
   serviceName: {
     type: String,
     required: true
@@ -92,6 +122,7 @@ const bookingSchema = new mongoose.Schema({
   }],
   // Booked Items (Brand > Card snapshot)
   bookedItems: [{
+    serviceId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserService', default: null },
     brandName: { type: String, default: '' },
     brandIcon: { type: String, default: null },
     serviceName: { type: String, default: '' },
@@ -101,9 +132,15 @@ const bookingSchema = new mongoose.Schema({
       price: { type: Number, default: 0 },
       originalPrice: { type: Number },
       duration: { type: String },
+      estimatedDurationMinutes: { type: Number, default: null },
       description: { type: String },
       imageUrl: { type: String },
       features: [{ type: String }],
+      pricingType: { type: String, enum: ['FIXED', 'DURATION', 'HOURLY', null], default: null },
+      durationMinutes: { type: Number, default: null },
+      pricePerUnit: { type: Number, default: null },
+      billingUnitMinutes: { type: Number, default: 30 },
+      pricePer30Minutes: { type: Number, default: null },
       hours: { type: Number, default: null } // Selected hours for HOURLY-priced services
     },
     quantity: { type: Number, default: 1 }
@@ -195,6 +232,33 @@ const bookingSchema = new mongoose.Schema({
     type: String, // 'wallet', 'razorpay', 'online', 'cash', 'card', 'plan_benefit'
     default: null
   },
+  useWalletPayment: {
+    type: Boolean,
+    default: false
+  },
+  // Payment split details. walletAmount is the amount actually funded by the
+  // user's wallet; pendingWalletAmount is reserved for the current Razorpay
+  // checkout and is consumed only after the online payment is verified.
+  walletAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  onlineAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  pendingWalletAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  razorpayOrderAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   paymentId: {
     type: String,
     default: null
@@ -282,6 +346,36 @@ const bookingSchema = new mongoose.Schema({
     default: BOOKING_STATUS.PENDING,
     index: true
   },
+  vendorAssignmentStatus: {
+    type: String,
+    enum: ['PENDING', 'ACCEPTED', 'REJECTED', 'REASSIGNING', 'FAILED'],
+    default: 'PENDING',
+    index: true
+  },
+  // Scheduled bookings reserve a vendor while the user is on the payment
+  // screen. The assignment is not committed, and the round-robin cursor is
+  // not advanced, until payment succeeds.
+  slotAssignment: {
+    state: {
+      type: String,
+      enum: ['TENTATIVE', 'COMMITTING', 'COMMITTED', 'RELEASED', null],
+      default: null,
+      index: true
+    },
+    selectionVersion: {
+      type: Number,
+      default: null
+    },
+    selectedAt: { type: Date, default: null },
+    committingAt: { type: Date, default: null },
+    committedAt: { type: Date, default: null },
+    cursorAdvanced: { type: Boolean, default: false },
+    cursorStale: { type: Boolean, default: false }
+  },
+  rejectedVendors: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Vendor'
+  }],
   workerResponse: {
     type: String,
     enum: ['PENDING', 'ACCEPTED', 'REJECTED'],
@@ -422,11 +516,78 @@ bookingSchema.pre('save', async function (next) {
   next();
 });
 
+// Referral rewards are settled after a booking reaches completed status and
+// payment is eligible. The service is idempotent, so every completion path can
+// safely pass through this hook without creating duplicate wallet credits.
+bookingSchema.post('save', async (booking) => {
+  if (booking.status !== BOOKING_STATUS.COMPLETED) return;
+  try {
+    const { rewardReferralForCompletedBooking } = require('../services/referralService');
+    await rewardReferralForCompletedBooking(booking);
+  } catch (error) {
+    console.error('[Referral] Failed to settle completed-booking reward:', error);
+  }
+});
+
 // Core compound indexes
 bookingSchema.index({ userId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ vendorId: 1, status: 1, createdAt: -1 });
 bookingSchema.index({ scheduledDate: 1, status: 1 });
 bookingSchema.index({ paymentStatus: 1, status: 1 });
+
+// Prevent two active scheduled bookings from reserving the same vendor/date/
+// start slot. Instant bookings do not participate in this constraint.
+bookingSchema.index(
+  { vendorId: 1, scheduledDate: 1, 'timeSlot.start': 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      bookingType: 'scheduled',
+      'hourlyTracking.isHourly': false,
+      vendorId: { $type: 'objectId' },
+      status: {
+        $in: [
+          'pending',
+          'awaiting_payment',
+          'confirmed',
+          'accepted',
+          'assigned',
+          'journey_started',
+          'visited',
+          'in_progress',
+          'work_done'
+        ]
+      }
+    }
+  }
+);
+
+// A user cannot submit the same NORMAL SLOT booking more than once. This is
+// separate from the vendor reservation index because two vendors may otherwise
+// allow a concurrent duplicate request to land on different vendors.
+bookingSchema.index(
+  { userId: 1, serviceId: 1, scheduledDate: 1, 'timeSlot.start': 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      bookingType: 'scheduled',
+      'hourlyTracking.isHourly': false,
+      status: {
+        $in: [
+          'pending',
+          'awaiting_payment',
+          'confirmed',
+          'accepted',
+          'assigned',
+          'journey_started',
+          'visited',
+          'in_progress',
+          'work_done'
+        ]
+      }
+    }
+  }
+);
 
 // ── PERFORMANCE INDEXES (added for wave-scheduler & dashboard queries) ──
 // Scheduler: Booking.find({ status: 'searching', waveStartedAt: { $ne: null } })

@@ -1,5 +1,5 @@
 const Settings = require('../../models/Settings');
-const Vendor = require('../../models/Vendor');
+const { clearGlobalSettingsCache } = require('../../services/pricingService');
 
 // Get Global Settings
 exports.getSettings = async (req, res, next) => {
@@ -36,8 +36,10 @@ exports.updateSettings = async (req, res, next) => {
       partsPayoutPercentage,
       tdsPercentage,
       platformFeePercentage,
-      vendorCashLimit, // Add this
       cancellationPenalty,
+      referralEnabled,
+      referrerRewardAmount,
+      referredRewardAmount,
       razorpayKeyId,
       razorpayKeySecret,
       razorpayWebhookSecret,
@@ -49,11 +51,13 @@ exports.updateSettings = async (req, res, next) => {
       // Support Settings
       supportEmail, supportPhone, supportWhatsapp,
       // Booking Timing
-      maxSearchTime, waveDuration, searchRadius, paymentTimeoutMinutes,
+      maxSearchTime, paymentTimeoutMinutes,
       // Payment Control
       isOnlinePaymentEnabled,
       // Dynamic Booking Slots Configuration
-      slotStartHour, slotEndHour, slotIntervalMins, maxDaysInAdvance, leadTimeHours, slotServiceDurationMins, disabledSlots, customSlots
+      slotStartHour, slotEndHour, slotIntervalMins, maxDaysInAdvance, leadTimeHours, slotServiceDurationMins, disabledSlots, customSlots,
+      // Public legal content
+      termsOfService, privacyPolicy
     } = req.body;
 
     let settings = await Settings.findOne({ type: 'global' });
@@ -69,8 +73,10 @@ exports.updateSettings = async (req, res, next) => {
         partsPayoutPercentage,
         tdsPercentage,
         platformFeePercentage,
-        vendorCashLimit,
         cancellationPenalty,
+        referralEnabled,
+        referrerRewardAmount,
+        referredRewardAmount,
         razorpayKeyId,
         razorpayKeySecret,
         razorpayWebhookSecret,
@@ -78,8 +84,6 @@ exports.updateSettings = async (req, res, next) => {
         cloudinaryApiKey,
         cloudinaryApiSecret,
         maxSearchTime,
-        waveDuration,
-        searchRadius,
         paymentTimeoutMinutes,
         slotStartHour,
         slotEndHour,
@@ -88,7 +92,9 @@ exports.updateSettings = async (req, res, next) => {
         leadTimeHours,
         slotServiceDurationMins,
         disabledSlots,
-        customSlots
+        customSlots,
+        termsOfService,
+        privacyPolicy
       });
     } else {
       // Update fields if provided
@@ -100,8 +106,10 @@ exports.updateSettings = async (req, res, next) => {
       if (partsPayoutPercentage !== undefined) settings.partsPayoutPercentage = partsPayoutPercentage;
       if (tdsPercentage !== undefined) settings.tdsPercentage = tdsPercentage;
       if (platformFeePercentage !== undefined) settings.platformFeePercentage = platformFeePercentage;
-      if (vendorCashLimit !== undefined) settings.vendorCashLimit = vendorCashLimit;
       if (cancellationPenalty !== undefined) settings.cancellationPenalty = cancellationPenalty;
+      if (referralEnabled !== undefined) settings.referralEnabled = referralEnabled;
+      if (referrerRewardAmount !== undefined) settings.referrerRewardAmount = referrerRewardAmount;
+      if (referredRewardAmount !== undefined) settings.referredRewardAmount = referredRewardAmount;
       if (razorpayKeyId !== undefined) settings.razorpayKeyId = razorpayKeyId;
       if (razorpayKeySecret !== undefined) settings.razorpayKeySecret = razorpayKeySecret;
       if (razorpayWebhookSecret !== undefined) settings.razorpayWebhookSecret = razorpayWebhookSecret;
@@ -129,8 +137,6 @@ exports.updateSettings = async (req, res, next) => {
 
       // Booking Timing update
       if (maxSearchTime !== undefined) settings.maxSearchTime = maxSearchTime;
-      if (waveDuration !== undefined) settings.waveDuration = waveDuration;
-      if (searchRadius !== undefined) settings.searchRadius = searchRadius;
       if (paymentTimeoutMinutes !== undefined) settings.paymentTimeoutMinutes = paymentTimeoutMinutes;
       if (isOnlinePaymentEnabled !== undefined) settings.isOnlinePaymentEnabled = isOnlinePaymentEnabled;
 
@@ -144,26 +150,15 @@ exports.updateSettings = async (req, res, next) => {
       if (disabledSlots !== undefined) settings.disabledSlots = disabledSlots;
       if (customSlots !== undefined) settings.customSlots = customSlots;
 
+      // Public legal content update
+      if (termsOfService !== undefined) settings.termsOfService = termsOfService;
+      if (privacyPolicy !== undefined) settings.privacyPolicy = privacyPolicy;
+
       await settings.save();
     }
 
-    // Propagate vendorCashLimit to all existing vendors if it was changed
-    if (vendorCashLimit !== undefined) {
-      console.log(`Updating all vendors with new cash limit: ${vendorCashLimit}`);
-      await Vendor.updateMany(
-        {},
-        { $set: { 'wallet.cashLimit': vendorCashLimit } }
-      );
-    }
+    clearGlobalSettingsCache();
 
-    // Propagate searchRadius to all existing vendors if it was changed
-    if (searchRadius !== undefined) {
-      console.log(`Updating all vendors with new service range: ${searchRadius}`);
-      await Vendor.updateMany(
-        {},
-        { $set: { 'settings.serviceRange': searchRadius } }
-      );
-    }
 
     res.status(200).json({
       success: true,
@@ -182,7 +177,7 @@ exports.updateSettings = async (req, res, next) => {
 exports.getPublicSettings = async (req, res, next) => {
   try {
     let settings = await Settings.findOne({ type: 'global' }).select(
-      'visitedCharges instantBookingCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty companyName companyAddress companyCity companyState companyPincode companyPhone companyEmail isOnlinePaymentEnabled slotStartHour slotEndHour slotIntervalMins maxDaysInAdvance leadTimeHours slotServiceDurationMins disabledSlots customSlots'
+      'visitedCharges instantBookingCharges serviceGstPercentage partsGstPercentage supportEmail supportPhone supportWhatsapp cancellationPenalty companyName companyGSTIN companyPAN companyAddress companyCity companyState companyPincode companyPhone companyEmail invoicePrefix sacCode isOnlinePaymentEnabled slotStartHour slotEndHour slotIntervalMins maxDaysInAdvance leadTimeHours slotServiceDurationMins disabledSlots customSlots termsOfService privacyPolicy'
     );
 
     // Default if not found (fallback values)

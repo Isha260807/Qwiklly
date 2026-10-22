@@ -1,6 +1,7 @@
 const Coupon = require('../../models/Coupon');
 const CouponUsage = require('../../models/CouponUsage');
 const User = require('../../models/User');
+const Booking = require('../../models/Booking');
 const { calculateBookingPrice, validateCouponApplicability } = require('../../services/pricingService');
 
 /**
@@ -13,7 +14,8 @@ const getAvailableCoupons = async (req, res) => {
     const now = new Date();
 
     // 1. Run Coupon find and User CouponUsage find in parallel in ONE round-trip
-    const [coupons, userUsages] = await Promise.all([
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [coupons, userUsages, currentUser, previousOrdersCount] = await Promise.all([
       Coupon.find({
         isActive: true,
         isDeleted: false,
@@ -32,7 +34,17 @@ const getAvailableCoupons = async (req, res) => {
           })
             .select('couponId')
             .lean()
-        : Promise.resolve([])
+        : Promise.resolve([]),
+      userId
+        ? User.findById(userId).select('createdAt').lean()
+        : Promise.resolve(null),
+      userId
+        ? Booking.countDocuments({
+            userId,
+            status: { $in: ['confirmed', 'completed', 'in_progress', 'ACCEPTED', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED'] },
+            paymentStatus: { $in: ['paid', 'success'] }
+          })
+        : Promise.resolve(0)
     ]);
 
     // 2. Build in-memory usage map: couponId -> count (O(1) lookup)
@@ -52,7 +64,9 @@ const getAvailableCoupons = async (req, res) => {
       let reason = null;
 
       // Global limit check
-      if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+      const consumedCount = Number(coupon.usedCount) || 0;
+      const reservedCount = Number(coupon.reservedCount) || 0;
+      if (coupon.usageLimit > 0 && consumedCount + reservedCount >= coupon.usageLimit) {
         isEligible = false;
         reason = 'Usage limit exhausted';
       }
@@ -71,6 +85,17 @@ const getAvailableCoupons = async (req, res) => {
       if (isEligible && cartAmount > 0 && cartAmount < (coupon.minOrderAmount || 0)) {
         isEligible = false;
         reason = `Add items worth ₹${(coupon.minOrderAmount - cartAmount)} more to use this coupon`;
+      }
+
+      // Mirror first-order and new-account rules in the offers list.
+      if (isEligible && coupon.firstOrderOnly && previousOrdersCount > 0) {
+        isEligible = false;
+        reason = 'Valid only on your first booking';
+      }
+
+      if (isEligible && coupon.newUserOnly && (!currentUser?.createdAt || new Date(currentUser.createdAt) < thirtyDaysAgo)) {
+        isEligible = false;
+        reason = 'Available only for accounts registered in the last 30 days';
       }
 
       return {

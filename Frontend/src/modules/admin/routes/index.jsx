@@ -21,12 +21,14 @@ const BookingNotifications = lazy(() => import('../pages/Bookings/BookingNotific
 const Payments = lazy(() => import('../pages/Payments'));
 const Reports = lazy(() => import('../pages/Reports'));
 const Notifications = lazy(() => import('../pages/Notifications'));
+const Support = lazy(() => import('../pages/Support'));
 
 const Plans = lazy(() => import('../pages/Plans/Plans'));
 const Settlements = lazy(() => import('../pages/Settlements'));
 const Reviews = lazy(() => import('../pages/Reviews'));
 const Banners = lazy(() => import('../pages/Banners'));
 const Coupons = lazy(() => import('../pages/Coupons'));
+const Zones = lazy(() => import('../pages/Zones'));
 
 
 
@@ -68,9 +70,11 @@ const AdminRoutes = () => {
           <Route path="payments/*" element={<Payments />} />
           <Route path="reports/*" element={<Reports />} />
           <Route path="notifications/*" element={<Notifications />} />
+          <Route path="support/*" element={<Support />} />
           <Route path="plans" element={<Plans />} />
           <Route path="reviews" element={<Reviews />} />
           <Route path="settlements/*" element={<Settlements />} />
+          <Route path="zones" element={<Zones />} />
           <Route path="settings/*" element={<Settings />} />
         </Route>
       </Routes>

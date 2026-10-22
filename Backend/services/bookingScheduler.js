@@ -1,12 +1,6 @@
 /**
  * Booking Scheduler Service — Optimized
- * Handles Wave-Based Vendor Alerting
- *
- * Wave Logic:
- * - Wave 1: First 3 closest vendors (alerted immediately on booking creation)
- * - Wave 2: Next 3 vendors (after 15s if no accept)
- * - Wave 3: Next 4 vendors (after another 15s)
- * - Wave 4+: All remaining vendors
+ * Handles zone-broadcast booking expiry and payment timeout recovery.
  *
  * OPTIMIZATIONS:
  * - All active bookings processed in PARALLEL (Promise.all, not serial for-loop)
@@ -18,32 +12,14 @@ const Booking = require('../models/Booking');
 const Vendor = require('../models/Vendor');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { createNotification } = require('../controllers/notificationControllers/notificationController');
+const { cancelCouponUsage } = require('./couponUsageService');
 
 const Settings = require('../models/Settings');
-
-// Wave configuration
-let WAVE_CONFIG = {
-  1: { count: 3, duration: 60000 },
-  2: { count: 3, duration: 60000 },
-  3: { count: 4, duration: 60000 },
-  4: { count: Infinity, duration: 0 }
-};
 
 let MAX_SEARCH_TIME_MS = 5 * 60 * 1000; // 5 mins fallback
 
 const ACTIVE_INTERVAL_MS = 5000;  // Poll every 5s when bookings exist
 const IDLE_INTERVAL_MS = 30000;   // Poll every 30s when no active bookings (circuit breaker)
-
-// Calculate vendor index range for a wave
-const getVendorRange = (wave) => {
-  let start = 0;
-  for (let i = 1; i < wave; i++) {
-    start += WAVE_CONFIG[i]?.count || 0;
-  }
-  const config = WAVE_CONFIG[wave] || WAVE_CONFIG[4];
-  const end = config.count === Infinity ? Infinity : start + config.count;
-  return { start, end };
-};
 
 class BookingScheduler {
   constructor(io) {
@@ -66,12 +42,13 @@ class BookingScheduler {
   scheduleNext(intervalMs) {
     if (this.intervalId) clearTimeout(this.intervalId);
     this.intervalId = setTimeout(async () => {
-      const [hadWaveWork, hadTimeoutWork] = await Promise.all([
+      const [hadWaveWork, hadTimeoutWork, hadSlotWork] = await Promise.all([
         this.processWaves(),
-        this.processPaymentTimeouts()
+        this.processPaymentTimeouts(),
+        this.processSlotPaymentTimeouts()
       ]);
       // Adaptive interval: if idle, slow down; if active, stay fast
-      this.scheduleNext((hadWaveWork || hadTimeoutWork) ? ACTIVE_INTERVAL_MS : IDLE_INTERVAL_MS);
+      this.scheduleNext((hadWaveWork || hadTimeoutWork || hadSlotWork) ? ACTIVE_INTERVAL_MS : IDLE_INTERVAL_MS);
     }, intervalMs);
   }
 
@@ -85,38 +62,30 @@ class BookingScheduler {
   }
 
   /**
-   * Process all active searching bookings in PARALLEL.
-   * @returns {boolean} true if any booking was processed, false if idle
+   * Expire zone-broadcast searches in PARALLEL.
+   * Vendors are all notified at dispatch time; this method must never send a
+   * second wave or use distance/radius as a fallback.
+   * @returns {boolean} true if active searches exist, false if idle
    */
   async processWaves() {
     try {
-      const BookingRequest = require('../models/BookingRequest');
-
-      // --- REFRESH SETTINGS ---
       try {
-        const globalSettings = await Settings.findOne({ type: 'global' }).lean();
+        const globalSettings = await Settings.findOne({ type: 'global' }).select('maxSearchTime').lean();
         if (globalSettings) {
-          const waveDur = (globalSettings.waveDuration || 60) * 1000;
-          WAVE_CONFIG = {
-            1: { count: 3, duration: waveDur },
-            2: { count: 3, duration: waveDur },
-            3: { count: 4, duration: waveDur },
-            4: { count: Infinity, duration: 0 }
-          };
           MAX_SEARCH_TIME_MS = (globalSettings.maxSearchTime || 5) * 60 * 1000;
         }
       } catch (sErr) {
         console.error('[BookingScheduler] Settings fetch error:', sErr);
       }
 
-      // --- CIRCUIT BREAKER: Fast query to detect if any work is needed ---
       const activeBookings = await Booking.find(
         {
           status: BOOKING_STATUS.SEARCHING,
+          dispatchState: { $in: ['DISPATCHED', null] },
           waveStartedAt: { $ne: null },
           potentialVendors: { $exists: true, $not: { $size: 0 } }
         },
-        '_id currentWave waveStartedAt potentialVendors notifiedVendors bookingNumber createdAt userId expiresAt paymentStatus paymentMethod'
+        '_id waveStartedAt potentialVendors notifiedVendors bookingNumber createdAt userId expiresAt dispatchState'
       ).lean();
 
       if (activeBookings.length === 0) {
@@ -125,12 +94,9 @@ class BookingScheduler {
 
       const now = Date.now();
 
-      // --- PARALLEL PROCESSING: All ready bookings processed simultaneously ---
       await Promise.all(
         activeBookings.map(async (booking) => {
           try {
-            const currentWave = booking.currentWave || 1;
-            const waveConfig = WAVE_CONFIG[currentWave] || WAVE_CONFIG[4];
             const startTime = new Date(booking.waveStartedAt || booking.createdAt).getTime();
             const totalElapsed = now - startTime;
 
@@ -144,12 +110,22 @@ class BookingScheduler {
             if (totalElapsed > MAX_SEARCH_TIME_MS) {
               console.log(`[BookingScheduler] ${booking.bookingNumber}: Search timed out. Cancelling.`);
 
-              await Booking.findByIdAndUpdate(booking._id, {
-                $set: {
-                  status: BOOKING_STATUS.NO_VENDORS,
-                  cancellationReason: 'No vendor accepted within time limit'
-                }
-              });
+              const expiredBooking = await Booking.findOneAndUpdate(
+                {
+                  _id: booking._id,
+                  status: BOOKING_STATUS.SEARCHING,
+                  vendorId: null
+                },
+                {
+                  $set: {
+                    status: BOOKING_STATUS.NO_VENDORS,
+                    cancellationReason: 'No vendor accepted within time limit'
+                  }
+                },
+                { new: true }
+              ).lean();
+
+              if (!expiredBooking) return;
 
               // Notify User
               if (this.io) {
@@ -160,7 +136,7 @@ class BookingScheduler {
               }
 
               // Remove from all notified vendors
-              if (booking.notifiedVendors && booking.notifiedVendors.length > 0) {
+              if (this.io && booking.notifiedVendors && booking.notifiedVendors.length > 0) {
                 booking.notifiedVendors.forEach(vId => {
                   this.io.to(`vendor_${vId}`).emit('removeVendorBooking', { id: booking._id });
                 });
@@ -169,68 +145,8 @@ class BookingScheduler {
               return;
             }
 
-            const waveElapsed = now - new Date(booking.waveStartedAt).getTime();
-            // Only process if this booking's wave timer has expired
-            if (waveConfig.duration === 0 || waveElapsed < waveConfig.duration) return;
-
-            const nextWave = currentWave + 1;
-            const { start, end } = getVendorRange(nextWave);
-
-            // Get vendors to notify in this wave
-            let vendorsToNotify = booking.potentialVendors.slice(
-              start,
-              end === Infinity ? undefined : end
-            );
-
-            if (vendorsToNotify.length === 0) {
-              console.log(`[BookingScheduler] Booking ${booking.bookingNumber}: No vendors left in Wave ${nextWave}`);
-              return;
-            }
-
-            // Filter to only online+available vendors (single batch find for this booking)
-            const vendorIds = vendorsToNotify.map(v => v.vendorId);
-            const onlineVendors = await Vendor.find(
-              { _id: { $in: vendorIds }, isOnline: true, availability: { $in: ['AVAILABLE', 'BUSY'] } },
-              '_id'
-            ).lean();
-
-            const onlineSet = new Set(onlineVendors.map(v => v._id.toString()));
-            vendorsToNotify = vendorsToNotify.filter(v => onlineSet.has(v.vendorId.toString()));
-
-            // Advance wave in DB — use findByIdAndUpdate for atomicity (avoids race with accept)
-            const notifyIds = vendorsToNotify.map(v => v.vendorId);
-            await Booking.findByIdAndUpdate(booking._id, {
-              $set: { currentWave: nextWave, waveStartedAt: new Date() },
-              $addToSet: { notifiedVendors: { $each: notifyIds } }
-            });
-
-            if (vendorsToNotify.length === 0) {
-              console.log(`[BookingScheduler] Booking ${booking.bookingNumber}: Wave ${nextWave} all offline, advancing quietly`);
-              return;
-            }
-
-            console.log(`[BookingScheduler] ${booking.bookingNumber}: Wave ${nextWave} → notifying ${vendorsToNotify.length} vendors`);
-
-            // Insert BookingRequest records + send notifications (both in parallel)
-            const bookingRequests = vendorsToNotify.map(v => ({
-              bookingId: booking._id,
-              vendorId: v.vendorId,
-              status: 'PENDING',
-              createdAt: booking.createdAt || new Date(),
-              distance: v.distance || null,
-              sentAt: new Date(),
-              expiresAt: new Date(Date.now() + 60 * 60 * 1000)
-            }));
-
-            await Promise.all([
-              BookingRequest.insertMany(bookingRequests, { ordered: false }).catch(err => {
-                if (err.code !== 11000) console.error('[BookingScheduler] BookingRequest insert error:', err);
-              }),
-              this.notifyVendors(booking, vendorsToNotify)
-            ]);
-
           } catch (bookingErr) {
-            console.error(`[BookingScheduler] Error processing booking ${booking._id}:`, bookingErr);
+            console.error(`[BookingScheduler] Error expiring booking ${booking._id}:`, bookingErr);
           }
         })
       );
@@ -243,22 +159,35 @@ class BookingScheduler {
   }
 
   /**
-   * Release a vendor's acceptance and put the booking back into search if the
-   * customer hasn't paid within the admin-configured window.
-   * @returns {boolean} true if any booking was released, false if idle
+   * Cancel bookings whose online payment was not completed within the
+   * admin-configured window after a vendor accepted them.
+   * @returns {boolean} true if any booking was cancelled, false if idle
    */
   async processPaymentTimeouts() {
     try {
       const globalSettings = await Settings.findOne({ type: 'global' }).select('paymentTimeoutMinutes').lean();
       const timeoutMs = (globalSettings?.paymentTimeoutMinutes || 15) * 60 * 1000;
       const cutoff = new Date(Date.now() - timeoutMs);
+      const acceptedPaymentTimeoutStatuses = [
+        BOOKING_STATUS.ACCEPTED,
+        BOOKING_STATUS.ASSIGNED,
+        BOOKING_STATUS.CONFIRMED
+      ];
 
       const timedOutBookings = await Booking.find({
-        status: BOOKING_STATUS.CONFIRMED,
+        status: { $in: acceptedPaymentTimeoutStatuses },
         vendorId: { $ne: null },
+        paymentMethod: 'online',
         paymentStatus: PAYMENT_STATUS.PENDING,
+        // Fixed NORMAL SLOT bookings have their own createdAt-based timeout
+        // path below. This path handles instant and Duration/Hourly bookings
+        // after a vendor has accepted them.
+        $or: [
+          { bookingType: { $ne: 'scheduled' } },
+          { bookingType: 'scheduled', 'hourlyTracking.isHourly': true }
+        ],
         acceptedAt: { $lte: cutoff }
-      });
+      }).select('_id vendorId userId bookingNumber');
 
       if (timedOutBookings.length === 0) return false;
 
@@ -266,60 +195,173 @@ class BookingScheduler {
         try {
           const releasedVendorId = booking.vendorId;
 
-          booking.vendorId = null;
-          booking.acceptedAt = null;
-          booking.status = BOOKING_STATUS.SEARCHING;
-          await booking.save();
+          // Conditional update prevents a late scheduler tick from cancelling
+          // a booking whose payment was completed in the meantime.
+          const cancelled = await Booking.findOneAndUpdate(
+            {
+              _id: booking._id,
+              status: { $in: acceptedPaymentTimeoutStatuses },
+              vendorId: releasedVendorId,
+              paymentMethod: 'online',
+              paymentStatus: PAYMENT_STATUS.PENDING,
+              acceptedAt: { $lte: cutoff }
+            },
+            {
+              $set: {
+                status: BOOKING_STATUS.CANCELLED,
+                vendorAssignmentStatus: 'FAILED',
+                cancelledAt: new Date(),
+                cancelledBy: 'system',
+                cancellationReason: 'Payment was not completed in time'
+              }
+            },
+            { new: true }
+          ).lean();
 
-          // Release the vendor so they're available for new bookings again
+          if (!cancelled) return;
+
+          try {
+            await cancelCouponUsage(cancelled._id);
+          } catch (couponRestoreErr) {
+            console.error('[BookingScheduler] Error restoring coupon usage:', couponRestoreErr);
+          }
+
+          const BookingRequest = require('../models/BookingRequest');
+          await BookingRequest.deleteMany({ bookingId: cancelled._id });
+
+          // The accepted vendor is free for a new booking after cancellation.
           await Vendor.findByIdAndUpdate(releasedVendorId, { availability: 'AVAILABLE' });
 
           await createNotification({
             vendorId: releasedVendorId,
-            type: 'booking_reassigned',
-            title: 'Booking Reassigned',
-            message: `Booking ${booking.bookingNumber} was reassigned — the customer didn't complete payment in time.`,
-            relatedId: booking._id,
+            type: 'booking_cancelled',
+            title: 'Booking Cancelled',
+            message: 'Booking ' + cancelled.bookingNumber + ' was cancelled because the customer did not complete payment in time.',
+            relatedId: cancelled._id,
             relatedType: 'booking'
           });
 
           await createNotification({
-            userId: booking.userId,
-            type: 'booking_updated',
-            title: 'Still Searching',
-            message: `We're still finding a professional for booking ${booking.bookingNumber}. Please pay promptly once one accepts.`,
-            relatedId: booking._id,
+            userId: cancelled.userId,
+            type: 'booking_cancelled',
+            title: 'Booking Cancelled',
+            message: 'Booking ' + cancelled.bookingNumber + ' was cancelled because payment was not completed in time.',
+            relatedId: cancelled._id,
             relatedType: 'booking'
           });
 
           if (this.io) {
-            this.io.to(`user_${booking.userId}`).emit('booking_updated', {
-              bookingId: booking._id,
-              status: BOOKING_STATUS.SEARCHING,
-              message: 'Vendor released — searching for a new professional'
+            this.io.to('user_' + cancelled.userId).emit('booking_updated', {
+              bookingId: cancelled._id,
+              status: BOOKING_STATUS.CANCELLED,
+              message: 'Booking cancelled - payment not completed in time'
             });
-            this.io.to(`vendor_${releasedVendorId}`).emit('booking_updated', {
-              bookingId: booking._id,
-              status: BOOKING_STATUS.SEARCHING,
-              message: 'Booking reassigned due to pending payment'
+            this.io.to('vendor_' + releasedVendorId).emit('booking_updated', {
+              bookingId: cancelled._id,
+              status: BOOKING_STATUS.CANCELLED,
+              message: 'Booking cancelled because payment was not completed in time'
             });
           }
 
-          console.log(`[BookingScheduler] ${booking.bookingNumber}: Payment timeout — vendor ${releasedVendorId} released, re-searching.`);
-
-          // Re-run dispatch immediately rather than waiting for the next wave tick
-          const { dispatchBookingToVendors } = require('../controllers/bookingControllers/userBookingController');
-          if (typeof dispatchBookingToVendors === 'function') {
-            await dispatchBookingToVendors(booking._id);
-          }
+          console.log('[BookingScheduler] ' + cancelled.bookingNumber + ': Payment timeout - booking cancelled and vendor ' + releasedVendorId + ' released.');
         } catch (err) {
-          console.error(`[BookingScheduler] Error releasing timed-out booking ${booking._id}:`, err);
+          console.error('[BookingScheduler] Error cancelling timed-out booking ' + booking._id + ':', err);
         }
       }));
 
       return true;
     } catch (error) {
       console.error('[BookingScheduler] Error processing payment timeouts:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Cancel SLOT bookings (system-assigned scheduled bookings) whose online
+   * payment was not completed within the admin-configured window, so the
+   * vendor's slot becomes bookable again. Bookings a vendor accepted manually
+   * are handled by processPaymentTimeouts (they always have acceptedAt set).
+   * @returns {boolean} true if any booking was cancelled
+   */
+  async processSlotPaymentTimeouts() {
+    try {
+      const globalSettings = await Settings.findOne({ type: 'global' }).select('paymentTimeoutMinutes').lean();
+      const timeoutMs = (globalSettings?.paymentTimeoutMinutes || 15) * 60 * 1000;
+      const cutoff = new Date(Date.now() - timeoutMs);
+
+      const unpaid = await Booking.find({
+        bookingType: 'scheduled',
+        status: { $in: [BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.CONFIRMED] },
+        vendorId: { $ne: null },
+        acceptedAt: null,
+        paymentMethod: 'online',
+        paymentStatus: PAYMENT_STATUS.PENDING,
+        createdAt: { $lte: cutoff }
+      }).select('_id');
+
+      if (unpaid.length === 0) return false;
+
+      await Promise.all(unpaid.map(async ({ _id }) => {
+        try {
+          const hold = await Booking.findById(_id).select('vendorId').lean();
+          const releasedVendorId = hold?.vendorId;
+          // Conditional update: skip if payment landed in the meantime
+          const cancelled = await Booking.findOneAndUpdate(
+            { _id, status: { $in: [BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.CONFIRMED] }, paymentStatus: PAYMENT_STATUS.PENDING },
+            {
+              $set: {
+                status: BOOKING_STATUS.CANCELLED,
+                'slotAssignment.state': 'RELEASED',
+                cancelledAt: new Date(),
+                cancelledBy: 'system',
+                cancellationReason: 'Payment was not completed in time'
+              },
+              $unset: {
+                vendorId: ''
+              },
+            },
+            { new: true }
+          ).lean();
+
+          if (!cancelled) return;
+
+          try {
+            await cancelCouponUsage(cancelled._id);
+          } catch (couponRestoreErr) {
+            console.error('[BookingScheduler] Error restoring coupon usage:', couponRestoreErr);
+          }
+
+          await createNotification({
+            userId: cancelled.userId,
+            type: 'booking_cancelled',
+            title: 'Booking Cancelled',
+            message: `Booking ${cancelled.bookingNumber} was cancelled because payment was not completed in time.`,
+            relatedId: cancelled._id,
+            relatedType: 'booking'
+          });
+
+          if (this.io) {
+            this.io.to(`user_${cancelled.userId}`).emit('booking_updated', {
+              bookingId: cancelled._id,
+              status: BOOKING_STATUS.CANCELLED,
+              message: 'Booking cancelled - payment not completed in time'
+            });
+            if (releasedVendorId) this.io.to(`vendor_${releasedVendorId}`).emit('booking_updated', {
+              bookingId: cancelled._id,
+              status: BOOKING_STATUS.CANCELLED,
+              message: 'An unpaid scheduled booking was released'
+            });
+          }
+
+          console.log(`[BookingScheduler] ${cancelled.bookingNumber}: Slot booking unpaid after timeout — cancelled, slot released.`);
+        } catch (err) {
+          console.error(`[BookingScheduler] Error cancelling unpaid slot booking ${_id}:`, err);
+        }
+      }));
+
+      return true;
+    } catch (error) {
+      console.error('[BookingScheduler] Error processing slot payment timeouts:', error);
       return false;
     }
   }

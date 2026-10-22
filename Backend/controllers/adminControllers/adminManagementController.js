@@ -1,14 +1,41 @@
 const Admin = require('../../models/Admin');
 const { validationResult } = require('express-validator');
+const {
+  ADMIN_ROLES,
+  ADMIN_PERMISSIONS,
+  DEFAULT_SUB_ADMIN_PERMISSIONS
+} = require('../../utils/constants');
+
+const ADMIN_PERMISSION_VALUES = new Set(Object.values(ADMIN_PERMISSIONS));
+const SUPER_ADMIN_ONLY_PERMISSIONS = new Set([
+  ADMIN_PERMISSIONS.SETTINGS,
+  ADMIN_PERMISSIONS.SETTINGS_PROFILE,
+  ADMIN_PERMISSIONS.SETTINGS_SUPPORT,
+  ADMIN_PERMISSIONS.SETTINGS_FINANCIAL,
+  ADMIN_PERMISSIONS.SETTINGS_BILLING,
+  ADMIN_PERMISSIONS.SETTINGS_REFERRAL,
+  ADMIN_PERMISSIONS.SETTINGS_SLOTS,
+  ADMIN_PERMISSIONS.SETTINGS_ZONES,
+  ADMIN_PERMISSIONS.SETTINGS_ADMINS
+]);
+
+const normalizePermissions = (permissions, role) => {
+  if (role === ADMIN_ROLES.SUPER_ADMIN) return [];
+  if (!Array.isArray(permissions)) return [...DEFAULT_SUB_ADMIN_PERMISSIONS];
+  return [...new Set(permissions.filter(permission => (
+    ADMIN_PERMISSION_VALUES.has(permission) && !SUPER_ADMIN_ONLY_PERMISSIONS.has(permission)
+  )))];
+};
 
 /**
  * Get all admins (Super Admin only)
  */
 const getAllAdmins = async (req, res) => {
   try {
-    const admins = await Admin.find()
+    const admins = await Admin.find({ isDeleted: { $ne: true } })
       .select('-password')
       .populate('cityId', 'name')
+      .populate('zoneIds', 'name')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -35,7 +62,8 @@ const createAdmin = async (req, res) => {
       });
     }
 
-    const { name, email, password, role, cityId, cityName } = req.body;
+    const { name, email, password, role, cityId, cityName, permissions } = req.body;
+    const resolvedRole = role || ADMIN_ROLES.SUB_ADMIN;
 
     // Check if admin already exists
     const existingAdmin = await Admin.findOne({ email });
@@ -51,9 +79,11 @@ const createAdmin = async (req, res) => {
       name,
       email,
       password,
-      role: role || 'admin',
+      role: resolvedRole,
+      zoneIds: [],
       cityId: cityId || null,
-      cityName: cityName || ''
+      cityName: cityName || '',
+      permissions: normalizePermissions(permissions, resolvedRole)
     });
 
     res.status(201).json({
@@ -65,11 +95,16 @@ const createAdmin = async (req, res) => {
         email: admin.email,
         role: admin.role,
         cityId: admin.cityId,
-        cityName: admin.cityName
+        cityName: admin.cityName,
+        zoneIds: admin.zoneIds || [],
+        permissions: admin.permissions || []
       }
     });
   } catch (error) {
     console.error('Create admin error:', error);
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ success: false, message: error.message });
+    }
     res.status(500).json({ success: false, message: 'Failed to create admin' });
   }
 };
@@ -106,7 +141,23 @@ const deleteAdmin = async (req, res) => {
       });
     }
 
-    await Admin.findByIdAndDelete(id);
+    // Keep a tombstone instead of physically removing the record. This lets
+    // login/session checks distinguish a deleted profile from a wrong email.
+    admin.isDeleted = true;
+    admin.isActive = false;
+    admin.deletedAt = new Date();
+    admin.deletedBy = req.user.id;
+    await admin.save();
+
+    try {
+      const { getIO } = require('../../sockets');
+      getIO().to(`admin_${admin._id.toString()}`).emit('admin_profile_deleted', {
+        code: 'ADMIN_DELETED',
+        message: 'Your profile was deleted by admin.'
+      });
+    } catch (socketError) {
+      console.warn('Could not send admin deletion event:', socketError.message);
+    }
 
     res.status(200).json({
       success: true,
@@ -126,10 +177,10 @@ const updateAdminRole = async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
 
-    if (!['super_admin', 'admin'].includes(role)) {
+    if (!Object.values(ADMIN_ROLES).includes(role)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid role. Must be super_admin or admin'
+        message: 'Invalid role. Must be super_admin, sub_admin or admin'
       });
     }
 
@@ -141,9 +192,16 @@ const updateAdminRole = async (req, res) => {
       });
     }
 
+    const currentAdmin = await Admin.findById(id).select('_id');
+    if (!currentAdmin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
     const admin = await Admin.findByIdAndUpdate(
       id,
-      { role },
+      {
+        role,
+        permissions: []
+      },
       { new: true }
     ).select('-password');
 
@@ -177,7 +235,7 @@ module.exports = {
   updateAdmin: async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, email, password, role, cityId, cityName } = req.body;
+      const { name, email, password, role, cityId, cityName, permissions } = req.body;
 
       // Find admin
       let admin = await Admin.findById(id);
@@ -200,18 +258,31 @@ module.exports = {
       if (cityId !== undefined) admin.cityId = cityId || null; // Allow clearing city
       if (cityName !== undefined) admin.cityName = cityName || '';
 
-      if (role && ['super_admin', 'admin'].includes(role)) {
+      if (role && Object.values(ADMIN_ROLES).includes(role)) {
         // Prevent self-demotion
         if (id === req.user.id && role !== 'super_admin' && admin.role === 'super_admin') {
           return res.status(400).json({ success: false, message: 'Cannot demote yourself' });
         }
         admin.role = role;
+        admin.permissions = role === ADMIN_ROLES.SUPER_ADMIN
+          ? []
+          : normalizePermissions(permissions, role);
+        admin.zoneIds = [];
+      } else if (Array.isArray(permissions) && admin.role !== ADMIN_ROLES.SUPER_ADMIN) {
+        admin.permissions = normalizePermissions(permissions, admin.role);
+      } else if (admin.role !== ADMIN_ROLES.SUPER_ADMIN && (!Array.isArray(admin.permissions) || admin.permissions.length === 0)) {
+        admin.permissions = [...DEFAULT_SUB_ADMIN_PERMISSIONS];
       }
+
+      // Zone assignment is retained only for backwards-compatible records;
+      // administrator access is global.
+      admin.zoneIds = [];
 
       await admin.save();
 
       // Populate city for response
       await admin.populate('cityId', 'name');
+      await admin.populate('zoneIds', 'name');
 
       res.status(200).json({
         success: true,
@@ -223,6 +294,8 @@ module.exports = {
           role: admin.role,
           cityId: admin.cityId,
           cityName: admin.cityName,
+          zoneIds: admin.zoneIds || [],
+          permissions: admin.permissions || [],
           isActive: admin.isActive
         }
       });
@@ -256,6 +329,20 @@ module.exports = {
 
       admin.isActive = !admin.isActive;
       await admin.save();
+
+      // End every active session immediately when an admin is blocked. The
+      // HTTP middleware still protects the next request as a fallback.
+      if (!admin.isActive) {
+        try {
+          const { getIO } = require('../../sockets');
+          getIO().to(`admin_${admin._id.toString()}`).emit('admin_blocked', {
+            code: 'ADMIN_BLOCKED',
+            message: 'Blocked by admin.'
+          });
+        } catch (socketError) {
+          console.warn('Could not send admin block event:', socketError.message);
+        }
+      }
 
       res.status(200).json({
         success: true,

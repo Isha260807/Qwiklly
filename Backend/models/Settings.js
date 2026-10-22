@@ -52,14 +52,23 @@ const settingsSchema = new mongoose.Schema({
     min: 0,
     max: 100
   },
-  vendorCashLimit: {
+  cancellationPenalty: {
     type: Number,
     default: 0,
     min: 0
   },
-  cancellationPenalty: {
+  referralEnabled: {
+    type: Boolean,
+    default: true
+  },
+  referrerRewardAmount: {
     type: Number,
-    default: 0,
+    default: 100,
+    min: 0
+  },
+  referredRewardAmount: {
+    type: Number,
+    default: 100,
     min: 0
   },
   maxSearchTime: {
@@ -200,7 +209,7 @@ const settingsSchema = new mongoose.Schema({
   slotIntervalMins: {
     type: Number,
     default: 60, // 60 min intervals
-    enum: [30, 45, 60, 90, 120]
+    enum: [15, 30, 45, 60, 90, 120]
   },
   maxDaysInAdvance: {
     type: Number,
@@ -210,7 +219,7 @@ const settingsSchema = new mongoose.Schema({
   },
   leadTimeHours: {
     type: Number,
-    default: 1, // 1 hour minimum notice for same-day
+    default: 0.5, // 30-minute minimum notice for same-day
     min: 0
   },
   slotServiceDurationMins: {
@@ -227,7 +236,9 @@ const settingsSchema = new mongoose.Schema({
     end: { type: String, required: true },
     display: { type: String, required: true },
     isActive: { type: Boolean, default: true }
-  }]
+  }],
+  termsOfService: { type: String, default: '' },
+  privacyPolicy: { type: String, default: '' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Settings', settingsSchema);

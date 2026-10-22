@@ -7,7 +7,8 @@ import { SocketProvider } from './context/SocketContext';
 import { CartProvider } from './context/CartContext';
 import { CityProvider } from './context/CityContext';
 import { initializePushNotifications, setupForegroundNotificationHandler } from './services/pushNotificationService';
-import { LocationPermissionChecker } from './components/common';
+import { LocationPermissionChecker, ScrollToTop } from './components/common';
+import { brand } from './theme';
 
 function App() {
   // Initialize push notifications on app load
@@ -43,6 +44,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <SocketProvider>
         <CityProvider>
           <CartProvider>
@@ -52,6 +54,7 @@ function App() {
               <Toaster
                 position="top-center"
                 reverseOrder={false}
+                containerStyle={{ zIndex: 10000000 }}
                 toastOptions={{
                   duration: 2000, // Global default (reduced from 3000)
                   style: {
@@ -63,13 +66,13 @@ function App() {
                   success: {
                     duration: 1000, // 1 second as requested
                     style: {
-                      background: '#10B981',
+                      background: brand.primary,
                     },
                   },
                   error: {
                     duration: 2000, // Reduced from 4000
                     style: {
-                      background: '#EF4444',
+                      background: brand.error,
                     },
                   },
                 }}

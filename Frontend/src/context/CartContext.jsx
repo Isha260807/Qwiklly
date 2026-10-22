@@ -7,6 +7,19 @@ import { cartService } from '../services/cartService';
  * No polling - cart count updates instantly on add/remove actions
  */
 
+const hasValidUserLocation = () => {
+  if (typeof window === 'undefined') return false;
+
+  const latitude = Number(window.localStorage.getItem('userLat'));
+  const longitude = Number(window.localStorage.getItem('userLng'));
+
+  return Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180;
+};
 const CartContext = createContext(null);
 
 export const CartProvider = ({ children }) => {
@@ -58,6 +71,18 @@ export const CartProvider = ({ children }) => {
 
   // Add item to cart - instant update + server sync
   const addToCart = useCallback(async (itemData) => {
+    if (!hasValidUserLocation()) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('requestLocationPrompt', { detail: { suppressToast: true } }));
+      }
+
+      return {
+        success: false,
+        code: 'LOCATION_REQUIRED',
+        message: 'Please enable or select your location before adding a service.'
+      };
+    }
+
     // Optimistic Update
     const tempId = `temp-${Date.now()}`;
     const tempItem = { ...itemData, _id: tempId, id: tempId };
@@ -68,11 +93,11 @@ export const CartProvider = ({ children }) => {
     try {
       const response = await cartService.addToCart(itemData);
 
-      if (response.success && response.data) {
-        // Replace temp item with real item from server, but preserve local fields (like category) just in case
-        setCartItems(prev => prev.map(item =>
-          item._id === tempId ? { ...item, ...response.data } : item
-        ));
+      if (response.success && Array.isArray(response.data)) {
+        // The API returns the complete cart. Replace the optimistic snapshot so
+        // an existing service is shown once with its updated quantity.
+        setCartItems(response.data);
+        setCartCount(response.data.length);
       } else {
         // Revert on failure (if success false but no throw)
         setCartItems(prev => prev.filter(item => item._id !== tempId));
@@ -83,33 +108,66 @@ export const CartProvider = ({ children }) => {
       // Revert on error
       setCartItems(prev => prev.filter(item => item._id !== tempId));
       setCartCount(prev => Math.max(0, prev - 1));
+
+      const backendError = error.response?.data;
+      if (backendError?.code === 'LOCATION_REQUIRED') {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('requestLocationPrompt', { detail: { suppressToast: true } }));
+        }
+        return backendError;
+      }
+
       throw error;
     }
   }, []);
 
-  // Update item quantity
-  const updateItem = useCallback(async (itemId, serviceCount) => {
-    // Optimistic update
+  // Update fixed quantity or duration-based cart value.
+  const updateItem = useCallback(async (itemId, serviceCount, durationMinutes = null) => {
     setCartItems(prev =>
       prev.map(item => {
-        if (item._id === itemId || item.id === itemId) {
-          const unitPrice = item.unitPrice || (item.serviceCount ? item.price / item.serviceCount : item.price);
-          return {
-            ...item,
-            serviceCount,
-            price: unitPrice * serviceCount
-          };
-        }
-        return item;
+        if (item._id !== itemId && item.id !== itemId) return item;
+
+        const isDurationBased = item.pricingType === 'DURATION' || item.pricingType === 'HOURLY';
+        const billingUnitMinutes = Number(item.billingUnitMinutes || 30);
+        const unitPrice = Number(
+          item.pricePerUnit ??
+          item.unitPrice ??
+          (isDurationBased
+            ? item.price / Math.max(1, Number(item.durationMinutes || billingUnitMinutes) / billingUnitMinutes)
+            : item.price / Math.max(1, item.serviceCount || 1))
+        );
+        const nextDurationMinutes = isDurationBased
+          ? Number(durationMinutes || item.durationMinutes || billingUnitMinutes)
+          : item.durationMinutes;
+        const nextServiceCount = isDurationBased ? 1 : Number(serviceCount || 1);
+        const nextPrice = isDurationBased
+          ? (nextDurationMinutes / billingUnitMinutes) * unitPrice
+          : unitPrice * nextServiceCount;
+
+        return {
+          ...item,
+          serviceCount: nextServiceCount,
+          quantity: nextServiceCount,
+          durationMinutes: nextDurationMinutes,
+          hours: isDurationBased ? nextDurationMinutes / 60 : item.hours,
+          price: nextPrice
+        };
       })
     );
 
     try {
-      const response = await cartService.updateItem(itemId, serviceCount);
-      if (response.success && response.data) {
-        // Replace with server data to ensure correctness
+      const response = await cartService.updateItem(itemId, serviceCount, durationMinutes ?? undefined);
+      if (response.success && Array.isArray(response.data)) {
+        setCartItems(response.data);
+        setCartCount(response.data.length);
+      } else if (response.success && response.data) {
         setCartItems(prev =>
-          prev.map(item => item._id === itemId ? response.data : item)
+          prev.map(item => {
+            if (item._id === itemId || item.id === itemId) {
+              return { ...item, ...response.data, _id: item._id || item.id };
+            }
+            return item;
+          })
         );
       } else {
         fetchCart();
@@ -120,7 +178,6 @@ export const CartProvider = ({ children }) => {
       throw error;
     }
   }, [fetchCart]);
-
   // Remove item from cart - instant update
   const removeItem = useCallback(async (itemId) => {
     // Optimistic update

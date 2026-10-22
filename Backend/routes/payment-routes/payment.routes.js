@@ -5,6 +5,7 @@ const { authenticate } = require('../../middleware/authMiddleware');
 const { isUser } = require('../../middleware/roleMiddleware');
 const {
   createPaymentOrder,
+  getPaymentBreakdown,
   verifyPaymentWebhook,
   handleRazorpayWebhook,
   processWalletPayment,
@@ -17,7 +18,8 @@ const {
 
 // Validation rules
 const createOrderValidation = [
-  body('bookingId').isMongoId().withMessage('Valid booking ID is required')
+  body('bookingId').isMongoId().withMessage('Valid booking ID is required'),
+  body('useWallet').optional().isBoolean().withMessage('useWallet must be a boolean')
 ];
 
 const verifyPaymentValidation = [
@@ -36,6 +38,7 @@ const refundValidation = [
 ];
 
 // Routes
+router.post('/breakdown', authenticate, isUser, createOrderValidation, getPaymentBreakdown);
 router.post('/create-order', authenticate, isUser, createOrderValidation, createPaymentOrder);
 router.post('/verify', authenticate, isUser, verifyPaymentValidation, verifyPaymentWebhook);
 // Razorpay calls this directly (server-to-server) — signature verification is the auth, no user session exists.

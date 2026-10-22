@@ -5,7 +5,8 @@
     "route": "/admin/dashboard",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": []
   },
@@ -15,7 +16,8 @@
     "route": "/admin/users",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "All Users",
@@ -29,42 +31,15 @@
     "route": "/admin/vendors",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "All Vendors",
+      "Daily Attendance",
       "Vendor Bookings",
       "Vendor Analytics"
     ]
-  },
-  {
-    "section": "VENDOR MANAGEMENT",
-    "title": "Vendor Services",
-    "route": "/admin/user-categories/vendor-services",
-    "allowedRoles": [
-      "super_admin",
-      "admin"
-    ],
-    "children": []
-  },
-  {
-    "section": "VENDOR MANAGEMENT",
-    "title": "Vendor Parts",
-    "route": "/admin/user-categories/vendor-parts",
-    "allowedRoles": [
-      "super_admin",
-      "admin"
-    ],
-    "children": []
-  },
-  {
-    "section": "VENDOR MANAGEMENT",
-    "title": "Plans",
-    "route": "/admin/plans",
-    "allowedRoles": [
-      "super_admin"
-    ],
-    "children": []
   },
   {
     "section": "OPERATIONS & CATALOG",
@@ -72,7 +47,8 @@
     "route": "/admin/bookings",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "All Bookings",
@@ -86,29 +62,24 @@
     "route": "/admin/user-categories",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "Manage Services",
-      "Page Builder"
+      "Page Builder",
+      "Home Content",
+      "Banners"
     ]
-  },
-  {
-    "section": "OPERATIONS & CATALOG",
-    "title": "Banners",
-    "route": "/admin/banners",
-    "allowedRoles": [
-      "super_admin",
-      "admin"
-    ],
-    "children": []
   },
   {
     "section": "OPERATIONS & CATALOG",
     "title": "Reviews",
     "route": "/admin/reviews",
     "allowedRoles": [
-      "super_admin"
+      "super_admin",
+      "admin",
+      "sub_admin"
     ],
     "children": []
   },
@@ -118,7 +89,41 @@
     "route": "/admin/coupons",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
+    ],
+    "children": []
+  },
+  {
+    "section": "PAGES & SOCIAL MEDIA",
+    "title": "Terms & Conditions",
+    "route": "/admin/settings/legal/terms",
+    "allowedRoles": [
+      "super_admin",
+      "admin",
+      "sub_admin"
+    ],
+    "children": []
+  },
+  {
+    "section": "PAGES & SOCIAL MEDIA",
+    "title": "Privacy Policy",
+    "route": "/admin/settings/legal/privacy",
+    "allowedRoles": [
+      "super_admin",
+      "admin",
+      "sub_admin"
+    ],
+    "children": []
+  },
+  {
+    "section": "ZONE MANAGEMENT",
+    "title": "Zone Management",
+    "route": "/admin/zones",
+    "allowedRoles": [
+      "super_admin",
+      "admin",
+      "sub_admin"
     ],
     "children": []
   },
@@ -127,7 +132,9 @@
     "title": "Payments",
     "route": "/admin/payments",
     "allowedRoles": [
-      "super_admin"
+      "super_admin",
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "Payment Overview",
@@ -142,12 +149,12 @@
     "title": "Settlements",
     "route": "/admin/settlements",
     "allowedRoles": [
-      "super_admin"
+      "super_admin",
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "Pending",
-      "Withdrawals",
-      "Vendors with Due",
       "History"
     ]
   },
@@ -156,7 +163,9 @@
     "title": "Reports",
     "route": "/admin/reports",
     "allowedRoles": [
-      "super_admin"
+      "super_admin",
+      "admin",
+      "sub_admin"
     ],
     "children": [
       "Revenue Report",
@@ -165,12 +174,27 @@
     ]
   },
   {
+    "section": "SUPPORT & ALERTS",
+    "title": "Support & SOS",
+    "route": "/admin/support",
+    "allowedRoles": [
+      "super_admin",
+      "admin",
+      "sub_admin"
+    ],
+    "children": [
+      "SOS Requests",
+      "Support Tickets"
+    ]
+  },
+  {
     "section": "SYSTEM & SETTINGS",
     "title": "Settings",
     "route": "/admin/settings",
     "allowedRoles": [
       "super_admin",
-      "admin"
+      "admin",
+      "sub_admin"
     ],
     "children": []
   }

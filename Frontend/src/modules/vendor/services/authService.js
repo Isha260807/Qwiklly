@@ -42,13 +42,14 @@ export const verifyLogin = async (data) => {
   try {
     const response = await api.post('/vendors/auth/verify-login', data);
 
-    // Check if vendor is pending approval
-    const isPending = response.data.vendor?.adminApproval?.toLowerCase() === 'pending';
-
-    if (response.data.success && !response.data.isNewUser && response.data.accessToken && !isPending) {
+    if (response.data.success && !response.data.isNewUser && response.data.accessToken) {
       localStorage.setItem('vendorAccessToken', response.data.accessToken);
       localStorage.setItem('vendorRefreshToken', response.data.refreshToken);
       localStorage.setItem('vendorData', JSON.stringify(response.data.vendor));
+      window.dispatchEvent(new Event('vendor_session_authenticated'));
+      const loginIsOnline = response.data.vendor?.isOnline === true;
+      localStorage.setItem('vendorIsOnline', String(loginIsOnline));
+      window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: loginIsOnline } }));
 
       // Notify Flutter about the login for mobile app FCM token handling
       notifyFlutterLogin(response.data);
@@ -80,6 +81,10 @@ export const login = async (credentials) => {
       localStorage.setItem('vendorAccessToken', response.data.accessToken);
       localStorage.setItem('vendorRefreshToken', response.data.refreshToken);
       localStorage.setItem('vendorData', JSON.stringify(response.data.vendor));
+      window.dispatchEvent(new Event('vendor_session_authenticated'));
+      const loginIsOnline = response.data.vendor?.isOnline === true;
+      localStorage.setItem('vendorIsOnline', String(loginIsOnline));
+      window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: loginIsOnline } }));
     }
 
     return response.data;
@@ -97,10 +102,12 @@ export const logout = async () => {
   try {
     const response = await api.post('/vendors/auth/logout');
 
-    // Clear tokens
+    // Clear tokens and set offline
     localStorage.removeItem('vendorAccessToken');
     localStorage.removeItem('vendorRefreshToken');
     localStorage.removeItem('vendorData');
+    localStorage.setItem('vendorIsOnline', 'false');
+    window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: false } }));
 
     return response.data;
   } catch (error) {
@@ -109,6 +116,8 @@ export const logout = async () => {
     localStorage.removeItem('vendorAccessToken');
     localStorage.removeItem('vendorRefreshToken');
     localStorage.removeItem('vendorData');
+    localStorage.setItem('vendorIsOnline', 'false');
+    window.dispatchEvent(new CustomEvent('vendorOnlineStatusChanged', { detail: { isOnline: false } }));
     throw error;
   }
 };
@@ -131,25 +140,42 @@ export const register = async (vendorData) => {
 };
 
 /**
+ * Get current vendor profile from API
+ * @returns {Promise<Object>} Vendor profile response
+ */
+export const getProfile = async () => {
+  try {
+    const response = await api.get('/vendors/profile');
+    if (response.data?.success && response.data.vendor) {
+      localStorage.setItem('vendorData', JSON.stringify(response.data.vendor));
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching vendor profile:', error);
+    throw error;
+  }
+};
+
+/**
  * Get current vendor profile
  * @returns {Promise<Object>} Vendor profile
  */
 export const getCurrentVendor = async () => {
   try {
-    // TODO: Replace with actual API call
-    // const response = await fetch(`${API_BASE_URL}/auth/me`, {
-    //   headers: {
-    //     'Authorization': `Bearer ${localStorage.getItem('vendorToken')}`,
-    //   },
-    // });
-    // return await response.json();
-
-    // Mock implementation
-    const profile = JSON.parse(localStorage.getItem('vendorProfile') || '{}');
+    const token = localStorage.getItem('vendorAccessToken') || sessionStorage.getItem('vendorAccessToken');
+    if (token) {
+      try {
+        const res = await getProfile();
+        if (res?.vendor) return res.vendor;
+      } catch (e) {
+        // Fallback to local
+      }
+    }
+    const profile = JSON.parse(localStorage.getItem('vendorData') || localStorage.getItem('vendorProfile') || '{}');
     return profile;
   } catch (error) {
-    console.error('Error fetching current vendor:', error);
-    throw error;
+    console.error('Error getting current vendor:', error);
+    return JSON.parse(localStorage.getItem('vendorData') || '{}');
   }
 };
 

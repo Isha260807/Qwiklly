@@ -1,7 +1,6 @@
 const Banner = require('../../models/Banner');
 const Category = require('../../models/Category');
 const Service = require('../../models/UserService');
-const City = require('../../models/City');
 
 /**
  * Get all banners with filtering and pagination
@@ -15,7 +14,7 @@ const getAllBanners = async (req, res) => {
       search = '',
       bannerType = '',
       position = '',
-      cityId = '',
+      zoneId = '',
       isActive = '',
       sortBy = 'order',
       sortOrder = 'asc'
@@ -43,11 +42,11 @@ const getAllBanners = async (req, res) => {
       query.isActive = isActive === 'true' || isActive === true;
     }
 
-    if (cityId && cityId !== 'all') {
-      if (cityId === 'null' || cityId === 'all_cities') {
-        query.cityId = null;
+    if (zoneId && zoneId !== 'all') {
+      if (zoneId === 'null' || zoneId === 'all_zones') {
+        query.zoneIds = { $size: 0 };
       } else {
-        query.cityId = cityId;
+        query.zoneIds = zoneId;
       }
     }
 
@@ -61,7 +60,7 @@ const getAllBanners = async (req, res) => {
     const total = await Banner.countDocuments(query);
 
     const banners = await Banner.find(query)
-      .populate('cityId', 'name state')
+      .populate('zoneIds', 'name')
       .populate('targetCategoryId', 'title slug homeIconUrl')
       .populate('targetServiceId', 'title slug iconUrl basePrice')
       .sort(sortOption)
@@ -132,7 +131,7 @@ const getBannerById = async (req, res) => {
   try {
     const { id } = req.params;
     const banner = await Banner.findById(id)
-      .populate('cityId', 'name state')
+      .populate('zoneIds', 'name')
       .populate('targetCategoryId', 'title slug')
       .populate('targetServiceId', 'title slug');
 
@@ -169,7 +168,7 @@ const createBanner = async (req, res) => {
       imageUrl,
       bannerType = 'hero',
       position = 'top',
-      cityId = null,
+      zoneIds = [],
       targetType = 'none',
       targetCategoryId = null,
       targetServiceId = null,
@@ -197,7 +196,7 @@ const createBanner = async (req, res) => {
       imageUrl: imageUrl.trim(),
       bannerType,
       position,
-      cityId: cityId && cityId !== 'all' && cityId !== 'null' ? cityId : null,
+      zoneIds: Array.isArray(zoneIds) ? zoneIds : [],
       targetType,
       targetCategoryId: targetType === 'category' && targetCategoryId ? targetCategoryId : null,
       targetServiceId: targetType === 'service' && targetServiceId ? targetServiceId : null,
@@ -214,7 +213,7 @@ const createBanner = async (req, res) => {
     const newBanner = await Banner.create(bannerData);
 
     const populatedBanner = await Banner.findById(newBanner._id)
-      .populate('cityId', 'name state')
+      .populate('zoneIds', 'name')
       .populate('targetCategoryId', 'title slug homeIconUrl')
       .populate('targetServiceId', 'title slug iconUrl');
 
@@ -246,7 +245,7 @@ const updateBanner = async (req, res) => {
       imageUrl,
       bannerType,
       position,
-      cityId,
+      zoneIds,
       targetType,
       targetCategoryId,
       targetServiceId,
@@ -273,8 +272,8 @@ const updateBanner = async (req, res) => {
     if (imageUrl !== undefined) banner.imageUrl = imageUrl.trim();
     if (bannerType !== undefined) banner.bannerType = bannerType;
     if (position !== undefined) banner.position = position;
-    if (cityId !== undefined) {
-      banner.cityId = cityId && cityId !== 'all' && cityId !== 'null' ? cityId : null;
+    if (zoneIds !== undefined) {
+      banner.zoneIds = Array.isArray(zoneIds) ? zoneIds : [];
     }
     if (targetType !== undefined) {
       banner.targetType = targetType;
@@ -312,7 +311,7 @@ const updateBanner = async (req, res) => {
     await banner.save();
 
     const updatedBanner = await Banner.findById(id)
-      .populate('cityId', 'name state')
+      .populate('zoneIds', 'name')
       .populate('targetCategoryId', 'title slug homeIconUrl')
       .populate('targetServiceId', 'title slug iconUrl');
 

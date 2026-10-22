@@ -1,4 +1,5 @@
 const Category = require('../../models/Category');
+const Banner = require('../../models/Banner');
 const { validationResult } = require('express-validator');
 const { SERVICE_STATUS } = require('../../utils/constants');
 
@@ -391,6 +392,17 @@ const deleteCategory = async (req, res) => {
     // Soft delete - set status to deleted
     category.status = SERVICE_STATUS.DELETED;
     await category.save();
+
+    // Cascade cleanup on Banners linked to this category
+    await Banner.updateMany(
+      { targetCategoryId: id },
+      {
+        $set: {
+          targetType: 'none',
+          targetCategoryId: null
+        }
+      }
+    ).catch(err => console.error('Banner category cleanup error:', err));
 
     res.status(200).json({
       success: true,

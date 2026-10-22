@@ -69,7 +69,7 @@ async function requestNotificationPermission() {
  * Get FCM token from Firebase
  * @returns {Promise<string|null>}
  */
-async function getFCMToken() {
+async function getFCMToken(retryCount = 0) {
   try {
     if (!messaging) {
       console.error('Firebase messaging not initialized');
@@ -77,7 +77,11 @@ async function getFCMToken() {
     }
 
     const registration = await registerServiceWorker();
-    await registration.update(); // Update service worker
+    try {
+      await registration.update(); // Update service worker
+    } catch (swErr) {
+      // Non-critical if SW update fails
+    }
 
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
@@ -92,8 +96,23 @@ async function getFCMToken() {
       return null;
     }
   } catch (error) {
+    // If IndexedDB version mismatch occurs (e.g. VersionError: The requested version (1) is less than the existing version (2))
+    if (retryCount === 0 && (error?.name === 'VersionError' || (error?.message && error.message.includes('VersionError')))) {
+      console.warn('⚠️ IndexedDB VersionError encountered in FCM. Resetting Firebase IndexedDB databases and retrying...');
+      try {
+        if (typeof window !== 'undefined' && window.indexedDB) {
+          window.indexedDB.deleteDatabase('firebase-messaging-database');
+          window.indexedDB.deleteDatabase('firebase-installations-database');
+          window.indexedDB.deleteDatabase('fcm_token_details_db');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return await getFCMToken(1);
+      } catch (dbErr) {
+        console.error('Failed to reset Firebase IndexedDB:', dbErr);
+      }
+    }
     console.error('❌ Error getting FCM token:', error);
-    throw error;
+    return null;
   }
 }
 
@@ -159,6 +178,11 @@ async function registerFCMToken(userType = 'user', forceUpdate = false) {
     if (!authToken) {
       console.log(`[FCM] ❌ No auth token found for ${userType} (${authTokenKey}), skipping registration`);
       return null;
+    }
+
+    // Check if token is already registered in localStorage
+    if (savedToken === token && !forceUpdate) {
+      return token;
     }
 
     // Save to backend
@@ -402,7 +426,7 @@ async function testPushNotification(userType = 'user') {
         const reg = await navigator.serviceWorker.ready;
         if (reg && reg.showNotification) {
           await reg.showNotification('🔔 Test Notification', {
-            body: 'This is a test notification from Quiklly! Push notifications are working properly.',
+            body: 'This is a test notification from Qwiklly! Push notifications are working properly.',
             icon: '/Homster-logo.png',
             badge: '/Homster-logo.png',
             tag: `test-push-${Date.now()}`

@@ -30,19 +30,7 @@ const seedAdmin = async () => {
       password: 'admin123', // Plain text, let model pre-save hook hash it
       role: 'super_admin',
       isActive: true,
-      permissions: {
-        users: { read: true, write: true, delete: true },
-        vendors: { read: true, write: true, delete: true },
-        workers: { read: true, write: true, delete: true },
-        bookings: { read: true, write: true, delete: true },
-        payments: { read: true, write: true, delete: true },
-        categories: { read: true, write: true, delete: true },
-        services: { read: true, write: true, delete: true },
-        homeContent: { read: true, write: true, delete: true },
-        notifications: { read: true, write: true, delete: true },
-        reports: { read: true, write: true, delete: true },
-        settings: { read: true, write: true, delete: true }
-      }
+      permissions: []
     };
 
     const admin = await Admin.create(adminData);

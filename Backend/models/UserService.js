@@ -48,14 +48,65 @@ const userServiceSchema = new mongoose.Schema({
     default: null
   },
   // ==========================================
-  // Hourly Booking Configuration
+  // Pricing Configuration (FIXED | DURATION)
   // ==========================================
   pricingType: {
     type: String,
-    enum: ['FIXED', 'HOURLY'],
+    enum: ['FIXED', 'DURATION', 'HOURLY'],
     default: 'FIXED',
     index: true
   },
+  fixedPrice: {
+    type: Number,
+    default: null,
+    min: [0, 'Fixed price cannot be negative']
+  },
+  estimatedDurationMinutes: {
+    type: Number,
+    default: null,
+    min: 1
+  },
+  // Duration-based pricing. `pricePer30Minutes` remains for backwards
+  // compatibility with older services; new services use the generic
+  // billing-unit fields below.
+  pricePerUnit: {
+    type: Number,
+    default: null,
+    min: [0, 'Price per billing unit cannot be negative']
+  },
+  billingUnitMinutes: {
+    type: Number,
+    default: 30,
+    min: [1, 'Billing unit must be at least 1 minute']
+  },
+  pricePer30Minutes: {
+    type: Number,
+    default: null,
+    min: [0, 'Price per 30 minutes cannot be negative']
+  },
+  minDurationMinutes: {
+    type: Number,
+    default: 30,
+    min: 1
+  },
+  maxDurationMinutes: {
+    type: Number,
+    default: 180,
+    min: 1
+  },
+  durationStepMinutes: {
+    type: Number,
+    default: 30
+  },
+  durationPricing: {
+    pricePerUnit: { type: Number, default: null },
+    billingUnitMinutes: { type: Number, default: 30 },
+    pricePer30Minutes: { type: Number, default: null },
+    minDurationMinutes: { type: Number, default: 30 },
+    maxDurationMinutes: { type: Number, default: 180 },
+    durationStepMinutes: { type: Number, default: 30 }
+  },
+  // Backward compatibility fields
   hourlyRate: {
     type: Number,
     default: null,
@@ -63,13 +114,13 @@ const userServiceSchema = new mongoose.Schema({
   },
   minHours: {
     type: Number,
-    default: 1,
-    min: 1
+    default: 0.5,
+    min: 0
   },
   maxHours: {
     type: Number,
     default: 8,
-    min: 1
+    min: 0
   },
   allowCustomHours: {
     type: Boolean,
@@ -88,6 +139,15 @@ const userServiceSchema = new mongoose.Schema({
     default: 18,
     min: 0
   },
+  // Optional rating override configured by an admin. When empty, public
+  // catalog responses use the average of active customer reviews.
+  adminRating: {
+    type: Number,
+    default: null,
+    min: 1,
+    max: 5
+  },
+  // Legacy fields kept for older records and clients.
   rating: {
     type: Number,
     default: 4.9,
@@ -150,6 +210,23 @@ const userServiceSchema = new mongoose.Schema({
     question: { type: String, trim: true },
     answer: { type: String, trim: true }
   }],
+  // Services shown as curated recommendations after this service is booked.
+  frequentlyAddedTogether: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'UserService'
+  }],
+  // Optional zone-specific overrides for the global recommendations above.
+  frequentlyAddedTogetherByZone: [{
+    zoneId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Zone',
+      required: true
+    },
+    serviceIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'UserService'
+    }]
+  }],
   cityIds: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'City',
@@ -159,6 +236,21 @@ const userServiceSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'City',
     index: true
+  },
+  // If empty, service is available in every active zone. If non-empty, the
+  // resolved booking zone MUST be in this list or booking fails with
+  // SERVICE_NOT_AVAILABLE_IN_ZONE.
+  zoneIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Zone',
+    index: true
+  }],
+  // Per-service override of the global vendor-matching radius (km).
+  // Falls back to Settings.searchRadius when not set.
+  serviceRadiusKm: {
+    type: Number,
+    default: null,
+    min: 1
   },
   displayOrder: {
     type: Number,

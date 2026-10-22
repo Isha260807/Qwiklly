@@ -1,20 +1,23 @@
-import React, { useState, useEffect, useLayoutEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
+import flutterBridge from '../../../../utils/flutterBridge';
 import { themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
-import BottomNav from '../../components/layout/BottomNav';
 import SearchBar from './components/SearchBar';
 import ServiceCategories from './components/ServiceCategories';
 import { publicCatalogService } from '../../../../services/catalogService';
+import { zoneService } from '../../../../services/zoneService';
 import { useCart } from '../../../../context/CartContext';
 import { useCity } from '../../../../context/CityContext';
 import { toast } from 'react-hot-toast';
-import { registerFCMToken } from '../../../../services/pushNotificationService';
 import { motion } from 'framer-motion';
+import { FiMapPin, FiBell, FiShoppingCart, FiChevronUp, FiMinus, FiPlus, FiX } from 'react-icons/fi';
 
 import PromoCarousel from './components/PromoCarousel';
 import TopHeroBanner from './components/TopHeroBanner';
 import ServicesWeOffer from './components/ServicesWeOffer';
+import TrustFooterSection from './components/TrustFooterSection';
 import DirectServiceDetailModal from './components/DirectServiceDetailModal';
 // Lazy load OTHER heavy components
 const NewAndNoteworthy = lazy(() => import('./components/NewAndNoteworthy'));
@@ -27,6 +30,11 @@ import CategoryModal from './components/CategoryModal';
 import SearchOverlay from './components/SearchOverlay';
 import LogoLoader from '../../../../components/common/LogoLoader';
 import AddressSelectionModal from '../Checkout/components/AddressSelectionModal';
+import { useJsApiLoader } from '@react-google-maps/api';
+
+const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+let autoLocationAttemptedInApp = false;
 
 
 
@@ -36,6 +44,111 @@ const toAssetUrl = (url) => {
   if (clean.startsWith('http')) return clean;
   const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/api$/, '');
   return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
+};
+
+const markAreaAvailability = (items, zoneStatus) => (items || []).map(service => {
+  let isAvailableInArea = true;
+
+  if (zoneStatus) {
+    if (!zoneStatus.inZone) {
+      isAvailableInArea = false;
+    } else if (Array.isArray(service.zoneIds) && service.zoneIds.length > 0) {
+      isAvailableInArea = Boolean(zoneStatus.zoneId) && service.zoneIds.some(zoneId => (
+        String(zoneId) === String(zoneStatus.zoneId)
+      ));
+    }
+  }
+
+  return { ...service, isAvailableInArea };
+});
+
+const reverseGeocodeCoords = async (lat, lng, availableCities = []) => {
+  // Check if we can find a matching city by coordinate distance directly as instant fallback
+  let nearestCity = null;
+  if (Array.isArray(availableCities) && availableCities.length > 0) {
+    let minDist = Infinity;
+    availableCities.forEach(c => {
+      const cLat = c.location?.coordinates?.[1] || c.lat;
+      const cLng = c.location?.coordinates?.[0] || c.lng;
+      if (typeof cLat === 'number' && typeof cLng === 'number') {
+        const d = Math.hypot(cLat - lat, cLng - lng);
+        if (d < minDist && d < 0.8) { // within ~80km
+          minDist = d;
+          nearestCity = c.name;
+        }
+      }
+    });
+  }
+
+  try {
+    // 1. Google Maps Geocoder if loaded
+    if (window.google?.maps?.Geocoder) {
+      const geocoder = new window.google.maps.Geocoder();
+      const result = await new Promise((resolve) => {
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === 'OK' && results?.[0]) {
+            resolve(results[0]);
+          } else {
+            resolve(null);
+          }
+        });
+      });
+
+      if (result) {
+        const components = result.address_components || [];
+        const getComponent = (type) => components.find(c => c.types.includes(type))?.long_name || '';
+        const city = getComponent('locality') || getComponent('administrative_area_level_2') || nearestCity || '';
+        const subLocality = getComponent('sublocality') || getComponent('sublocality_level_1') || getComponent('neighborhood') || '';
+        const readable = [subLocality, city].filter(Boolean).join(', ') || result.formatted_address?.split(',').slice(0, 3).join(', ');
+
+        return {
+          address: readable || result.formatted_address,
+          city: city
+        };
+      }
+    }
+
+    // 2. OpenStreetMap Nominatim fallback with timeout
+    const fetchPromise = fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`,
+      { headers: { 'Accept-Language': 'en-US,en;q=0.9' } }
+    ).then(async (res) => {
+      if (!res.ok) return null;
+      const data = await res.json();
+      const addressObj = data.address || {};
+      const detectedCity =
+        addressObj.city ||
+        addressObj.town ||
+        addressObj.village ||
+        addressObj.suburb ||
+        addressObj.state_district ||
+        nearestCity ||
+        '';
+
+      const readableAddress =
+        data.display_name?.split(',').slice(0, 3).join(', ') ||
+        (detectedCity ? `${detectedCity}, India` : `Location (${lat.toFixed(3)}, ${lng.toFixed(3)})`);
+
+      return {
+        address: readableAddress,
+        city: detectedCity
+      };
+    });
+
+    const timeoutPromise = new Promise((resolve) =>
+      setTimeout(() => resolve(null), 2500)
+    );
+
+    const geo = await Promise.race([fetchPromise, timeoutPromise]);
+    if (geo) return geo;
+  } catch (err) {
+    console.warn('Reverse geocoding error:', err);
+  }
+
+  return {
+    address: nearestCity ? `${nearestCity}, India` : `Location (${lat.toFixed(3)}, ${lng.toFixed(3)})`,
+    city: nearestCity || ''
+  };
 };
 
 const Home = () => {
@@ -56,15 +169,33 @@ const Home = () => {
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [houseNumber, setHouseNumber] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isLocationSupported, setIsLocationSupported] = useState(true);
   const [detectedCityName, setDetectedCityName] = useState(() => {
     const saved = localStorage.getItem('currentCity');
     return (saved && !/[\u0900-\u097F]/.test(saved)) ? saved : null;
   });
+  const [userCoords, setUserCoords] = useState(() => {
+    const lat = parseFloat(localStorage.getItem('userLat'));
+    const lng = parseFloat(localStorage.getItem('userLng'));
+    return (!Number.isNaN(lat) && !Number.isNaN(lng)) ? { lat, lng } : null;
+  });
+  // null = not yet checked, { inZone, zoneName, nearestZone } once resolved.
+  // Browsing is never blocked by this - it only drives the informational
+  // "coming soon in this location" banner.
+  const [zoneStatus, setZoneStatus] = useState(null);
+  const [zoneResolved, setZoneResolved] = useState(false);
 
-
-  const { cartCount, addToCart } = useCart();
+  const { cartItems, cartCount, addToCart, updateItem, removeItem } = useCart();
   const { currentCity, cities, selectCity, loading: cityLoading } = useCity();
+  const [isLocating, setIsLocating] = useState(false);
+  const autoLocationAttemptedRef = useRef(false);
+
+  // Initialize Google Maps API for geocoding
+  useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY || '',
+    libraries: GOOGLE_MAPS_LIBRARIES,
+    language: 'en'
+  });
 
   // Clean up legacy storage keys on mount
   useEffect(() => {
@@ -75,6 +206,112 @@ const Home = () => {
       localStorage.removeItem('currentCity');
     }
   }, []);
+
+  const fetchUserLocation = async () => {
+    setIsLocating(true);
+    try {
+      const pos = await flutterBridge.getCurrentLocation({ allowBrowserFallback: false });
+      const lat = pos?.coords?.latitude || pos?.latitude;
+      const lng = pos?.coords?.longitude || pos?.longitude;
+
+      if (!lat || !lng) {
+        throw new Error('Coordinates missing');
+      }
+
+      const geo = await reverseGeocodeCoords(lat, lng, cities);
+      const newAddress = geo?.address || `Location (${lat.toFixed(3)}, ${lng.toFixed(3)})`;
+      const newCity = geo?.city || '';
+
+      setAddress(newAddress);
+      setUserCoords({ lat, lng });
+      localStorage.setItem('currentAddress', newAddress);
+      localStorage.setItem('userLat', String(lat));
+      localStorage.setItem('userLng', String(lng));
+      localStorage.setItem('location_granted', 'true');
+
+      if (newCity) {
+        setDetectedCityName(newCity);
+        localStorage.setItem('currentCity', newCity);
+
+        if (cities && cities.length > 0) {
+          const matched = cities.find(c =>
+            c.name.toLowerCase() === newCity.toLowerCase() ||
+            c.name.toLowerCase().includes(newCity.toLowerCase()) ||
+            newCity.toLowerCase().includes(c.name.toLowerCase())
+          );
+          if (matched) {
+            selectCity(matched);
+          }
+        }
+      }
+      window.dispatchEvent(new CustomEvent('locationUpdate', { detail: { lat, lng, address: newAddress, handledByHome: true } }));
+      toast.success(`Location detected: ${newCity || newAddress}`, { id: 'auto-location-toast' });
+    } catch (err) {
+      // Permission UI is owned by the Flutter host; web stays silent when native GPS is unavailable.
+      console.warn('Native location detection unavailable:', err);
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleNativeLocationUpdate = async (event) => {
+      const detail = event.detail || {};
+      if (detail.handledByHome) return;
+
+      const latitude = Number(detail.lat ?? detail.coords?.latitude ?? detail.latitude);
+      const longitude = Number(detail.lng ?? detail.coords?.longitude ?? detail.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+      setUserCoords({ lat: latitude, lng: longitude });
+      localStorage.setItem('userLat', String(latitude));
+      localStorage.setItem('userLng', String(longitude));
+      localStorage.setItem('location_granted', 'true');
+
+      let resolvedAddress = detail.address || '';
+      let resolvedCity = detail.city || '';
+
+      if (!resolvedAddress || !resolvedCity) {
+        const geo = await reverseGeocodeCoords(latitude, longitude, cities);
+        resolvedAddress = resolvedAddress || geo?.address || '';
+        resolvedCity = resolvedCity || geo?.city || '';
+      }
+
+      if (resolvedAddress) {
+        setAddress(resolvedAddress);
+        localStorage.setItem('currentAddress', resolvedAddress);
+      }
+
+      if (resolvedCity) {
+        setDetectedCityName(resolvedCity);
+        localStorage.setItem('currentCity', resolvedCity);
+
+        const matched = (cities || []).find(city =>
+          city.name.toLowerCase() === resolvedCity.toLowerCase() ||
+          city.name.toLowerCase().includes(resolvedCity.toLowerCase()) ||
+          resolvedCity.toLowerCase().includes(city.name.toLowerCase())
+        );
+        if (matched) selectCity(matched);
+      }
+    };
+
+    window.addEventListener('locationUpdate', handleNativeLocationUpdate);
+    return () => window.removeEventListener('locationUpdate', handleNativeLocationUpdate);
+  }, [cities, selectCity]);
+  // Automatically fetch GPS location if skipped from login or if not yet set
+  useEffect(() => {
+    const isExplicitAutoFetch = Boolean(location.state?.autoFetchLocation);
+    const hasSavedAddress = localStorage.getItem('currentAddress') && localStorage.getItem('currentAddress') !== 'Select Location';
+    const isPermissionGranted = localStorage.getItem('location_granted') === 'true';
+
+    const shouldAutoFetch = isExplicitAutoFetch || !hasSavedAddress || !isPermissionGranted;
+
+    if (autoLocationAttemptedRef.current || autoLocationAttemptedInApp || !shouldAutoFetch) return;
+    autoLocationAttemptedRef.current = true;
+    autoLocationAttemptedInApp = true;
+
+    fetchUserLocation();
+  }, [location.state?.autoFetchLocation, cities, selectCity]);
 
   // Sync detectedCityName with Address on mount/update if not already set
   useEffect(() => {
@@ -98,7 +335,6 @@ const Home = () => {
           setDetectedCityName(cityCandidate);
           localStorage.setItem('currentCity', cityCandidate);
         }
-        setIsLocationSupported(false);
       }
     }
   }, [address, cities, detectedCityName]);
@@ -114,7 +350,6 @@ const Home = () => {
     );
 
     if (matchedCity) {
-      setIsLocationSupported(true);
       const matchedId = matchedCity._id || matchedCity.id;
       const currentId = currentCity?._id || currentCity?.id;
 
@@ -125,11 +360,38 @@ const Home = () => {
           window.location.reload();
         }, 500);
       }
-    } else {
-      setIsLocationSupported(false);
-      if (currentCity) selectCity(null);
     }
+    // No matching City record is no longer treated as "unserviceable" - the
+    // catalog still renders for every location. Zone-based booking
+    // eligibility is enforced server-side at checkout instead (see
+    // serviceabilityService.checkBookingServiceability on the backend).
   }, [detectedCityName, cities, currentCity, cityLoading]);
+
+  // Resolve the actual serviceable zone for the "coming soon" banner. This
+  // is informational only - it never hides or blocks the catalog, it just
+  // lets the user know before they try to book.
+  useEffect(() => {
+    if (!userCoords) {
+      setZoneStatus(null);
+      setZoneResolved(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setZoneResolved(false);
+
+    zoneService.resolve(userCoords.lat, userCoords.lng)
+      .then(res => {
+        if (cancelled) return;
+        if (res?.success) setZoneStatus(res.zoneStatus);
+        setZoneResolved(true);
+      })
+      .catch(() => {
+        if (!cancelled) setZoneResolved(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [userCoords]);
 
 
   const handleAddressSave = (savedHouseNumber, locationObj) => {
@@ -141,6 +403,15 @@ const Home = () => {
     if (fullAddr) {
       setAddress(fullAddr);
       localStorage.setItem('currentAddress', fullAddr);
+      // A manually selected address is already a valid location choice;
+      // don't force GPS detection again when the user returns to Home.
+      localStorage.setItem('location_granted', 'true');
+
+      if (typeof locationObj?.lat === 'number' && typeof locationObj?.lng === 'number') {
+        setUserCoords({ lat: locationObj.lat, lng: locationObj.lng });
+        localStorage.setItem('userLat', String(locationObj.lat));
+        localStorage.setItem('userLng', String(locationObj.lng));
+      }
 
       // Try to parse city from location object (Google Places)
       const components = locationObj?.components || locationObj?.address_components;
@@ -183,96 +454,6 @@ const Home = () => {
     setIsAddressModalOpen(false);
   };
 
-  // Auto-detect location on mount with forced English language
-  useEffect(() => {
-    const autoDetectLocation = async () => {
-      const curStored = localStorage.getItem('currentAddress');
-      const isHindi = curStored && /[\u0900-\u097F]/.test(curStored);
-
-      if (navigator.geolocation) {
-        if (address === 'Select Location' || isHindi) {
-          navigator.geolocation.getCurrentPosition(
-            async (position) => {
-              try {
-                const { latitude, longitude } = position.coords;
-                const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-                const response = await fetch(
-                  `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}&language=en`
-                );
-                const data = await response.json();
-
-                if (data.status === 'OK' && data.results.length > 0) {
-                  const result = data.results[0];
-                  const getComponent = (type) =>
-                    result.address_components?.find(c => c.types.includes(type))?.long_name || '';
-
-                  const area = getComponent('sublocality_level_1') || getComponent('neighborhood') || getComponent('locality');
-                  const city = getComponent('locality') || getComponent('administrative_area_level_2');
-                  const state = getComponent('administrative_area_level_1');
-
-                  let formattedAddress = [area, city, state].filter(Boolean).join(', ');
-                  if (!formattedAddress || /[\u0900-\u097F]/.test(formattedAddress)) {
-                    formattedAddress = result.formatted_address || `${city || 'Indore'}, Madhya Pradesh`;
-                  }
-
-                  setAddress(formattedAddress);
-                  localStorage.setItem('currentAddress', formattedAddress);
-
-                  if (city) {
-                    setDetectedCityName(city);
-                    localStorage.setItem('currentCity', city);
-
-                    // Immediate update of selected city if supported
-                    if (cities && cities.length > 0) {
-                      const matchedCity = cities.find(c =>
-                        c.name.toLowerCase() === city.toLowerCase() ||
-                        c.name.toLowerCase().includes(city.toLowerCase()) ||
-                        city.toLowerCase().includes(c.name.toLowerCase())
-                      );
-                      if (matchedCity) {
-                        selectCity(matchedCity);
-                      } else {
-                        selectCity(null);
-                      }
-                    }
-                  }
-                }
-              } catch (error) {
-                // Fallback to nominatim with en language
-                try {
-                  const nomRes = await fetch(
-                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}&zoom=18&addressdetails=1&accept-language=en`,
-                    { headers: { 'Accept-Language': 'en-US,en;q=0.9' } }
-                  );
-                  const nomData = await nomRes.json();
-                  const nomAddr = nomData.display_name?.split(',').slice(0, 3).join(', ');
-                  if (nomAddr) {
-                    setAddress(nomAddr);
-                    localStorage.setItem('currentAddress', nomAddr);
-                  }
-                } catch (e) {
-                  // silent
-                }
-              }
-            },
-            (error) => {
-              console.log("GPS Error:", error);
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 5000,
-              maximumAge: 0
-            }
-          );
-        }
-      }
-    };
-
-    autoDetectLocation();
-
-    // Register FCM token for user to receive push notifications
-    registerFCMToken('user', true).catch(err => {/* Silent fail */ });
-  }, []);
 
   const [categories, setCategories] = useState([]);
   const [services, setServices] = useState([]);
@@ -292,15 +473,31 @@ const Home = () => {
 
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isCartReviewOpen, setIsCartReviewOpen] = useState(false);
+
+  // Prevent background scrolling when cart review modal is open
+  useEffect(() => {
+    if (isCartReviewOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isCartReviewOpen]);
 
   // Fetch categories, services and home content on mount (and when city changes)
   useEffect(() => {
+    // Wait for the stable city and one-time zone lookup before requesting catalog data.
+    if (cityLoading || (userCoords && !zoneResolved)) return;
+
     const fetchData = async () => {
       try {
         setLoading(true);
         const cityId = currentCity?._id || currentCity?.id;
 
-        const response = await publicCatalogService.getHomeData(cityId);
+        const response = await publicCatalogService.getHomeData(cityId, zoneStatus?.zoneId);
 
         if (response.success) {
           if (response.categories) {
@@ -316,7 +513,7 @@ const Home = () => {
           }
 
           if (response.services) {
-            setServices(response.services);
+            setServices(markAreaAvailability(response.services, zoneStatus));
           }
 
           if (response.banners && response.banners.length > 0) {
@@ -335,7 +532,7 @@ const Home = () => {
           try {
             const svcRes = await publicCatalogService.getServices({ cityId });
             if (svcRes.success && svcRes.services) {
-              setServices(svcRes.services);
+              setServices(markAreaAvailability(svcRes.services, zoneStatus));
             }
           } catch (e) {
             console.error("Direct services fetch fallback error:", e);
@@ -349,7 +546,7 @@ const Home = () => {
     };
 
     fetchData();
-  }, [currentCity]);
+  }, [currentCity, cityLoading, userCoords, zoneResolved, zoneStatus?.zoneId, zoneStatus?.inZone]);
   // Open category modal from navigation state (e.g. from Cart 'Add Services')
   useEffect(() => {
     if (!loading && categories.length > 0 && (location.state?.openCategoryId || location.state?.openCategoryName)) {
@@ -411,54 +608,108 @@ const Home = () => {
 
   const handleAddClick = async (service) => {
     try {
+      if (service.isAvailableInArea === false) {
+        toast.error('This service is not available in your selected area.');
+        return;
+      }
+
       if (service.targetCategoryId) {
-        const cat = categories.find(c => c.id === service.targetCategoryId);
+        const cat = categories.find(c => c.id === service.targetCategoryId || c._id === service.targetCategoryId);
         if (cat) {
           handleCategoryClick(cat);
           return;
         }
       }
 
-      if (service.serviceId && service.categoryId) {
+      const serviceId = service.serviceId || service._id || service.id;
+      const categoryId = service.categoryId?._id || service.categoryId?.id || service.categoryId;
+
+      if (serviceId) {
+        const latitude = parseFloat(localStorage.getItem('userLat'));
+        const longitude = parseFloat(localStorage.getItem('userLng'));
+        const isDurationBased = service.pricingType === 'DURATION' || service.pricingType === 'HOURLY';
+        const billingUnitMinutes = Number(service.billingUnitMinutes ?? service.durationPricing?.billingUnitMinutes ?? 30);
+        const minDurationMinutes = Number(service.minDurationMinutes ?? service.durationPricing?.minDurationMinutes ?? (service.minHours ? service.minHours * 60 : billingUnitMinutes));
+        const pricePerUnit = Number(
+          service.pricePerUnit ??
+          service.durationPricing?.pricePerUnit ??
+          service.pricePer30Minutes ??
+          (service.hourlyRate ? service.hourlyRate * (billingUnitMinutes / 60) : (service.basePrice || service.price || 0))
+        );
+        const fixedPrice = Number(service.discountPrice ?? service.price ?? service.basePrice ?? 0);
+        const durationMinutes = isDurationBased ? minDurationMinutes : null;
         const cartItemData = {
-          serviceId: service.serviceId,
-          categoryId: service.categoryId,
+          serviceId,
+          categoryId,
           title: service.title,
           description: service.subtitle || service.description || '',
           icon: service.image || '',
           category: service.category || 'Service',
-          price: parseInt(service.price?.toString().replace(/,/g, '') || 0),
-          originalPrice: service.originalPrice ? parseInt(service.originalPrice.toString().replace(/,/g, '')) : null,
-          unitPrice: parseInt(service.price?.toString().replace(/,/g, '') || 0),
+          price: isDurationBased ? pricePerUnit : fixedPrice,
+          originalPrice: service.originalPrice ? Number(service.originalPrice) : null,
+          unitPrice: isDurationBased ? pricePerUnit : fixedPrice,
+          pricingType: isDurationBased ? 'DURATION' : 'FIXED',
+          pricePerUnit: isDurationBased ? pricePerUnit : null,
+          billingUnitMinutes: isDurationBased ? billingUnitMinutes : null,
+          minDurationMinutes: isDurationBased ? minDurationMinutes : null,
+          durationMinutes,
+          hours: isDurationBased ? durationMinutes / 60 : null,
           serviceCount: 1,
-          rating: service.rating || "4.8",
-          reviews: service.reviews || "10k+",
+          quantity: 1,
+          rating: service.rating ?? null,
+          reviews: service.reviews ?? null,
           vendorId: service.vendorId || null,
-          sectionId: service.sectionId || null // VITAL: Added for plan benefits
+          sectionId: service.sectionId || null, // VITAL: Added for plan benefits
+          ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {})
         };
 
         const response = await addToCart(cartItemData);
-        if (response.success) {
-          toast.success(`${service.title} added to cart!`);
-          navigate('/user/cart');
-        } else {
+        if (!response.success) {
           toast.error(response.message || 'Failed to add to cart');
         }
       } else {
-        if (service.targetCategoryId) {
-          const cat = categories.find(c => (c.id === service.targetCategoryId || c._id === service.targetCategoryId));
-          if (cat) {
-            handleCategoryClick(cat);
-          } else {
-            toast.error('Unable to add this service to cart.');
-          }
-        } else {
-          toast.error('Unable to add this service to cart.');
-        }
+        toast.error('Unable to add this service to cart.');
       }
     } catch (error) {
-      toast.error('Failed to add to cart. Please try again.');
+      toast.error(error.response?.data?.message || error.message || 'Failed to add to cart. Please try again.');
     }
+  };
+
+  const handleCartItemChange = (item, direction) => {
+    const itemId = item?._id || item?.id;
+    if (!itemId) return;
+
+    const isDurationBased = item.pricingType === 'DURATION' || item.pricingType === 'HOURLY' || Boolean(item.durationMinutes);
+    if (isDurationBased) {
+      const billingUnitMinutes = Number(item.billingUnitMinutes || 30);
+      const minDurationMinutes = Number(item.minDurationMinutes || billingUnitMinutes);
+      const maxDurationMinutes = Number(item.maxDurationMinutes || 480);
+      const durationStepMinutes = Number(item.durationStepMinutes || billingUnitMinutes);
+      const currentDurationMinutes = Number(item.durationMinutes || ((item.hours || 0) * 60) || billingUnitMinutes);
+      const requestedDuration = currentDurationMinutes + (direction * durationStepMinutes);
+
+      if (requestedDuration < minDurationMinutes && direction < 0) {
+        removeItem(itemId);
+        return;
+      }
+
+      const nextDurationMinutes = Math.max(
+        minDurationMinutes,
+        Math.min(maxDurationMinutes, requestedDuration)
+      );
+      if (nextDurationMinutes !== currentDurationMinutes) {
+        updateItem(itemId, 1, nextDurationMinutes);
+      }
+      return;
+    }
+
+    const currentQuantity = Number(item.serviceCount || item.quantity || 1);
+    const nextQuantity = currentQuantity + direction;
+    if (nextQuantity <= 0) {
+      removeItem(itemId);
+      return;
+    }
+    updateItem(itemId, nextQuantity);
   };
 
   const handleReferClick = () => {
@@ -498,8 +749,9 @@ const Home = () => {
     return <LogoLoader />;
   }
 
+
   return (
-    <div className="min-h-screen pb-20 relative bg-white">
+    <div className="min-h-screen relative bg-white">
       {/* Refined Brand Mesh Gradient Background */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0"
@@ -534,39 +786,57 @@ const Home = () => {
           className="sticky top-0 z-50 transition-all duration-300 shadow-sm"
         >
           <Header
-            location={address}
+            location={isLocating ? 'Detecting location...' : address}
             onLocationClick={handleLocationClick}
             onSearchClick={() => setIsSearchOpen(true)}
           />
         </motion.div>
 
-        <main className="pt-2 sm:pt-3 space-y-4 sm:space-y-6 pb-24 max-w-screen-xl mx-auto w-full">
-          {!isLocationSupported ? (
-            <div className="flex flex-col items-center justify-center pt-10 pb-10 px-6 text-center min-h-[50vh]">
-              <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6">
-                <svg className="w-12 h-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3l18 18" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">
-                Not service available in your city
-              </h2>
-              <p className="text-gray-500 max-w-xs mx-auto mb-8 font-medium">
-                Please fast! We are coming soon.
-              </p>
-              <button
-                onClick={() => setIsAddressModalOpen(true)}
-                className="px-6 py-3 bg-primary-600 text-white rounded-xl font-semibold shadow-md hover:bg-primary-700 transition-all font-bold"
-                style={{ backgroundColor: '#2874f0' }}
-              >
-                Change Location
-              </button>
+        {/* Informational only - never blocks browsing, just flags that
+            booking may not go through from this exact location yet. */}
+        {zoneStatus && !zoneStatus.inZone && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="px-5 py-4 flex flex-col items-center text-center"
+          >
+            <div className="w-11 h-11 rounded-full flex items-center justify-center mb-2"
+              style={{ background: 'linear-gradient(135deg, #FFF7FA 0%, #FCEBF3 100%)' }}
+            >
+              <FiMapPin className="w-5 h-5 text-[#720C3E]" />
             </div>
-          ) : (
-            <>
-              {/* Top Hero Banner Carousel */}
+
+            <h2 className="text-base sm:text-lg font-extrabold tracking-tight leading-tight">
+              <span className="text-slate-300">WE ARE</span>{' '}
+              <span className="text-[#720C3E]">COMING SOON</span>
+            </h2>
+
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-1 max-w-xs">
+              We're currently live in select areas and expanding quickly. Get notified when we are near you!
+            </p>
+
+            <button
+              onClick={() => toast.success("We'll notify you as soon as we launch in your area!")}
+              className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs sm:text-sm font-bold shadow-md transition-transform active:scale-95"
+              style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
+            >
+              <FiBell className="w-3.5 h-3.5" />
+              Notify me!
+            </button>
+
+            <button
+              onClick={() => setIsAddressModalOpen(true)}
+              className="mt-2 text-xs sm:text-sm font-bold text-[#720C3E] underline underline-offset-2"
+            >
+              Change location
+            </button>
+          </motion.div>
+        )}
+
+        <main className="pt-2 sm:pt-3 space-y-4 sm:space-y-6 max-w-screen-xl mx-auto w-full">
+          <>
+            {/* Top Hero Banner Carousel */}
               {banners.filter(b => b.bannerType === 'top' || b.bannerType === 'hero' || (!b.bannerType && b.bannerType !== 'footer' && b.bannerType !== 'bottom')).length > 0 && (
                 <motion.section variants={itemVariants} className="relative z-0">
                   <TopHeroBanner
@@ -664,6 +934,10 @@ const Home = () => {
                 <motion.section variants={itemVariants}>
                   <ServicesWeOffer
                     services={services}
+                    cartItems={cartItems}
+                    onAddClick={handleAddClick}
+                    onUpdateItem={updateItem}
+                    onRemoveItem={removeItem}
                     onServiceClick={(svc) => {
                       const serviceId = svc._id || svc.id || svc.slug;
                       navigate(`/user/service/${serviceId}`, { state: { service: svc } });
@@ -757,8 +1031,8 @@ const Home = () => {
                         return {
                           id: card._id || cIdx,
                           title: card.title,
-                          rating: card.rating || "4.8",
-                          reviews: card.reviews || "10k+",
+                          rating: card.rating ?? null,
+                          reviews: card.reviews ?? null,
                           price: card.price,
                           originalPrice: card.originalPrice,
                           discount: card.discount,
@@ -802,7 +1076,7 @@ const Home = () => {
                           }
                         }
                       }}
-                      className="cursor-pointer overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all mb-4 h-[130px] sm:h-[160px] md:h-[190px] lg:h-[220px] w-full bg-gray-100"
+                       className="relative cursor-pointer overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-all mb-4 h-[130px] sm:h-[160px] md:h-[190px] lg:h-[220px] w-full bg-gray-100"
                     >
                       <img
                         src={toAssetUrl(fb.imageUrl)}
@@ -810,17 +1084,186 @@ const Home = () => {
                         className="w-full h-full object-cover object-center rounded-2xl"
                         loading="lazy"
                       />
+                       {fb.badgeText && (
+                         <div
+                           className="absolute left-3 top-3 rounded-full border border-white/30 bg-[#720C3E]/95 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-lg backdrop-blur-sm sm:left-4 sm:top-4 sm:text-xs"
+                         >
+                           {fb.badgeText}
+                         </div>
+                       )}
+                       {(fb.title || fb.subtitle || fb.tagline || (fb.buttonText && fb.targetType !== 'none')) && (
+                         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-3 pt-12 text-white sm:px-5 sm:pb-5 sm:pt-16">
+                           <div className="min-w-0">
+                             {fb.title && (
+                               <h2 className="truncate text-sm font-black drop-shadow-md sm:text-xl md:text-2xl">
+                                 {fb.title}
+                               </h2>
+                             )}
+                             {(fb.subtitle || fb.tagline) && (
+                               <p className="mt-0.5 truncate text-[10px] font-semibold text-white/90 drop-shadow sm:text-xs md:text-sm">
+                                 {fb.subtitle || fb.tagline}
+                               </p>
+                             )}
+                           </div>
+                           {fb.buttonText && fb.targetType !== 'none' && (
+                             <span className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#720C3E] shadow-md sm:px-4 sm:py-2 sm:text-xs">
+                               {fb.buttonText}
+                             </span>
+                           )}
+                         </div>
+                       )}
                     </div>
                   ))}
                 </motion.section>
               )}
-            </>
-          )}
+          <TrustFooterSection
+            config={homeContent ? homeContent.trustSection : undefined}
+            services={services}
+          />
+          </>
         </main>
       </motion.div>
 
-      {/* Bottom Navigation */}
-      {!isAddressModalOpen && <BottomNav />}
+      {cartItems.length > 0 && !isAddressModalOpen && !isCartReviewOpen && (
+        <div className="fixed bottom-[54px] left-1/2 z-[45] w-full max-w-md -translate-x-1/2 px-3 lg:hidden">
+          <div className="mx-auto flex items-center justify-between gap-2.5 rounded-xl border border-[#E8D9DF]/80 bg-white/95 backdrop-blur-md px-3 py-1.5 shadow-[0_4px_16px_rgba(114,12,62,0.12)]">
+            <button
+              type="button"
+              onClick={() => setIsCartReviewOpen(true)}
+              className="flex min-w-0 flex-1 items-center gap-1.5 text-left py-0.5 active:opacity-80"
+              aria-label="Review cart services"
+            >
+              <FiShoppingCart className="h-4 w-4 shrink-0 text-[#720C3E]" />
+              <span className="truncate text-xs font-bold text-slate-800">
+                {cartItems.length} {cartItems.length === 1 ? 'service' : 'services'}
+              </span>
+              <FiChevronUp className="h-3.5 w-3.5 shrink-0 text-[#720C3E]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/user/cart')}
+              className="shrink-0 rounded-lg bg-gradient-to-r from-[#720C3E] to-[#9A2459] px-4 py-1.5 text-xs font-bold text-white shadow-xs shadow-[#720C3E]/20 active:scale-95 transition-transform"
+            >
+              Go to cart
+            </button>
+          </div>
+        </div>
+      )}
+
+      {cartItems.length > 0 && isCartReviewOpen && !isAddressModalOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 backdrop-blur-[2px] px-0 lg:hidden select-none animate-in fade-in duration-200"
+          onClick={() => setIsCartReviewOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-t-[24px] bg-[#FFF9FB] shadow-[0_-10px_35px_rgba(0,0,0,0.25)] border-t border-[#E8D9DF]/60 animate-in slide-in-from-bottom duration-200"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="review-services-title"
+          >
+            {/* Drag Handle Indicator */}
+            <div className="flex justify-center pt-2 pb-0.5 bg-[#FFF9FB]">
+              <div className="h-1 w-10 rounded-full bg-slate-300/80" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#E8D9DF]/70 px-4 py-2.5 bg-[#FFF9FB]">
+              <h2 id="review-services-title" className="text-base font-bold text-slate-900 tracking-tight">
+                Review Services
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsCartReviewOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200/80 text-slate-600 transition-colors hover:bg-slate-300 active:scale-95"
+                aria-label="Close review services"
+              >
+                <FiX className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Services List - Compact & Scrollable */}
+            <div className="max-h-[46vh] space-y-2.5 overflow-y-auto px-3.5 py-3">
+              {cartItems.map((item, index) => {
+                const isDurationBased = item.pricingType === 'DURATION' || item.pricingType === 'HOURLY' || Boolean(item.durationMinutes);
+                const currentDurationMinutes = Number(item.durationMinutes || ((item.hours || 0) * 60) || item.billingUnitMinutes || 30);
+                const currentQuantity = Number(item.serviceCount || item.quantity || 1);
+                const maxDurationMinutes = Number(item.maxDurationMinutes || 480);
+                const itemImage = item.icon || item.image || item.imageUrl;
+
+                return (
+                  <div
+                    key={item._id || item.id || `${item.title}-${index}`}
+                    className="flex items-center gap-2.5 rounded-xl border border-slate-100 bg-white p-2.5 shadow-xs"
+                  >
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#E8D9DF] bg-[#FFF7FA] p-0.5">
+                      {itemImage ? (
+                        <img src={toAssetUrl(itemImage)} alt={item.title} className="h-full w-full object-contain" />
+                      ) : (
+                        <span className="text-base font-black text-[#720C3E]">{item.title?.charAt(0) || 'S'}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-medium leading-none text-slate-400">
+                        {index === 0 ? 'Main service' : 'Added service'}
+                      </p>
+                      <p className="truncate text-xs sm:text-sm font-semibold text-slate-800 leading-snug mt-0.5">
+                        {item.title}
+                      </p>
+                      <p className="text-xs sm:text-sm font-black text-[#831843] leading-none mt-1">
+                        ₹{Math.round(Number(item.price || 0))}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[#E8D9DF] bg-[#FFF9FB] p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleCartItemChange(item, -1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-[#831843] transition-colors hover:bg-white active:scale-90"
+                        aria-label={`Decrease ${isDurationBased ? 'duration' : 'quantity'} for ${item.title}`}
+                      >
+                        <FiMinus className="h-3.5 w-3.5" />
+                      </button>
+                      <div className="min-w-[36px] text-center leading-none">
+                        <div className="text-xs sm:text-sm font-black text-[#831843]">
+                          {isDurationBased ? currentDurationMinutes : currentQuantity}
+                        </div>
+                        <div className="mt-0.5 text-[8px] font-semibold text-slate-400">
+                          {isDurationBased ? 'Minutes' : 'Qty'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCartItemChange(item, 1)}
+                        disabled={isDurationBased && currentDurationMinutes >= maxDurationMinutes}
+                        className="flex h-7 w-7 items-center justify-center rounded-md bg-[#831843] text-white transition-opacity active:scale-90 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label={`Increase ${isDurationBased ? 'duration' : 'quantity'} for ${item.title}`}
+                      >
+                        <FiPlus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-[#E8D9DF]/70 bg-white px-4 py-2.5 pb-[max(12px,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCartReviewOpen(false);
+                  navigate('/user/cart');
+                }}
+                className="w-full rounded-xl bg-gradient-to-r from-[#720C3E] to-[#931448] py-2.5 text-sm font-bold text-white shadow-md shadow-[#720C3E]/20 transition-all hover:brightness-105 active:scale-[0.99]"
+              >
+                Go to cart
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Category Modal */}
       <CategoryModal
@@ -833,6 +1276,7 @@ const Home = () => {
         location={address}
         cartCount={cartCount}
         currentCity={currentCity}
+        zoneStatus={zoneStatus}
       />
 
       {/* Search Overlay */}
@@ -861,6 +1305,7 @@ const Home = () => {
         }}
         service={selectedDirectService}
       />
+
     </div>
   );
 };

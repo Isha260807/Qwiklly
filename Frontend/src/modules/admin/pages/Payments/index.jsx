@@ -13,8 +13,8 @@ const Payments = () => {
   const navTabs = [
     { path: '/admin/payments/overview', label: 'Overview', icon: FiPieChart },
     { path: '/admin/payments/users', label: 'User Payments', icon: FiUser },
-    { path: '/admin/payments/vendors', label: 'Vendor Payouts', icon: FiBriefcase },
-    { path: '/admin/payments/revenue', label: 'Platform Revenue', icon: FiTrendingUp },
+    { path: '/admin/payments/vendors', label: 'Salary Payroll', icon: FiBriefcase },
+    { path: '/admin/payments/revenue', label: 'Booking Revenue', icon: FiTrendingUp },
     { path: '/admin/payments/reports', label: 'Tax & Reports', icon: FiFileText },
   ];
 

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiLayers, FiHeadphones, FiPhoneCall, FiX, FiClock } from 'react-icons/fi';
 import { FaWallet, FaWhatsapp } from 'react-icons/fa';
@@ -33,6 +33,7 @@ const Profile = () => {
   });
 
   const menuItems = [
+    { id: 'payout', label: 'Payout & Bank Details (QR / UPI)', icon: FiCreditCard, path: '/vendor/profile/payout' },
     { id: 5, label: 'My Ratings', icon: FiStar, path: '/vendor/my-ratings' },
     { id: 7, label: 'Manage Address', icon: FiMapPin, path: '/vendor/address-management' },
     { id: 8, label: 'Settings', icon: FiSettings, path: '/vendor/settings' },
@@ -99,6 +100,9 @@ const Profile = () => {
               `${vendorData.address.addressLine1 || ''} ${vendorData.address.addressLine2 || ''} ${vendorData.address.city || ''} ${vendorData.address.state || ''} ${vendorData.address.pincode || ''}`.trim() || 'Not set')
             : 'Not set';
 
+          const rawServices = vendorData.service || vendorData.categories || [];
+          const servicesList = Array.isArray(rawServices) ? rawServices : (rawServices ? [rawServices] : []);
+
           setProfile({
             name: vendorData.name || 'Vendor Name',
             businessName: vendorData.businessName || null,
@@ -108,8 +112,9 @@ const Profile = () => {
             rating: vendorData.rating || 0,
             totalJobs: vendorData.totalJobs || 0,
             completionRate: vendorData.completionRate || 0,
-            serviceCategory: vendorData.service || '',
-            skills: [],
+            serviceCategory: Array.isArray(vendorData.service) ? vendorData.service.join(', ') : (vendorData.service || ''),
+            services: servicesList,
+            skills: vendorData.skills || [],
             photo: vendorData.profilePhoto || null,
             approvalStatus: vendorData.approvalStatus,
             isPhoneVerified: vendorData.isPhoneVerified || false,
@@ -262,25 +267,6 @@ const Profile = () => {
                     </div>
                   )}
                 </div>
-
-                {/* Assigned Services Pills */}
-                {profile.services && profile.services.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {profile.services.slice(0, 3).map((srv, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold text-[#720C3E] bg-[#FCEBF3]"
-                      >
-                        {srv}
-                      </span>
-                    ))}
-                    {profile.services.length > 3 && (
-                      <span className="text-[9px] font-bold text-[#720C3E] self-center">
-                        +{profile.services.length - 3}
-                      </span>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* Navigate Button */}
@@ -295,9 +281,9 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Three Cards Section - Horizontal */}
+        {/* Quick Action Cards - Horizontal */}
         <div className="px-4 mb-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             {/* Active Jobs */}
             <button
               onClick={() => navigate('/vendor/jobs')}
@@ -321,19 +307,6 @@ const Profile = () => {
               </div>
               <span className="text-[11px] font-bold text-[#24151D] text-center leading-tight">
                 Wallet
-              </span>
-            </button>
-
-            {/* My Services */}
-            <button
-              onClick={() => navigate('/vendor/services')}
-              className="flex flex-col items-center justify-center p-2.5 rounded-xl active:scale-95 transition-all duration-200 bg-white shadow-xs hover:shadow-sm cursor-pointer"
-            >
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-1 bg-[#FCEBF3] text-[#720C3E]">
-                <FiLayers className="w-3.5 h-3.5" />
-              </div>
-              <span className="text-[11px] font-bold text-[#24151D] text-center leading-tight">
-                My Services
               </span>
             </button>
           </div>

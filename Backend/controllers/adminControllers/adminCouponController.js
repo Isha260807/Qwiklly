@@ -3,6 +3,26 @@ const CouponUsage = require('../../models/CouponUsage');
 const Booking = require('../../models/Booking');
 const User = require('../../models/User');
 
+const COUPON_TIME_ZONE_OFFSET = '+05:30';
+
+const parseCouponDate = (value, endOfDay = false) => {
+  if (value === undefined || value === null || value === '') return null;
+
+  const input = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    return new Date(
+      input + 'T' + (endOfDay ? '23:59:59.999' : '00:00:00.000') + COUPON_TIME_ZONE_OFFSET
+    );
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(input)) {
+    return new Date(input + ':00' + COUPON_TIME_ZONE_OFFSET);
+  }
+
+  const parsed = new Date(input);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 /**
  * Get all coupons with search, status filters, and pagination
  * GET /api/admin/coupons
@@ -200,7 +220,28 @@ const createCoupon = async (req, res) => {
       });
     }
 
-    if (startAt && expiresAt && new Date(startAt) >= new Date(expiresAt)) {
+    if (usageLimit !== undefined && usageLimit !== null && usageLimit !== '' && (!Number.isInteger(Number(usageLimit)) || Number(usageLimit) < 1)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Global usage limit must be a whole number greater than 0'
+      });
+    }
+
+    const parsedStartAt = startAt ? parseCouponDate(startAt) : new Date();
+    const parsedExpiresAt = parseCouponDate(expiresAt, true);
+    if (!parsedStartAt || Number.isNaN(parsedStartAt.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coupon start date and time'
+      });
+    }
+    if (!parsedExpiresAt || Number.isNaN(parsedExpiresAt.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coupon expiry date and time'
+      });
+    }
+    if (parsedStartAt >= parsedExpiresAt) {
       return res.status(400).json({
         success: false,
         message: 'Expiry date must be after start date'
@@ -217,8 +258,8 @@ const createCoupon = async (req, res) => {
       minOrderAmount: minOrderAmount ? Number(minOrderAmount) : 0,
       usageLimit: usageLimit ? Number(usageLimit) : null,
       perUserLimit: perUserLimit ? Number(perUserLimit) : 1,
-      startAt: startAt ? new Date(startAt) : new Date(),
-      expiresAt: new Date(expiresAt),
+      startAt: parsedStartAt,
+      expiresAt: parsedExpiresAt,
       applicableServices: applicableServices || [],
       applicableCategories: applicableCategories || [],
       applicableCities: applicableCities || [],
@@ -306,10 +347,41 @@ const updateCoupon = async (req, res) => {
     if (discountValue !== undefined) coupon.discountValue = Number(discountValue);
     if (maxDiscount !== undefined) coupon.maxDiscount = maxDiscount ? Number(maxDiscount) : null;
     if (minOrderAmount !== undefined) coupon.minOrderAmount = minOrderAmount ? Number(minOrderAmount) : 0;
-    if (usageLimit !== undefined) coupon.usageLimit = usageLimit ? Number(usageLimit) : null;
+    if (usageLimit !== undefined) {
+      if (usageLimit === null || usageLimit === '') {
+        coupon.usageLimit = null;
+      } else if (!Number.isInteger(Number(usageLimit)) || Number(usageLimit) < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Global usage limit must be a whole number greater than 0'
+        });
+      } else {
+        coupon.usageLimit = Number(usageLimit);
+      }
+    }
     if (perUserLimit !== undefined) coupon.perUserLimit = perUserLimit ? Number(perUserLimit) : 1;
-    if (startAt !== undefined) coupon.startAt = new Date(startAt);
-    if (expiresAt !== undefined) coupon.expiresAt = new Date(expiresAt);
+    const parsedStartAt = startAt !== undefined ? parseCouponDate(startAt) : coupon.startAt;
+    const parsedExpiresAt = expiresAt !== undefined ? parseCouponDate(expiresAt, true) : coupon.expiresAt;
+    if (!parsedStartAt || Number.isNaN(parsedStartAt.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coupon start date and time'
+      });
+    }
+    if (!parsedExpiresAt || Number.isNaN(parsedExpiresAt.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coupon expiry date and time'
+      });
+    }
+    if (parsedStartAt >= parsedExpiresAt) {
+      return res.status(400).json({
+        success: false,
+        message: 'Expiry date must be after start date'
+      });
+    }
+    coupon.startAt = parsedStartAt;
+    coupon.expiresAt = parsedExpiresAt;
     if (applicableServices !== undefined) coupon.applicableServices = applicableServices;
     if (applicableCategories !== undefined) coupon.applicableCategories = applicableCategories;
     if (applicableCities !== undefined) coupon.applicableCities = applicableCities;

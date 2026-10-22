@@ -1,4 +1,5 @@
 import React from 'react';
+import { hardReload } from '../../../../utils/chunkReload';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -29,7 +30,7 @@ class ErrorBoundary extends React.Component {
             </p>
             <button
               onClick={() => {
-                window.location.reload();
+                hardReload();
               }}
               className="px-6 py-3 rounded-xl font-semibold text-white transition-all duration-300"
               style={{

@@ -43,6 +43,13 @@ const vendorSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  // Zones this vendor is allowed to serve (source of truth for zone-based matching).
+  // Empty array + no legacy address.city match = vendor is not assigned anywhere yet.
+  zoneIds: {
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Zone' }],
+    default: [],
+    index: true
+  },
   skills: {
     type: [String],
     default: []
@@ -147,6 +154,48 @@ const vendorSchema = new mongoose.Schema({
       default: null
     }
   },
+  bankDetails: {
+    accountHolderName: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    accountNumber: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    ifscCode: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    bankName: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    upiId: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    upiQrCode: {
+      type: String,
+      default: ''
+    }
+  },
+  salaryConfig: {
+    rateAmount: { type: Number, default: 0, min: 0 },
+    rateUnitMinutes: { type: Number, enum: [30, 60], default: 60 },
+    effectiveFrom: { type: Date, default: Date.now },
+    rateHistory: [{
+      rateAmount: { type: Number, required: true, min: 0 },
+      rateUnitMinutes: { type: Number, enum: [30, 60], required: true },
+      effectiveFrom: { type: Date, required: true },
+      updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null }
+    }]
+  },
   isActive: {
     type: Boolean,
     default: true
@@ -154,6 +203,13 @@ const vendorSchema = new mongoose.Schema({
   isPhoneVerified: {
     type: Boolean,
     default: false
+  },
+  // Set only after the vendor submits the complete registration form.
+  // Pending vendors without this flag must not enter the approval queue.
+  registrationCompleted: {
+    type: Boolean,
+    default: false,
+    index: true
   },
   isEmailVerified: {
     type: Boolean,
@@ -190,6 +246,25 @@ const vendorSchema = new mongoose.Schema({
     type: { type: String, enum: ['Point'], default: 'Point' },
     coordinates: { type: [Number], default: [0, 0] } // [lng, lat]
   },
+  // Live zone presence (set by /vendors/profile/sync-location).
+  // ASSIGNED + active zones whose polygon contains the vendor's live GPS
+  // position right now (array because zones may overlap/nest). Empty = vendor
+  // is outside all of their assigned zones. Booking dispatch only goes to
+  // vendors whose currentZoneIds contains the booking's zone.
+  currentZoneIds: {
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Zone' }],
+    default: [],
+    index: true
+  },
+  lastLocationSyncAt: {
+    type: Date,
+    default: null
+  },
+  // Consecutive out-of-zone GPS readings (debounce against boundary jitter)
+  zoneExitStrikes: {
+    type: Number,
+    default: 0
+  },
   // Real-time Online Status
   isOnline: {
     type: Boolean,
@@ -203,6 +278,13 @@ const vendorSchema = new mongoose.Schema({
   currentSocketId: {
     type: String,
     default: null
+  },
+  // Prevent login/socket reconnects from reopening attendance after the
+  // vendor has manually ended their day. This is cleared by a manual ON.
+  manualOffDateKey: {
+    type: String,
+    default: null,
+    index: true
   },
   // Availability Status
   availability: {

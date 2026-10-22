@@ -3,10 +3,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiStar, FiFilter, FiEye, FiEyeOff, FiTrash2, FiSearch,
   FiUser, FiBriefcase, FiBox, FiRefreshCw, FiAlertCircle, FiMessageSquare,
-  FiCheckCircle, FiXCircle, FiCalendar
+  FiCheckCircle, FiXCircle, FiCalendar, FiTrendingUp, FiChevronDown, FiChevronLeft, FiChevronRight
 } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import reviewService from '../../services/reviewService';
+import { getAllVendors } from '../../services/vendorService';
+
+const toDateInputValue = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const ReviewsPage = () => {
   const [reviews, setReviews] = useState([]);
@@ -25,6 +33,19 @@ const ReviewsPage = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [vendors, setVendors] = useState([]);
+  const [analyticsVendorId, setAnalyticsVendorId] = useState('');
+  const [analyticsPeriod, setAnalyticsPeriod] = useState('week');
+  const [customFromDate, setCustomFromDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 30);
+    return toDateInputValue(date);
+  });
+  const [customToDate, setCustomToDate] = useState(() => toDateInputValue(new Date()));
+  const [vendorAnalytics, setVendorAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [showVendorRating, setShowVendorRating] = useState(true);
+  const [ratingDetailsPage, setRatingDetailsPage] = useState(1);
 
   const [filters, setFilters] = useState({
     page: 1,
@@ -90,6 +111,65 @@ const ReviewsPage = () => {
   useEffect(() => {
     fetchStats();
   }, []);
+
+  useEffect(() => {
+    const fetchVendors = async () => {
+      try {
+        const response = await getAllVendors({ limit: 1000 });
+        const vendorList = response.data || [];
+        setVendors(vendorList);
+        setAnalyticsVendorId(current => current || vendorList[0]?._id || '');
+      } catch (error) {
+        console.error('Fetch vendors for review analytics error:', error);
+        toast.error('Failed to load vendors for rating analytics');
+      }
+    };
+
+    fetchVendors();
+  }, []);
+
+  useEffect(() => {
+    setRatingDetailsPage(1);
+
+    if (!analyticsVendorId || (analyticsPeriod === 'custom' && (!customFromDate || !customToDate || customFromDate > customToDate))) {
+      setVendorAnalytics(null);
+      setAnalyticsLoading(false);
+      return undefined;
+    }
+
+    let isMounted = true;
+    const fetchVendorAnalytics = async () => {
+      try {
+        setAnalyticsLoading(true);
+        const response = await reviewService.getVendorRatingAnalytics(analyticsVendorId, analyticsPeriod, {
+          fromDate: analyticsPeriod === 'custom' ? customFromDate : undefined,
+          toDate: analyticsPeriod === 'custom' ? customToDate : undefined
+        });
+        if (isMounted && response.success) {
+          setVendorAnalytics(response.data || null);
+        }
+      } catch (error) {
+        console.error('Fetch vendor rating analytics error:', error);
+        if (isMounted) toast.error('Failed to load vendor rating analytics');
+      } finally {
+        if (isMounted) setAnalyticsLoading(false);
+      }
+    };
+
+    fetchVendorAnalytics();
+    return () => {
+      isMounted = false;
+    };
+  }, [analyticsVendorId, analyticsPeriod, customFromDate, customToDate]);
+
+  const ratingDetails = vendorAnalytics?.reviewDetails || [];
+  const ratingDetailsPageSize = 10;
+  const ratingDetailsPageCount = Math.max(1, Math.ceil(ratingDetails.length / ratingDetailsPageSize));
+  const ratingDetailsStartIndex = (ratingDetailsPage - 1) * ratingDetailsPageSize;
+  const visibleRatingDetails = ratingDetails.slice(
+    ratingDetailsStartIndex,
+    ratingDetailsStartIndex + ratingDetailsPageSize
+  );
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -190,6 +270,211 @@ const ReviewsPage = () => {
         </div>
       </div>
 
+      {/* Vendor Rating Analytics */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-gray-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setShowVendorRating(current => !current)}
+            aria-expanded={showVendorRating}
+            className="flex items-center gap-2.5 text-left group"
+          >
+            <div className="w-9 h-9 rounded-lg bg-primary-50 text-primary-700 flex items-center justify-center">
+              <FiTrendingUp className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-extrabold text-gray-900">Vendor Rating Analytics</h2>
+              <p className="text-[10px] text-gray-500 mt-0.5">Track a vendor's average rating over time</p>
+            </div>
+            <FiChevronDown className={`w-4 h-4 ml-1 text-gray-400 transition-transform duration-200 ${showVendorRating ? 'rotate-180' : ''}`} />
+          </button>
+
+          <div className={`${showVendorRating ? 'flex' : 'hidden'} flex-col sm:flex-row gap-2`}>
+            <select
+              value={analyticsVendorId}
+              onChange={(e) => setAnalyticsVendorId(e.target.value)}
+              className="min-w-[220px] px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 focus:outline-none focus:border-primary-500 cursor-pointer"
+              disabled={vendors.length === 0}
+            >
+              {vendors.length === 0 ? (
+                <option value="">Loading vendors...</option>
+              ) : (
+                vendors.map(vendor => (
+                  <option key={vendor._id} value={vendor._id}>
+                    {vendor.businessName || vendor.name || 'Unnamed vendor'}
+                  </option>
+                ))
+              )}
+            </select>
+            <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+              {['week', 'month', 'custom'].map(period => (
+                <button
+                  key={period}
+                  type="button"
+                  onClick={() => setAnalyticsPeriod(period)}
+                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold capitalize transition-colors ${
+                    analyticsPeriod === period
+                      ? 'bg-primary-700 text-white shadow-sm'
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                    {period === 'custom' ? 'Custom' : period}
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+
+        {showVendorRating && analyticsPeriod === 'custom' && (
+          <div className="px-4 py-3 bg-primary-50/40 border-b border-gray-100 flex flex-col sm:flex-row sm:items-end gap-2.5">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">From date</label>
+              <input
+                type="date"
+                value={customFromDate}
+                max={customToDate || undefined}
+                onChange={(e) => setCustomFromDate(e.target.value)}
+                className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 focus:outline-none focus:border-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">To date</label>
+              <input
+                type="date"
+                value={customToDate}
+                min={customFromDate || undefined}
+                max={toDateInputValue(new Date())}
+                onChange={(e) => setCustomToDate(e.target.value)}
+                className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 focus:outline-none focus:border-primary-500"
+              />
+            </div>
+            {customFromDate > customToDate && (
+              <p className="text-[10px] font-semibold text-red-600 pb-2">From date must be before To date.</p>
+            )}
+          </div>
+        )}
+
+        <div className={`p-4 ${showVendorRating ? '' : 'hidden'}`}>
+          {analyticsLoading ? (
+            <div className="h-40 flex items-center justify-center text-xs text-gray-500">Loading rating trend...</div>
+          ) : !analyticsVendorId ? (
+            <div className="h-40 flex items-center justify-center text-xs text-gray-400">No vendors available.</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                <div className="rounded-lg bg-amber-50 border border-amber-100 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Period average</p>
+                  <p className="text-2xl font-extrabold text-gray-900 mt-1">
+                    {vendorAnalytics?.averageRating?.toFixed(1) || '0.0'} <span className="text-amber-500">★</span>
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    {analyticsPeriod === 'custom' ? 'Custom date range' : `Selected ${analyticsPeriod} range`}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Reviews in range</p>
+                  <p className="text-2xl font-extrabold text-gray-900 mt-1">{vendorAnalytics?.totalReviews || 0}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Active reviews</p>
+                </div>
+                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Total rating</p>
+                  <p className="text-2xl font-extrabold text-gray-900 mt-1">
+                    {vendorAnalytics?.overallAverageRating?.toFixed(1) || '0.0'} <span className="text-amber-500">★</span>
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    All-time average · {vendorAnalytics?.overallTotalReviews || 0} reviews
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div>
+                    <h3 className="text-xs font-extrabold text-gray-900">Rating Details</h3>
+                    <p className="text-[10px] text-gray-400">Users and bookings in the selected range</p>
+                  </div>
+                  <span className="text-[10px] font-bold text-primary-700">
+                    {ratingDetails.length
+                      ? (ratingDetailsStartIndex + 1) + '-' + Math.min(ratingDetailsStartIndex + ratingDetailsPageSize, ratingDetails.length) + ' of ' + ratingDetails.length
+                      : '0 shown'}
+                  </span>
+                </div>
+
+                {ratingDetails.length ? (
+                  <div className="max-h-72 overflow-y-auto rounded-xl border border-gray-100 divide-y divide-gray-100">
+                    {visibleRatingDetails.map(review => {
+                      const reviewer = review.userId?.name || 'Customer';
+                      const bookingNumber = review.bookingId?.bookingNumber || 'Booking unavailable';
+                      const serviceName = review.serviceId?.title || review.bookingId?.serviceName || 'Service';
+                      const bookingStatus = review.bookingId?.status?.replace(/_/g, ' ');
+                      return (
+                        <div key={review._id} className="p-3 flex flex-col sm:flex-row sm:items-center gap-2.5 hover:bg-gray-50/70">
+                          <div className="w-8 h-8 rounded-full bg-primary-50 text-primary-700 flex items-center justify-center shrink-0">
+                            <FiUser className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="text-xs font-bold text-gray-900">{reviewer}</span>
+                              <span className="text-[10px] text-gray-400">{review.userId?.phone || review.userId?.email || ''}</span>
+                              <span className="text-[10px] text-gray-400">
+                                {review.createdAt ? new Date(review.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
+                              <span className="font-semibold text-gray-700">{serviceName}</span>
+                              <span className="text-gray-300">•</span>
+                              <span className="font-bold text-primary-700">{bookingNumber}</span>
+                              {bookingStatus && <span className="capitalize text-gray-400">({bookingStatus})</span>}
+                            </div>
+                            {review.review && <p className="mt-1 text-[10px] text-gray-500 truncate">{review.review}</p>}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-sm text-amber-500">★</span>
+                            <span className="text-xs font-extrabold text-gray-800">{Number(review.rating || 0).toFixed(1)}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-center text-[10px] text-gray-400">
+                    No rating details available for this range.
+                  </div>
+                )}
+
+                {ratingDetails.length > ratingDetailsPageSize && (
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <span className="text-[10px] text-gray-400">
+                      Page {ratingDetailsPage} of {ratingDetailsPageCount}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setRatingDetailsPage(page => Math.max(1, page - 1))}
+                        disabled={ratingDetailsPage === 1}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-gray-200 text-[10px] font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <FiChevronLeft className="w-3 h-3" />
+                        Previous
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRatingDetailsPage(page => Math.min(ratingDetailsPageCount, page + 1))}
+                        disabled={ratingDetailsPage === ratingDetailsPageCount}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-gray-200 text-[10px] font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Next
+                        <FiChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Filter Bar */}
       <div className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-3 justify-between items-center">
         {/* Search Input */}
@@ -251,7 +536,7 @@ const ReviewsPage = () => {
               <tr className="bg-gray-50/75 border-b border-gray-100">
                 <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Customer</th>
                 <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Rating & Feedback</th>
-                <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Service / Entity</th>
+                <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Service & Booking</th>
                 <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
               </tr>
@@ -280,9 +565,11 @@ const ReviewsPage = () => {
                 reviews.map((review) => {
                   const customerName = review.userId?.name || review.bookingId?.customerName || 'Customer';
                   const customerPhone = review.userId?.phone || review.bookingId?.customerPhone || 'N/A';
+                  const customerEmail = review.userId?.email || '';
                   const serviceTitle = review.serviceId?.title || review.bookingId?.serviceName || 'Service';
                   const partnerName = review.vendorId?.businessName || review.vendorId?.name || 'Partner';
                   const orderNumber = review.bookingId?.bookingNumber || (review.bookingId?._id ? `#${review.bookingId._id.slice(-6).toUpperCase()}` : null);
+                  const bookingStatus = review.bookingId?.status?.replace(/_/g, ' ');
 
                   return (
                     <tr key={review._id} className="hover:bg-gray-50/60 transition-colors">
@@ -293,8 +580,10 @@ const ReviewsPage = () => {
                             {customerName.charAt(0).toUpperCase()}
                           </div>
                           <div>
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Rated by</p>
                             <p className="font-bold text-gray-900 text-xs">{customerName}</p>
                             <p className="text-[10px] text-gray-400 font-medium">{customerPhone}</p>
+                            {customerEmail && <p className="text-[10px] text-gray-400 truncate max-w-[145px]" title={customerEmail}>{customerEmail}</p>}
                           </div>
                         </div>
                       </td>
@@ -317,9 +606,9 @@ const ReviewsPage = () => {
                         </div>
                       </td>
 
-                      {/* Service / Partner */}
+                      {/* Service / Booking */}
                       <td className="px-4 py-3.5">
-                        <div className="space-y-1 max-w-[200px]">
+                        <div className="space-y-1.5 max-w-[220px]">
                           <div className="flex items-center gap-1.5 text-xs">
                             <FiBox className="text-primary-600 w-3.5 h-3.5 flex-shrink-0" />
                             <span className="font-bold text-gray-800 truncate" title={serviceTitle}>
@@ -331,9 +620,11 @@ const ReviewsPage = () => {
                             <span className="font-medium truncate" title={partnerName}>{partnerName}</span>
                           </div>
                           {orderNumber && (
-                            <span className="inline-block text-[9px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                              {orderNumber}
-                            </span>
+                            <div className="rounded-md bg-gray-50 border border-gray-100 px-2 py-1">
+                              <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Booking</p>
+                              <p className="text-[10px] font-bold text-gray-700 truncate" title={orderNumber}>{orderNumber}</p>
+                              {bookingStatus && <p className="text-[9px] capitalize text-gray-400">{bookingStatus}</p>}
+                            </div>
                           )}
                         </div>
                       </td>

@@ -1,9 +1,8 @@
 const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
 const Booking = require('../../models/Booking');
-const Withdrawal = require('../../models/Withdrawal');
-const Settlement = require('../../models/Settlement');
 const { BOOKING_STATUS, PAYMENT_STATUS, VENDOR_STATUS } = require('../../utils/constants');
+const { getAdminBookingCityFilter, getAdminVendorCityFilter } = require('../../utils/adminCityScope');
 
 /**
  * Get overall dashboard stats
@@ -22,22 +21,32 @@ const getDashboardStats = async (req, res) => {
       }
     }
 
+    const bookingScope = getAdminBookingCityFilter(req);
+    const vendorScope = getAdminVendorCityFilter(req);
+    const scopedUserIds = Array.isArray(req.adminZoneIds)
+      ? await Booking.distinct('userId', bookingScope)
+      : null;
+    const userScope = scopedUserIds ? { _id: { $in: scopedUserIds } } : {};
+
     // Total counts (filtered by creation date if provided)
-    const totalUsers = await User.countDocuments({ isActive: true, ...dateFilter });
-    const totalVendors = await Vendor.countDocuments({ isActive: true, ...dateFilter });
-    const totalWorkers = await Vendor.countDocuments({ role: 'worker', ...dateFilter });
-    const totalBookings = await Booking.countDocuments(dateFilter);
+    const totalUsers = await User.countDocuments({ ...userScope, isActive: true, ...dateFilter });
+    const totalVendors = await Vendor.countDocuments({ ...vendorScope, isActive: true, ...dateFilter });
+    const totalWorkers = await Vendor.countDocuments({ ...vendorScope, role: 'worker', ...dateFilter });
+    const totalBookings = await Booking.countDocuments({ ...bookingScope, ...dateFilter });
 
     // Booking stats
     const pendingBookings = await Booking.countDocuments({
+      ...bookingScope,
       ...dateFilter,
       status: { $nin: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED, 'completed', 'cancelled', 'rejected'] }
     });
     const completedBookings = await Booking.countDocuments({
+      ...bookingScope,
       ...dateFilter,
       status: { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'work_done'] }
     });
     const cancelledBookings = await Booking.countDocuments({
+      ...bookingScope,
       ...dateFilter,
       status: { $in: [BOOKING_STATUS.CANCELLED, 'cancelled', 'rejected'] }
     });
@@ -50,6 +59,7 @@ const getDashboardStats = async (req, res) => {
             { status: { $in: [BOOKING_STATUS.COMPLETED, 'completed', 'work_done'] } },
             { paymentStatus: { $in: [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, 'success', 'collected_by_vendor', 'collected_by_worker', 'paid'] } }
           ],
+          ...bookingScope,
           ...dateFilter
         }
       },
@@ -63,18 +73,13 @@ const getDashboardStats = async (req, res) => {
     ]);
 
     const revenue = revenueResult[0] || { totalRevenue: 0, totalBookings: 0 };
-    const platformCommission = revenue.totalRevenue * 0.2; // 20% commission
 
     // Vendor approval stats
-    const pendingVendors = await Vendor.countDocuments({ approvalStatus: VENDOR_STATUS.PENDING, ...dateFilter });
-    const approvedVendors = await Vendor.countDocuments({ approvalStatus: VENDOR_STATUS.APPROVED, ...dateFilter });
-
-    // Withdrawal & Settlement stats
-    const pendingWithdrawals = await Withdrawal.countDocuments({ status: 'pending', ...dateFilter });
-    const pendingSettlementsCount = await Settlement.countDocuments({ status: 'pending', ...dateFilter });
+    const pendingVendors = await Vendor.countDocuments({ ...vendorScope, approvalStatus: VENDOR_STATUS.PENDING, registrationCompleted: true, ...dateFilter });
+    const approvedVendors = await Vendor.countDocuments({ ...vendorScope, approvalStatus: VENDOR_STATUS.APPROVED, ...dateFilter });
 
     // Recent activities (filtered by period)
-    const recentActivityDocs = await Booking.find(dateFilter)
+    const recentActivityDocs = await Booking.find({ ...bookingScope, ...dateFilter })
       .populate('userId', 'name phone email')
       .populate('vendorId', 'name businessName phone')
       .populate('serviceId', 'title name')
@@ -110,11 +115,8 @@ const getDashboardStats = async (req, res) => {
           completedBookings,
           cancelledBookings,
           totalRevenue: revenue.totalRevenue,
-          platformCommission,
           pendingVendors,
           approvedVendors,
-          pendingWithdrawals,
-          pendingSettlements: pendingSettlementsCount
         },
         recentBookings
       }
@@ -149,10 +151,12 @@ const getRevenueAnalytics = async (req, res) => {
       }
     }
 
+    Object.assign(matchFilter, getAdminBookingCityFilter(req));
+
     // Revenue analytics aggregated from bookings
     const aggregated = await Booking.aggregate([
       {
-        $match: matchFilter
+          $match: matchFilter
       },
       {
         $group: {
@@ -177,20 +181,6 @@ const getRevenueAnalytics = async (req, res) => {
             }
           },
           bookings: { $sum: 1 },
-          platformCommission: {
-            $sum: {
-              $cond: [
-                {
-                  $or: [
-                    { $in: ['$status', [BOOKING_STATUS.COMPLETED, 'completed', 'work_done']] },
-                    { $in: ['$paymentStatus', [PAYMENT_STATUS.SUCCESS, PAYMENT_STATUS.COLLECTED_BY_VENDOR, 'success', 'collected_by_vendor', 'collected_by_worker', 'paid']] }
-                  ]
-                },
-                { $multiply: [{ $ifNull: ['$finalAmount', '$basePrice', 0] }, 0.2] },
-                0
-              ]
-            }
-          }
         }
       },
       { $sort: { _id: 1 } }
@@ -217,7 +207,6 @@ const getRevenueAnalytics = async (req, res) => {
           _id: key,
           revenue: existing ? existing.revenue : 0,
           bookings: existing ? existing.bookings : 0,
-          platformCommission: existing ? existing.platformCommission : 0
         });
         d.setMonth(d.getMonth() + 1);
       }
@@ -234,7 +223,6 @@ const getRevenueAnalytics = async (req, res) => {
           _id: key,
           revenue: existing ? existing.revenue : 0,
           bookings: existing ? existing.bookings : 0,
-          platformCommission: existing ? existing.platformCommission : 0
         });
         d.setDate(d.getDate() + 1);
       }
@@ -270,7 +258,8 @@ const getBookingTrends = async (req, res) => {
     const trends = await Booking.aggregate([
       {
         $match: {
-          createdAt: { $gte: startDate }
+          createdAt: { $gte: startDate },
+          ...getAdminBookingCityFilter(req)
         }
       },
       {
@@ -323,11 +312,16 @@ const getUserGrowthMetrics = async (req, res) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - parseInt(days));
 
+    const scopedUserIds = Array.isArray(req.adminZoneIds)
+      ? await Booking.distinct('userId', getAdminBookingCityFilter(req))
+      : null;
+
     // User growth
     const userGrowth = await User.aggregate([
       {
         $match: {
-          createdAt: { $gte: startDate }
+          createdAt: { $gte: startDate },
+          ...(scopedUserIds ? { _id: { $in: scopedUserIds } } : {})
         }
       },
       {
@@ -348,7 +342,8 @@ const getUserGrowthMetrics = async (req, res) => {
     const vendorGrowth = await Vendor.aggregate([
       {
         $match: {
-          createdAt: { $gte: startDate }
+          createdAt: { $gte: startDate },
+          ...getAdminVendorCityFilter(req)
         }
       },
       {

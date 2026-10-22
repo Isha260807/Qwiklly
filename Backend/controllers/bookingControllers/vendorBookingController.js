@@ -4,6 +4,9 @@ const { validationResult } = require('express-validator');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { sendNotificationToUser, sendNotificationToVendor } = require('../../services/firebaseAdmin');
+const { isVendorEligibleForInstantBooking } = require('../../services/vendorMatchService');
+const { getSlotRules } = require('../../services/slotSettingsService');
+const { creditSalaryEarningForBooking } = require('../../services/salaryEarningService');
 
 /**
  * Get vendor bookings with filters
@@ -14,16 +17,30 @@ const getVendorBookings = async (req, res) => {
     const { status, q, page = 1, limit = 20 } = req.query;
 
     const vId = new mongoose.Types.ObjectId(vendorId);
+    const now = new Date();
 
     // ── Build Base Query ──
     // This Or condition ensures vendors see their own jobs OR relevant unassigned alerts
     const query = {
       $or: [
-        { vendorId: vId, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } },
+        {
+          vendorId: vId,
+          status: { $nin: [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED] },
+          rejectedVendors: { $ne: vId },
+          $or: [
+            { bookingType: 'scheduled' },
+            { bookingType: { $ne: 'scheduled' }, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } }
+          ]
+        },
         {
           vendorId: null,
           status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
-          'potentialVendors.vendorId': vId // Only show jobs where THIS vendor is within range
+          'potentialVendors.vendorId': vId, // Only show jobs broadcast to THIS zone-eligible vendor
+          rejectedVendors: { $ne: vId },    // Exclude jobs this vendor has rejected
+          $or: [
+            { expiresAt: null },
+            { expiresAt: { $gt: now } }
+          ]
         }
       ]
     };
@@ -51,7 +68,7 @@ const getVendorBookings = async (req, res) => {
           ]
         };
       } else if (status === 'assigned') {
-        query.status = { $in: [BOOKING_STATUS.ASSIGNED, 'worker_accepted'] };
+        query.status = { $in: [BOOKING_STATUS.AWAITING_PAYMENT, BOOKING_STATUS.ASSIGNED, 'worker_accepted'] };
       } else {
         query.status = status;
       }
@@ -89,6 +106,8 @@ const getVendorBookings = async (req, res) => {
                   _id: 1,
                   bookingNumber: 1,
                   status: 1,
+                  bookingType: 1,
+                  vendorId: 1,
                   paymentMethod: 1,
                   finalAmount: 1,
                   scheduledDate: 1,
@@ -99,6 +118,8 @@ const getVendorBookings = async (req, res) => {
                   createdAt: 1,
                   'address.addressLine1': 1,
                   'address.city': 1,
+                  'address.lat': 1,
+                  'address.lng': 1,
                   userId: 1,
                   workerId: 1,
                   serviceId: 1,
@@ -118,6 +139,17 @@ const getVendorBookings = async (req, res) => {
       const result = (aggResult && aggResult[0]) || { data: [], total: [] };
       bookings = result.data || [];
       total = result.total?.[0]?.n || 0;
+
+      // Distance from this vendor's last synced location (display-only). Customer
+      // coordinates are not sent to the client.
+      const { getVendorBookingDistanceKm } = require('../../services/locationService');
+      bookings.forEach(b => {
+        b.distance = getVendorBookingDistanceKm(req.user, b.address);
+        if (b.address) {
+          delete b.address.lat;
+          delete b.address.lng;
+        }
+      });
 
       // ── Populate only required fields ──
       if (bookings.length > 0) {
@@ -203,20 +235,51 @@ const acceptBooking = async (req, res) => {
     const vendorId = req.user.id;
     const { id } = req.params;
 
-    // ATOMIC UPDATE: Check status and vendorId in query to prevent race conditions
-    // Only accept if status is REQUESTED/SEARCHING and NO vendor is assigned yet
+    // ATOMIC UPDATE: Check status, vendor eligibility and vendorId in query to
+    // prevent race conditions. Only a vendor broadcast for this zone booking
+    // can accept it, and the first successful update wins.
+    const vObjId = mongoose.Types.ObjectId.isValid(vendorId) ? new mongoose.Types.ObjectId(vendorId) : vendorId;
+    const instantCandidate = await Booking.findOne({
+      _id: id,
+      bookingType: 'instant',
+      status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
+      vendorId: null,
+      'potentialVendors.vendorId': vObjId
+    }).select('bookingType bookedItems hourlyTracking').lean();
+
+    if (instantCandidate) {
+      const slotRules = await getSlotRules();
+      const eligibility = await isVendorEligibleForInstantBooking({
+        vendorId: vObjId,
+        booking: instantCandidate,
+        fixedDurationMins: slotRules.slotServiceDurationMins,
+        now: new Date()
+      });
+
+      if (!eligibility.eligible) {
+        return res.status(409).json({
+          success: false,
+          code: 'INSTANT_BOOKING_CONFLICT',
+          message: 'This instant booking can no longer be accepted before your scheduled booking.'
+        });
+      }
+    }
     const updatedBooking = await Booking.findOneAndUpdate(
       {
         _id: id,
         status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
-        vendorId: null // Crucial: Ensures another request didn't just take it
+        $or: [
+          { vendorId: null },
+          { vendorId: vObjId }
+        ],
+        'potentialVendors.vendorId': vObjId
       },
       {
         $set: {
-          vendorId: vendorId,
+          vendorId: vObjId,
+          vendorAssignmentStatus: 'ACCEPTED',
           acceptedAt: new Date(),
-          // Check payment method for optimized status update logic
-          status: BOOKING_STATUS.CONFIRMED // Default to confirmed
+          status: BOOKING_STATUS.CONFIRMED
         }
       },
       { new: true } // Return updated doc
@@ -225,7 +288,7 @@ const acceptBooking = async (req, res) => {
     if (!updatedBooking) {
       // If update failed, check why (likely already taken)
       const existing = await Booking.findById(id);
-      if (existing && existing.vendorId) {
+      if (existing && existing.vendorId && existing.vendorId.toString() !== vendorId.toString()) {
         return res.status(409).json({ // 409 Conflict
           success: false,
           message: 'Sorry, this job has already been accepted by another vendor.'
@@ -284,10 +347,17 @@ const acceptBooking = async (req, res) => {
       console.log('[AcceptBooking] No other vendors to notify or io not available');
     }
 
+    const paymentRequired = ![
+      PAYMENT_STATUS.SUCCESS,
+      PAYMENT_STATUS.PLAN_COVERED
+    ].includes(booking.paymentStatus);
+    const vendorDisplayName = req.user.businessName || req.user.name || 'your service provider';
+    const userAcceptanceMessage = paymentRequired
+      ? `Your booking ${booking.bookingNumber} has been accepted by ${vendorDisplayName}. Please complete payment before the service can start.`
+      : `Your booking ${booking.bookingNumber} is confirmed! ${vendorDisplayName} will arrive at the scheduled time.`;
+
     // Emit real-time updates to USER
     if (io) {
-      const message = 'Vendor has accepted your request. Your booking is confirmed!';
-
       io.to(`user_${booking.userId}`).emit('booking_accepted', {
         bookingId: booking._id,
         bookingNumber: booking.bookingNumber,
@@ -296,32 +366,45 @@ const acceptBooking = async (req, res) => {
           name: req.user.name,
           businessName: req.user.businessName
         },
-        message
+        message: userAcceptanceMessage,
+        paymentRequired,
+        action: paymentRequired ? 'pay_booking' : 'view_booking'
       });
 
       io.to(`user_${booking.userId}`).emit('booking_updated', {
         bookingId: booking._id,
         status: booking.status,
-        message: 'Vendor has accepted your request'
+        message: userAcceptanceMessage,
+        paymentRequired,
+        action: paymentRequired ? 'pay_booking' : 'view_booking'
       });
     }
 
     // Send notification to user
-    const notificationMessage = `Your booking ${booking.bookingNumber} is confirmed! ${req.user.businessName || req.user.name} will arrive at scheduled time.`;
-
     await createNotification({
       userId: booking.userId,
       type: 'booking_accepted',
-      title: 'Booking Confirmed!',
-      message: notificationMessage,
+      title: paymentRequired ? 'Vendor Accepted - Payment Required' : 'Booking Confirmed!',
+      message: userAcceptanceMessage,
       relatedId: booking._id,
       relatedType: 'booking',
+      data: {
+        bookingId: booking._id.toString(),
+        bookingType: booking.bookingType,
+        paymentRequired,
+        action: paymentRequired ? 'pay_booking' : 'view_booking'
+      },
       pushData: {
         type: 'booking_accepted',
         bookingId: booking._id.toString(),
-        link: `/user/booking/${booking._id}`
+        bookingType: booking.bookingType,
+        paymentRequired,
+        action: paymentRequired ? 'pay_booking' : 'view_booking',
+        link: `/user/booking/${booking._id}`,
+        priority: paymentRequired ? 'high' : 'normal'
         // dataOnly: true // Ensure user sees this
-      }
+      },
+      priority: paymentRequired ? 'high' : 'normal'
     });
 
     // Send Push Notification to user (handled by createNotification)
@@ -359,29 +442,60 @@ const rejectBooking = async (req, res) => {
     const vendorId = req.user.id;
     const { id } = req.params;
     const { reason } = req.body;
+    const actionableStatuses = [BOOKING_STATUS.PENDING, BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING];
 
     // Find booking
+    const vObjId = mongoose.Types.ObjectId.isValid(vendorId) ? new mongoose.Types.ObjectId(vendorId) : vendorId;
     const booking = await Booking.findOne({
       _id: id,
+      vendorId: null,
+      status: { $in: actionableStatuses },
       $or: [
-        { notifiedVendors: vendorId },
+        { vendorId: vObjId },
+        { notifiedVendors: vObjId },
+        { 'potentialVendors.vendorId': vObjId },
         { vendorId: null, status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] } }
       ]
     });
 
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found or not available for rejection'
+      // Decline is intentionally idempotent. A second click, a stale socket
+      // event, or another vendor accepting first should not make the client
+      // show/retry the same alert forever.
+      return res.status(200).json({
+        success: true,
+        ignored: true,
+        message: 'Booking is no longer available for rejection',
+        data: { bookingId: id }
       });
     }
 
-    const validStatuses = [BOOKING_STATUS.PENDING, BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING];
-    if (!validStatuses.includes(booking.status)) {
+    const invalidStatuses = [
+      BOOKING_STATUS.IN_PROGRESS,
+      BOOKING_STATUS.WORK_DONE,
+      BOOKING_STATUS.COMPLETED,
+      BOOKING_STATUS.JOURNEY_STARTED,
+      BOOKING_STATUS.VISITED
+    ];
+    if (invalidStatuses.includes(booking.status)) {
       return res.status(400).json({
         success: false,
         message: `Cannot reject booking with status: ${booking.status}`
       });
+    }
+
+    // Always record vendor in rejectedVendors
+    if (!booking.rejectedVendors) {
+      booking.rejectedVendors = [];
+    }
+    if (!booking.rejectedVendors.some(v => v?.toString() === vendorId.toString())) {
+      booking.rejectedVendors.push(vObjId);
+    }
+
+    // If this vendor was the assigned vendorId, clear assignment
+    if (booking.vendorId && booking.vendorId.toString() === vendorId.toString()) {
+      booking.vendorId = null;
+      booking.vendorAssignmentStatus = 'REJECTED';
     }
 
     // Update BookingRequest for this vendor
@@ -396,12 +510,12 @@ const rejectBooking = async (req, res) => {
     );
 
     // Remove vendor from notifiedVendors (they've responded)
-    booking.notifiedVendors = booking.notifiedVendors.filter(
+    booking.notifiedVendors = (booking.notifiedVendors || []).filter(
       v => v.toString() !== vendorId.toString()
     );
 
     // Remove from potentialVendors too
-    booking.potentialVendors = booking.potentialVendors.filter(
+    booking.potentialVendors = (booking.potentialVendors || []).filter(
       v => v.vendorId?.toString() !== vendorId.toString()
     );
 
@@ -413,7 +527,7 @@ const rejectBooking = async (req, res) => {
 
     const remainingPotential = booking.potentialVendors.length;
 
-    if (pendingRequests === 0 && remainingPotential === 0) {
+    if (pendingRequests === 0 && remainingPotential === 0 && !booking.vendorId) {
       // No vendors left - mark booking as rejected/failed
       booking.status = BOOKING_STATUS.REJECTED;
       booking.cancelledAt = new Date();
@@ -477,6 +591,13 @@ const assignWorker = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Booking not found'
+      });
+    }
+
+    if ([BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED].includes(booking.status)) {
+      return res.status(409).json({
+        success: false,
+        message: 'Cancelled or rejected bookings cannot have a worker assigned.'
       });
     }
 
@@ -551,6 +672,23 @@ const updateBookingStatus = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Booking not found'
+      });
+    }
+
+    // A scheduled booking with a payment-pending slot hold is not a vendor
+    // job yet. Only the payment commit path may turn it into a confirmed job.
+    if (booking.bookingType === 'scheduled' && booking.slotAssignment
+      && booking.slotAssignment?.state !== 'COMMITTED') {
+      return res.status(409).json({ success: false, message: 'This scheduled booking is waiting for customer payment.' });
+    }
+
+    // SLOT (scheduled, fixed-price) bookings are assigned by the system. Vendors
+    // cannot cancel/reject them - only admin or the system can reassign.
+    const isSlotBooking = booking.bookingType === 'scheduled' && !booking.acceptedAt;
+    if (isSlotBooking && [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED].includes(status)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Scheduled slot bookings cannot be cancelled by the vendor. Please contact support.'
       });
     }
 
@@ -767,13 +905,30 @@ const startSelfJob = async (req, res) => {
     // Generate Visit OTP
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
-    // Update booking
-    booking.status = BOOKING_STATUS.JOURNEY_STARTED;
-    booking.journeyStartedAt = new Date();
-    booking.visitOtp = otp;
-    booking.assignedAt = new Date(); // Implicitly assigned to self now
+    // Update booking atomically: a customer cancel that lands first must win,
+    // otherwise this write would resurrect a cancelled (and refunded) booking.
+    const startedAt = new Date();
+    const startedBooking = await Booking.findOneAndUpdate(
+      { _id: booking._id, vendorId, status: { $in: allowed }, journeyStartedAt: null },
+      {
+        $set: {
+          status: BOOKING_STATUS.JOURNEY_STARTED,
+          journeyStartedAt: startedAt,
+          visitOtp: otp,
+          assignedAt: startedAt // Implicitly assigned to self now
+        }
+      },
+      { new: true }
+    );
 
-    await booking.save();
+    if (!startedBooking) {
+      return res.status(409).json({
+        success: false,
+        message: 'This booking is no longer available to start (it may have been cancelled by the customer).'
+      });
+    }
+    booking.status = startedBooking.status;
+    booking.journeyStartedAt = startedBooking.journeyStartedAt;
 
     // Notify user
     const { createNotification } = require('../notificationControllers/notificationController');
@@ -1003,18 +1158,39 @@ const getHourlyServiceStatus = async (req, res) => {
       elapsedMinutes = Math.floor((endRef.getTime() - tracking.serviceStartedAt.getTime()) / 60000);
     }
 
+    // Auto-end service when booked time completes
     if (
       tracking.phase === 'SERVICE_STARTED' &&
-      elapsedMinutes >= tracking.bookedMinutes
+      elapsedMinutes >= (tracking.bookedMinutes || 0)
     ) {
-      tracking.phase = 'BOOKED_TIME_COMPLETED';
-      tracking.bookedTimeCompletedNotifiedAt = new Date();
+      const serviceEndedAt = new Date();
+      tracking.serviceEndedAt = serviceEndedAt;
+      tracking.actualDurationMinutes = tracking.bookedMinutes;
+      tracking.extraDurationMinutes = 0;
+      tracking.extraAmount = 0;
+      tracking.extraPaymentStatus = 'NOT_REQUIRED';
+      tracking.phase = 'ENDED';
+      tracking.workDoneAllowed = true;
       await booking.save();
 
       const io = req.app.get('io');
       if (io) {
-        io.to(`vendor_${vendorId}`).emit('hourly_booked_time_completed', { bookingId: booking._id });
-        io.to(`user_${booking.userId}`).emit('hourly_booked_time_completed', { bookingId: booking._id });
+        io.to(`vendor_${vendorId}`).emit('hourly_service_ended', {
+          bookingId: booking._id,
+          actualDurationMinutes: tracking.bookedMinutes,
+          extraDurationMinutes: 0,
+          extraAmount: 0,
+          extraPaymentRequired: false,
+          autoEnded: true
+        });
+        io.to(`user_${booking.userId}`).emit('hourly_service_ended', {
+          bookingId: booking._id,
+          actualDurationMinutes: tracking.bookedMinutes,
+          extraDurationMinutes: 0,
+          extraAmount: 0,
+          extraPaymentRequired: false,
+          autoEnded: true
+        });
       }
     }
 
@@ -1037,9 +1213,8 @@ const getHourlyServiceStatus = async (req, res) => {
 };
 
 /**
- * End the hourly service. Backend calculates actual duration and any extra
- * amount from serviceStartedAt/serviceEndedAt — never trusts client-supplied
- * durations. Idempotent: a second END call returns the already-computed result.
+ * End the hourly service. Backend calculates actual duration and marks service completed.
+ * Idempotent: a second END call returns the already-computed result.
  */
 const endHourlyService = async (req, res) => {
   try {
@@ -1058,84 +1233,63 @@ const endHourlyService = async (req, res) => {
     }
 
     // Idempotency: already ended, return the existing computed result
-    if (tracking.phase === 'EXTRA_TIME' || tracking.phase === 'ENDED') {
+    if (tracking.phase === 'ENDED' || tracking.phase === 'EXTRA_TIME') {
       return res.status(200).json({
         success: true,
         message: 'Service already ended',
         data: {
           phase: tracking.phase,
           actualDurationMinutes: tracking.actualDurationMinutes,
-          extraDurationMinutes: tracking.extraDurationMinutes,
-          extraAmount: tracking.extraAmount,
-          extraPaymentStatus: tracking.extraPaymentStatus,
-          workDoneAllowed: tracking.workDoneAllowed
+          extraDurationMinutes: tracking.extraDurationMinutes || 0,
+          extraAmount: tracking.extraAmount || 0,
+          extraPaymentStatus: tracking.extraPaymentStatus || 'NOT_REQUIRED',
+          workDoneAllowed: true
         }
       });
     }
 
     const serviceEndedAt = new Date();
-    const actualDurationMinutes = Math.max(0, Math.ceil((serviceEndedAt.getTime() - tracking.serviceStartedAt.getTime()) / 60000));
-    const extraDurationMinutes = Math.max(0, actualDurationMinutes - tracking.bookedMinutes);
+    const rawElapsedMinutes = Math.max(0, Math.ceil((serviceEndedAt.getTime() - tracking.serviceStartedAt.getTime()) / 60000));
+    const actualDurationMinutes = Math.min(rawElapsedMinutes, tracking.bookedMinutes || rawElapsedMinutes);
 
     tracking.serviceEndedAt = serviceEndedAt;
     tracking.actualDurationMinutes = actualDurationMinutes;
-    tracking.extraDurationMinutes = extraDurationMinutes;
-
-    if (extraDurationMinutes > 0) {
-      const rate = tracking.extraHourlyRate || tracking.hourlyRate || 0;
-      tracking.extraAmount = parseFloat(((rate / 60) * extraDurationMinutes).toFixed(2));
-      tracking.extraPaymentStatus = 'PENDING';
-      tracking.phase = 'EXTRA_TIME';
-      tracking.workDoneAllowed = false;
-    } else {
-      tracking.extraAmount = 0;
-      tracking.extraPaymentStatus = 'NOT_REQUIRED';
-      tracking.phase = 'ENDED';
-      tracking.workDoneAllowed = true;
-    }
+    tracking.extraDurationMinutes = 0;
+    tracking.extraAmount = 0;
+    tracking.extraPaymentStatus = 'NOT_REQUIRED';
+    tracking.phase = 'ENDED';
+    tracking.workDoneAllowed = true;
 
     await booking.save();
 
     const io = req.app.get('io');
     if (io) {
+      io.to(`vendor_${vendorId}`).emit('hourly_service_ended', {
+        bookingId: booking._id,
+        actualDurationMinutes,
+        extraDurationMinutes: 0,
+        extraAmount: 0,
+        extraPaymentRequired: false
+      });
       io.to(`user_${booking.userId}`).emit('hourly_service_ended', {
         bookingId: booking._id,
         actualDurationMinutes,
-        extraDurationMinutes,
-        extraAmount: tracking.extraAmount,
-        extraPaymentRequired: extraDurationMinutes > 0
-      });
-    }
-
-    if (extraDurationMinutes > 0) {
-      const { createNotification } = require('../notificationControllers/notificationController');
-      await createNotification({
-        userId: booking.userId,
-        type: 'hourly_extra_payment_required',
-        title: 'Additional Service Payment Required',
-        message: `The service ran ${extraDurationMinutes} minutes beyond the booked time. Please pay ₹${tracking.extraAmount} extra.`,
-        relatedId: booking._id,
-        relatedType: 'booking',
-        priority: 'high',
-        pushData: {
-          type: 'hourly_extra_payment_required',
-          bookingId: booking._id.toString(),
-          extraAmount: tracking.extraAmount,
-          link: `/user/booking/${booking._id}`
-        }
+        extraDurationMinutes: 0,
+        extraAmount: 0,
+        extraPaymentRequired: false
       });
     }
 
     res.status(200).json({
       success: true,
-      message: extraDurationMinutes > 0 ? 'Service ended. Extra time payment required.' : 'Service ended',
+      message: 'Service ended successfully',
       data: {
         phase: tracking.phase,
         actualDurationMinutes,
-        extraDurationMinutes,
-        extraAmount: tracking.extraAmount,
-        extraPaymentStatus: tracking.extraPaymentStatus,
-        workDoneAllowed: tracking.workDoneAllowed
+        extraDurationMinutes: 0,
+        extraAmount: 0,
+        extraPaymentStatus: 'NOT_REQUIRED',
+        workDoneAllowed: true
       }
     });
   } catch (error) {
@@ -1213,6 +1367,7 @@ const completeSelfJob = async (req, res) => {
       booking.vendorBillId = existingBill._id;
       if (photoList.length > 0) booking.workPhotos = photoList;
       await booking.save();
+      await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId });
 
       return res.status(200).json({
         success: true,
@@ -1233,105 +1388,51 @@ const completeSelfJob = async (req, res) => {
     // ── Fetch Settings (frozen snapshot for this bill) ──
     const Settings = require('../../models/Settings');
     const settings = await Settings.findOne({ type: 'global' });
-    const serviceSplitPct = settings?.servicePayoutPercentage ?? 0;
-    const partsSplitPct = settings?.partsPayoutPercentage ?? 0;
+    // Vendor compensation is salary-based; booking bills never use percentage sharing.
+    const serviceSplitPct = 0;
+    const partsSplitPct = 0;
     const serviceGstPct = settings?.serviceGstPercentage ?? 0;
     const partsGstPct = settings?.partsGstPercentage ?? 0;
 
     // ═══════════════════════════════════════════
-    // STEP 1: BUILD LINE ITEMS
+    // STEP 1: ORIGINAL SERVICE ONLY (No extra services or parts)
     // ═══════════════════════════════════════════
-
-    // -- Original booking service (from basePrice) --
-    const originalBase = Number(booking.basePrice) || 0;
+    const originalBase = Number(booking.basePrice) || (Number(booking.finalAmount) ? Number(booking.finalAmount) / (1 + serviceGstPct / 100) : 0);
     const originalGST = parseFloat(((originalBase * serviceGstPct) / 100).toFixed(2));
-
-    // -- Vendor-added services --
-    const billServices = (billDetails?.services || []).map(svc => {
-      const price = Number(svc.price) || 0;
-      const qty = Number(svc.quantity) || 1;
-      const base = price * qty;
-      const gst = parseFloat(((base * serviceGstPct) / 100).toFixed(2));
-      return {
-        catalogId: svc.catalogId || undefined,
-        name: svc.name || 'Service',
-        price,
-        gstPercentage: serviceGstPct,
-        quantity: qty,
-        gstAmount: gst,
-        total: parseFloat((base + gst).toFixed(2)),
-        isOriginal: false
-      };
-    });
-
-    // -- Parts --
-    const billParts = (billDetails?.parts || []).map(part => {
-      const price = Number(part.price) || 0;
-      const qty = Number(part.quantity) || 1;
-      const pGstPct = (part.gstPercentage != null) ? Number(part.gstPercentage) : partsGstPct;
-      const base = price * qty;
-      const gst = parseFloat(((base * pGstPct) / 100).toFixed(2));
-      return {
-        catalogId: part.catalogId || undefined,
-        name: part.name || 'Part',
-        price,
-        gstPercentage: pGstPct,
-        quantity: qty,
-        gstAmount: gst,
-        total: parseFloat((base + gst).toFixed(2))
-      };
-    });
-
-    // ═══════════════════════════════════════════
-    // STEP 2: CALCULATE BASE TOTALS
-    // ═══════════════════════════════════════════
-
-    const vendorServiceBase = billServices.reduce((s, sv) => s + (sv.price * sv.quantity), 0);
-    const totalServiceBase = parseFloat((originalBase + vendorServiceBase).toFixed(2));
-    const totalPartsBase = parseFloat(billParts.reduce((s, p) => s + (p.price * p.quantity), 0).toFixed(2));
-
-    // ═══════════════════════════════════════════
-    // STEP 3: CALCULATE GST TOTALS
-    // ═══════════════════════════════════════════
-
-    const vendorServiceGST = parseFloat(billServices.reduce((s, sv) => s + sv.gstAmount, 0).toFixed(2));
-    const partsGST = parseFloat(billParts.reduce((s, p) => s + p.gstAmount, 0).toFixed(2));
-    const totalGST = parseFloat((originalGST + vendorServiceGST + partsGST).toFixed(2));
-
-    // ═══════════════════════════════════════════
-    // STEP 4: FINAL BILL (what user pays)
-    // ═══════════════════════════════════════════
-
     const visitingCharges = Number(booking.visitingCharges) || 0;
-    const grandTotal = parseFloat((totalServiceBase + totalPartsBase + totalGST + visitingCharges).toFixed(2));
+
+    const totalServiceBase = parseFloat(originalBase.toFixed(2));
+    const totalPartsBase = 0;
+    const vendorServiceBase = 0;
+    const vendorServiceGST = 0;
+    const partsGST = 0;
+    const totalGST = originalGST;
+
+    const grandTotal = booking.finalAmount || parseFloat((totalServiceBase + totalGST + visitingCharges).toFixed(2));
 
     // ═══════════════════════════════════════════
-    // STEP 5: REVENUE SPLIT (internal only)
+    // STEP 2: REVENUE SPLIT (Vendor % on service base)
     // ═══════════════════════════════════════════
-    // Vendor % is applied ONLY on base — never on GST
-
-    const vendorServiceEarning = parseFloat(((totalServiceBase * serviceSplitPct) / 100).toFixed(2));
-    const vendorPartsEarning = parseFloat(((totalPartsBase * partsSplitPct) / 100).toFixed(2));
-    const vendorTotalEarning = parseFloat((vendorServiceEarning + vendorPartsEarning).toFixed(2));
-    const companyRevenue = parseFloat((grandTotal - vendorTotalEarning).toFixed(2));
+    const vendorServiceEarning = 0;
+    const vendorPartsEarning = 0;
+    const vendorTotalEarning = 0;
+    const companyRevenue = parseFloat(grandTotal.toFixed(2));
 
     // ═══════════════════════════════════════════
-    // STEP 6: PERSIST BILL
+    // STEP 3: PERSIST BILL
     // ═══════════════════════════════════════════
-
-    // Include original service as line item for completeness
     const allServices = [
       {
-        name: booking.serviceName || 'Original Service',
+        name: booking.serviceName || 'Service',
         price: originalBase,
         gstPercentage: serviceGstPct,
         quantity: 1,
         gstAmount: originalGST,
         total: parseFloat((originalBase + originalGST).toFixed(2)),
         isOriginal: true
-      },
-      ...billServices
+      }
     ];
+    const billParts = [];
 
     const bill = await VendorBill.create({
       bookingId: booking._id,
@@ -1343,15 +1444,15 @@ const completeSelfJob = async (req, res) => {
 
       // Base totals
       originalServiceBase: originalBase,
-      vendorServiceBase,
+      vendorServiceBase: 0,
       totalServiceBase,
-      totalPartsBase,
+      totalPartsBase: 0,
       visitingCharges,
 
       // GST totals
       originalGST,
-      vendorServiceGST,
-      partsGST,
+      vendorServiceGST: 0,
+      partsGST: 0,
       totalGST,
 
       // Bill total
@@ -1367,7 +1468,7 @@ const completeSelfJob = async (req, res) => {
 
       // Revenue split
       vendorServiceEarning,
-      vendorPartsEarning,
+      vendorPartsEarning: 0,
       vendorTotalEarning,
       companyRevenue,
 
@@ -1405,6 +1506,7 @@ const completeSelfJob = async (req, res) => {
     booking.markModified('workDoneDetails');
 
     await booking.save();
+    await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId });
 
     // ── Notify user (wrapped in try/catch to avoid failing response on notif error) ──
     try {
@@ -1509,7 +1611,7 @@ const collectSelfCash = async (req, res) => {
     if (!bill) return res.status(500).json({ success: false, message: 'Bill not found — cannot process payment' });
 
     const grandTotal = Number(bill.grandTotal) || 0;
-    const vendorEarning = Number(bill.vendorTotalEarning) || 0;
+    const vendorEarning = 0;
 
     // ── Update Booking status ──
     booking.status = BOOKING_STATUS.COMPLETED;
@@ -1522,6 +1624,7 @@ const collectSelfCash = async (req, res) => {
     booking.completedAt = new Date();
     booking.paymentOtp = undefined;
     await booking.save();
+    await creditSalaryEarningForBooking({ bookingId: booking._id, vendorId });
 
     // ── Update VendorBill status ──
     bill.status = 'paid';

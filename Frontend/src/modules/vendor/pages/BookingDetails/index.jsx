@@ -34,6 +34,9 @@ export default function BookingDetails() {
   const [isWorkDoneModalOpen, setIsWorkDoneModalOpen] = useState(false);
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const isTerminalBooking = ['cancelled', 'rejected'].includes(
+    String(booking?.status || '').toLowerCase()
+  );
 
 
   const [actionLoading, setActionLoading] = useState(false);
@@ -103,24 +106,18 @@ export default function BookingDetails() {
         tax: parseFloat(apiData.tax || 0),
         visitingCharges: parseFloat(apiData.visitingCharges || apiData.visitationFee || (apiData.paymentMethod === 'plan_benefit' ? 49 : 0)),
         discount: parseFloat(apiData.discount || 0),
-        platformCommission: parseFloat(apiData.adminCommission || apiData.platformFee || apiData.commission || 0),
         finalAmount: parseFloat(apiData.finalAmount || 0),
-        vendorEarnings: parseFloat(
-          billData?.vendorTotalEarning ||
-          apiData.vendorEarnings ||
-          (apiData.paymentMethod === 'plan_benefit'
-            ? (Number(apiData.basePrice || 0) * 0.7) // Fallback: 70% share from base
-            : (apiData.finalAmount ? apiData.finalAmount - (apiData.commission || 0) : 0)
-          )
-        ),
+        // Salary earnings are calculated by the backend from worked duration and
+        // the vendor's configured hourly/30-minute rate.
+        vendorEarnings: parseFloat(billData?.vendorTotalEarning || apiData.vendorEarnings || 0),
 
-        // Display Price (Vendor Earnings by default as requested)
-        price: (apiData.vendorEarnings || (apiData.finalAmount ? apiData.finalAmount - (apiData.commission || 0) : 0)).toFixed(2),
+        price: parseFloat(apiData.finalAmount || 0).toFixed(2),
 
         timeSlot: {
           date: apiData.scheduledDate ? new Date(apiData.scheduledDate).toLocaleDateString() : 'Today',
           time: apiData.scheduledTime || apiData.timeSlot?.start ? `${apiData.timeSlot.start} - ${apiData.timeSlot.end}` : 'Flexible'
         },
+        bookingType: apiData.bookingType,
         status: apiData.status,
         description: apiData.description || apiData.notes || 'No description provided',
         assignedTo: apiData.workerId ? { name: apiData.workerId.name } : (apiData.assignedAt ? { name: 'You (Self)' } : null),
@@ -191,7 +188,7 @@ export default function BookingDetails() {
 
           if (isPaymentSuccess) {
             toast.success('Online Payment Received!');
-            setTimeout(() => window.location.reload(), 1500);
+            loadBooking();
           }
         }
       };
@@ -260,7 +257,8 @@ export default function BookingDetails() {
       await verifySelfVisit(id, otp, location);
       toast.success('Visit Verified');
       setIsVisitModalOpen(false);
-      window.location.reload();
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
+      await loadBooking();
     } catch (error) {
       console.error("Geo Error:", error);
       if (error.code === 1) toast.error('Location permission denied');
@@ -424,7 +422,8 @@ export default function BookingDetails() {
       const res = await vendorWalletService.confirmCashCollection(id, amount, code, extras);
       if (res.success) {
         toast.success('Payment verified successfully!');
-        window.location.reload();
+        window.dispatchEvent(new Event('vendorJobsUpdated'));
+        await loadBooking();
       }
       return res;
     } catch (error) {
@@ -479,7 +478,7 @@ export default function BookingDetails() {
           if (response && response.success) {
             toast.success('Assigned to yourself successfully');
             window.dispatchEvent(new Event('vendorJobsUpdated'));
-            window.location.reload();
+            await loadBooking();
           } else {
             throw new Error(response?.message || 'Failed to assign');
           }
@@ -494,6 +493,13 @@ export default function BookingDetails() {
   };
 
   const handleStartJourney = async () => {
+    const isScheduledPaymentPending = booking.bookingType === 'scheduled'
+      && booking.status === 'awaiting_payment';
+    if (isScheduledPaymentPending) {
+      toast.error('Waiting for customer payment. You can start the journey once payment is completed.');
+      return;
+    }
+
     // If self-job, call the start API first
     if (booking.assignedTo?.name === 'You (Self)') {
       const isPaymentComplete = booking.paymentStatus === 'success' || booking.paymentStatus === 'plan_covered';
@@ -533,7 +539,8 @@ export default function BookingDetails() {
       await completeSelfJob(id, { workPhotos: photos, workDoneDetails: { notes } });
       toast.success('Work marked done');
       setIsWorkDoneModalOpen(false);
-      window.location.reload();
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
+      await loadBooking();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to complete job');
     } finally {
@@ -553,7 +560,7 @@ export default function BookingDetails() {
           await updateBookingStatus(id, 'completed');
           window.dispatchEvent(new Event('vendorJobsUpdated'));
           toast.success('Work Approved! You can now pay the worker.');
-          window.location.reload();
+          await loadBooking();
         } catch (error) {
           console.error('Error approving work:', error);
           toast.error('Failed to approve work');
@@ -606,8 +613,20 @@ export default function BookingDetails() {
   const originalGST = bill ? (bill.originalGST || 0) : (parseFloat(booking?.tax) || 0);
   const totalGST = originalGST + extraServiceGST + partsGST;
 
-  // Final Total from bill or booking
-  const finalTotal = bill?.grandTotal || (booking?.finalAmount || 0);
+  // Keep the vendor-facing payment summary identical to the user-facing summary.
+  // The booking fields are the canonical customer-facing amounts; the bill is
+  // only used as a fallback for older records that do not have them.
+  const paymentBase = Number(booking?.basePrice || bill?.originalServiceBase || 0);
+  const paymentDiscount = Number(booking?.discount || 0);
+  const paymentTax = Number(booking?.tax ?? (bill ? totalGST : 0)) || 0;
+  const paymentVisitingCharges = Number(
+    booking?.visitingCharges || booking?.visitationFee || bill?.visitingCharges || 0
+  ) || 0;
+  const paymentInstantBookingFee = Number(booking?.instantBookingCharges || 0);
+  const paymentTotal = isPlanBenefit
+    ? 0
+    : Number(booking?.finalAmount || booking?.totalAmount || bill?.grandTotal || 0);
+  const finalTotal = paymentTotal;
   const hasBill = !!bill;
 
   return (
@@ -623,6 +642,11 @@ export default function BookingDetails() {
               <p className="text-base font-bold text-[#720C3E] leading-tight mt-0.5">
                 {booking.serviceType}
               </p>
+              <span className={`inline-flex mt-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md border ${booking.bookingType === 'scheduled'
+                ? 'bg-blue-50 text-blue-700 border-blue-100'
+                : 'bg-orange-50 text-orange-700 border-orange-100'}`}>
+                {booking.bookingType === 'scheduled' ? 'Slot Booking' : 'Instant Booking'}
+              </span>
             </div>
             <div className="flex flex-col items-end gap-1">
               <div
@@ -822,7 +846,77 @@ export default function BookingDetails() {
           </div>
 
           <div className="p-3 space-y-2.5 text-xs">
-            {/* Services Section */}
+            {/* Customer Payment Summary */}
+            <div>
+              <h4 className="font-bold text-gray-900 flex items-center gap-1.5 mb-2 pb-1.5 border-b border-gray-100 text-xs">
+                <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px]"><FiDollarSign /></span>
+                Payment Summary
+              </h4>
+              <div className="space-y-1.5 pl-1 text-xs">
+                <div className="flex justify-between text-gray-600">
+                  <span>Base Price</span>
+                  {isPlanBenefit ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="line-through text-gray-400 text-[11px]">&#8377;{paymentBase.toLocaleString('en-IN')}</span>
+                      <span className="text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100">FREE</span>
+                    </div>
+                  ) : (
+                    <span className="font-medium text-gray-900">&#8377;{paymentBase.toLocaleString('en-IN')}</span>
+                  )}
+                </div>
+
+                {!isPlanBenefit && paymentDiscount > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span className="text-green-600 font-medium">Discount</span>
+                    <span className="font-medium text-green-600">-&#8377;{paymentDiscount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {(paymentTax > 0 || isPlanBenefit) && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Taxes &amp; GST</span>
+                    {isPlanBenefit ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="line-through text-gray-400 text-[11px]">&#8377;{paymentTax.toLocaleString('en-IN')}</span>
+                        <span className="text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100">FREE</span>
+                      </div>
+                    ) : (
+                      <span className="font-medium text-gray-900">&#8377;{paymentTax.toLocaleString('en-IN')}</span>
+                    )}
+                  </div>
+                )}
+
+                {(paymentVisitingCharges > 0 || isPlanBenefit) && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Convenience Fee</span>
+                    {isPlanBenefit ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="line-through text-gray-400 text-[11px]">&#8377;{paymentVisitingCharges.toLocaleString('en-IN')}</span>
+                        <span className="text-emerald-600 font-bold text-[9px] bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100">FREE</span>
+                      </div>
+                    ) : (
+                      <span className="font-medium text-gray-900">&#8377;{paymentVisitingCharges.toLocaleString('en-IN')}</span>
+                    )}
+                </div>
+                )}
+
+                {paymentInstantBookingFee > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Instant Booking Fee</span>
+                    <span className="font-medium text-gray-900">&#8377;{paymentInstantBookingFee.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between font-bold text-gray-900 border-t border-slate-200 pt-2 mt-1">
+                  <span>Total Paid</span>
+                  <span>&#8377;{paymentTotal.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
+
+            {false && (
+              <>
+                {/* Services Section */}
             <div>
               <h4 className="font-bold text-gray-900 flex items-center gap-1.5 mb-2 pb-1.5 border-b border-gray-100 text-xs">
                 <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px]"><FiTool /></span>
@@ -861,6 +955,8 @@ export default function BookingDetails() {
                 </div>
               </div>
             </div>
+              </>
+            )}
 
             {/* Parts Section */}
             {(parts.length > 0 || customItems.length > 0) && (
@@ -901,7 +997,9 @@ export default function BookingDetails() {
               </div>
             )}
 
-            {/* Visiting Charges */}
+            {false && (
+              <>
+                {/* Visiting Charges */}
             {(booking.visitingCharges > 0 || bill?.visitingCharges > 0) && (
               <div>
                 <h4 className="font-bold text-gray-900 flex items-center gap-1.5 mb-1.5 pb-1 border-b border-gray-100 text-xs">
@@ -913,6 +1011,8 @@ export default function BookingDetails() {
                   <span>₹{(bill?.visitingCharges || booking.visitingCharges || 0).toFixed(2)}</span>
                 </div>
               </div>
+            )}
+              </>
             )}
 
             {/* Transport Charges */}
@@ -930,36 +1030,16 @@ export default function BookingDetails() {
             )}
           </div>
 
-          {/* Vendor Earnings Footer - ONLY SHOW WHEN COMPLETED */}
+          {/* Salary Earnings Footer - ONLY SHOW WHEN COMPLETED */}
           {(booking.status === 'completed' || booking.status === 'work_done' || booking.cashCollected) ? (
             <div className="bg-emerald-50 px-4 py-3 border-t border-emerald-100">
-              <div className="space-y-1.5 mb-2 text-xs">
-                <div className="flex justify-between items-center text-emerald-700">
-                  <span>Service Earnings ({bill?.payoutConfig?.serviceSplitPercentage || 70}%)</span>
-                  <span className="font-bold">₹{(bill?.vendorServiceEarning || (booking.vendorEarnings || 0)).toFixed(2)}</span>
-                </div>
-                {(parts.length > 0 || customItems.length > 0 || bill?.vendorPartsEarning > 0) && (
-                  <div className="flex justify-between items-center text-emerald-700">
-                    <span>Parts Earnings ({bill?.payoutConfig?.partsSplitPercentage || 10}%)</span>
-                    <span className="font-bold">₹{(bill?.vendorPartsEarning || 0).toFixed(2)}</span>
-                  </div>
-                )}
+              <div className="flex justify-between items-center text-emerald-800">
+                <span className="font-bold text-[10px] uppercase tracking-wider">Salary earning</span>
+                <span className="font-bold text-xs">Added to Earning</span>
               </div>
-              <div className="flex justify-between items-center pt-1.5 border-t border-emerald-200/50">
-                <span className="text-emerald-800 font-bold text-[10px] uppercase tracking-wider">
-                  {(booking?.paymentStatus === 'SUCCESS' || booking?.paymentStatus === 'paid' || booking?.cashCollected)
-                    ? 'Total Net Earnings'
-                    : 'Estimated Net Earnings'}
-                </span>
-                <span className="text-emerald-700 font-black text-base">
-                  ₹{(bill?.vendorTotalEarning || booking.vendorEarnings || 0).toFixed(2)}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-emerald-600/70 text-[9px] mt-1">
-                <span>Platform Commission</span>
-                <span>-₹{(booking.adminCommission || booking.platformCommission || 0).toFixed(2)}</span>
-              </div>
+              <p className="text-emerald-700/80 text-[10px] mt-1">
+                This booking is calculated from worked duration and your configured salary rate.
+              </p>
             </div>
           ) : (
             <div className="bg-gray-50 px-3 py-2 border-t border-gray-100/50 text-center">
@@ -1027,7 +1107,7 @@ export default function BookingDetails() {
         )}
 
         {/* Worker & Job Status Card (Enhanced) */}
-        {booking.assignedTo && booking.assignedTo?.name !== 'You (Self)' && (
+        {booking.assignedTo && booking.assignedTo?.name !== 'You (Self)' && !isTerminalBooking && (
           <div className="bg-white rounded-2xl p-5 mb-5 shadow-lg border border-gray-100">
             <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-100">
               <div className="flex items-center gap-3">
@@ -1373,25 +1453,28 @@ export default function BookingDetails() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleViewTimeline}
+              onClick={isTerminalBooking ? undefined : handleViewTimeline}
+              disabled={isTerminalBooking}
               className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs border border-[#720C3E]/20"
               style={{
-                background: '#FCEBF3',
-                color: '#720C3E',
+                background: isTerminalBooking ? '#F3F4F6' : '#FCEBF3',
+                color: isTerminalBooking ? '#9CA3AF' : '#720C3E',
+                opacity: isTerminalBooking ? 0.55 : 1,
               }}
             >
               <span>Timeline</span>
               <FiArrowRight className="w-3.5 h-3.5" />
             </button>
 
-            {(booking.status === 'confirmed' || booking.status === 'assigned') && (() => {
+            {(booking.status === 'confirmed' || booking.status === 'assigned' || (booking.bookingType === 'scheduled' && booking.status === 'awaiting_payment')) && (() => {
               const isSelfJob = booking.assignedTo?.name === 'You (Self)';
               const isPaymentComplete = booking.paymentStatus === 'success' || booking.paymentStatus === 'plan_covered';
-              const journeyDisabled = isSelfJob && !isPaymentComplete;
+              const journeyDisabled = (booking.bookingType === 'scheduled' && booking.status === 'awaiting_payment') || (isSelfJob && !isPaymentComplete);
               return (
                 <button
                   type="button"
                   onClick={handleStartJourney}
+                  disabled={journeyDisabled || loading}
                   className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs ${journeyDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   style={{
                     background: journeyDisabled ? '#9CA3AF' : 'linear-gradient(135deg, #10B981, #059669)',
@@ -1490,7 +1573,11 @@ export default function BookingDetails() {
         isOpen={isVisitModalOpen}
         onClose={() => setIsVisitModalOpen(false)}
         bookingId={id}
-        onSuccess={() => window.location.reload()}
+        onSuccess={() => {
+          setIsVisitModalOpen(false);
+          window.dispatchEvent(new Event('vendorJobsUpdated'));
+          loadBooking();
+        }}
       />
 
       {/* Unified Worker Completion Modal - REUSABLE COMPONENT */}
@@ -1507,7 +1594,8 @@ export default function BookingDetails() {
             await completeSelfJob(id, { workPhotos: photos, workDoneDetails: { notes } });
             toast.success('Work marked done');
             setIsWorkDoneModalOpen(false);
-            window.location.reload();
+            window.dispatchEvent(new Event('vendorJobsUpdated'));
+            await loadBooking();
           } catch (err) {
             toast.error(err.response?.data?.message || 'Failed to complete job');
           } finally {

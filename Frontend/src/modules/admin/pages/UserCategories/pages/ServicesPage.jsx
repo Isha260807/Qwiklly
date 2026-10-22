@@ -11,13 +11,24 @@ import {
   FiDollarSign,
   FiUploadCloud,
   FiLayout,
-  FiExternalLink
+  FiExternalLink,
+  FiAlertTriangle,
+  FiInfo,
+  FiCheckCircle,
+  FiLayers,
+  FiShoppingCart,
+  FiTag,
+  FiImage,
+  FiShield,
+  FiClock,
+  FiMapPin
 } from "react-icons/fi";
 import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
 import Modal from "../components/Modal";
 import { toAssetUrl } from "../utils";
 import { serviceService } from "../../../../../services/catalogService";
+import { zoneService } from "../../../../../services/zoneService";
 
 const initialServiceForm = {
   title: "",
@@ -29,21 +40,27 @@ const initialServiceForm = {
   originalPrice: "",
   discountPrice: "",
   pricingType: "FIXED",
+  pricePerUnit: "",
+  billingUnitMinutes: 30,
+  minDurationMinutes: 30,
+  maxDurationMinutes: 240,
   hourlyRate: "",
   minHours: 1,
   maxHours: 8,
   allowCustomHours: false,
   allowExtraHours: true,
   allowExtraParts: true,
-  gstPercentage: 18,
-  rating: 4.9,
-  ratingCount: "237.6k",
-  status: "active"
+  rating: "",
+  ratingCount: "",
+  status: "active",
+  zoneIds: []
 };
 
-const ServicesPage = ({ selectedCity }) => {
+const ServicesPage = () => {
   const navigate = useNavigate();
   const [services, setServices] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [zoneFilter, setZoneFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -51,17 +68,47 @@ const ServicesPage = ({ selectedCity }) => {
   const [formData, setFormData] = useState(initialServiceForm);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [canEditZoneAssignments, setCanEditZoneAssignments] = useState(false);
+  const [formZoneOptions, setFormZoneOptions] = useState([]);
 
   // Delete Confirmation Modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [serviceToDelete, setServiceToDelete] = useState(null);
+  const [loadingImpact, setLoadingImpact] = useState(false);
+  const [serviceImpact, setServiceImpact] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedData = sessionStorage.getItem('adminData') || localStorage.getItem('adminData');
+      const adminData = JSON.parse(storedData || '{}');
+      // Catalog admins may assign an existing admin-created zone to a
+      // service. Zone Management permission is only needed for zone CRUD.
+      setCanEditZoneAssignments(
+        adminData.role === 'super_admin' ||
+        !Array.isArray(adminData.permissions) ||
+        adminData.permissions?.includes('catalog')
+      );
+    } catch (error) {
+      setCanEditZoneAssignments(false);
+    }
+  }, []);
+
+  const fetchZones = async () => {
+    try {
+      const res = await zoneService.getAll();
+      if (res.success) setZones(res.zones);
+    } catch (error) {
+      // silent - zone assignment section just stays empty
+    }
+  };
 
   // Fetch Services from API
   const fetchServices = async () => {
     try {
       setLoading(true);
       const params = {};
-      if (selectedCity) params.cityId = selectedCity;
+      if (zoneFilter) params.zoneId = zoneFilter;
       if (searchTerm) params.search = searchTerm;
 
       const res = await serviceService.getAll(params);
@@ -79,8 +126,12 @@ const ServicesPage = ({ selectedCity }) => {
   };
 
   useEffect(() => {
+    fetchZones();
+  }, []);
+
+  useEffect(() => {
     fetchServices();
-  }, [selectedCity]);
+  }, [zoneFilter]);
 
   // Debounced search
   useEffect(() => {
@@ -100,16 +151,28 @@ const ServicesPage = ({ selectedCity }) => {
     );
   }, [services, searchTerm]);
 
+  const formZoneChoices = zones.length ? zones : formZoneOptions;
+
   // Open Modal for Add
   const handleOpenAdd = () => {
     setEditingServiceId(null);
     setFormData(initialServiceForm);
+    setFormZoneOptions([]);
     setIsModalOpen(true);
   };
 
   // Open Modal for Edit
   const handleOpenEdit = (service) => {
     setEditingServiceId(service._id || service.id);
+    const pType = service.pricingType === "DURATION" ? "DURATION" : (service.pricingType === "HOURLY" ? "DURATION" : "FIXED");
+    const billingUnit = Number(service.billingUnitMinutes ?? service.durationPricing?.billingUnitMinutes ?? 30);
+    const pUnit = service.pricePerUnit ?? service.durationPricing?.pricePerUnit ?? service.pricePer30Minutes ?? (service.hourlyRate ? service.hourlyRate * (billingUnit / 60) : (service.basePrice || ""));
+    const minM = service.minDurationMinutes ?? service.durationPricing?.minDurationMinutes ?? (service.minHours ? service.minHours * 60 : billingUnit);
+    const maxM = service.maxDurationMinutes ?? service.durationPricing?.maxDurationMinutes ?? (service.maxHours ? service.maxHours * 60 : 240);
+    setFormZoneOptions((service.zoneIds || [])
+      .filter(zone => typeof zone === 'object' && (zone._id || zone.id))
+      .map(zone => ({ _id: zone._id || zone.id, name: zone.name || 'Assigned zone' })));
+
     setFormData({
       title: service.title || "",
       tagline: service.tagline || "",
@@ -119,19 +182,33 @@ const ServicesPage = ({ selectedCity }) => {
       basePrice: service.basePrice ?? "",
       originalPrice: service.originalPrice ?? "",
       discountPrice: service.discountPrice ?? "",
-      pricingType: service.pricingType === "HOURLY" ? "HOURLY" : "FIXED",
+      pricingType: pType,
+      pricePerUnit: pUnit,
+      billingUnitMinutes: billingUnit,
+      minDurationMinutes: minM,
+      maxDurationMinutes: maxM,
       hourlyRate: service.hourlyRate ?? "",
       minHours: service.minHours ?? 1,
       maxHours: service.maxHours ?? 8,
       allowCustomHours: service.allowCustomHours ?? false,
       allowExtraHours: service.allowExtraHours ?? true,
       allowExtraParts: service.allowExtraParts ?? true,
-      gstPercentage: service.gstPercentage ?? 18,
-      rating: service.rating ?? 4.9,
-      ratingCount: service.ratingCount || "237.6k",
-      status: service.status || "active"
+      rating: service.adminRating ?? "",
+      ratingCount: "",
+      status: service.status || "active",
+      zoneIds: (service.zoneIds || []).map(z => (typeof z === "object" ? z._id : z))
     });
     setIsModalOpen(true);
+  };
+
+  const toggleFormZone = (zoneId) => {
+    if (!canEditZoneAssignments) return;
+    setFormData(prev => ({
+      ...prev,
+      zoneIds: prev.zoneIds.includes(zoneId)
+        ? prev.zoneIds.filter(id => id !== zoneId)
+        : [...prev.zoneIds, zoneId]
+    }));
   };
 
   // Image Upload Handler
@@ -165,46 +242,73 @@ const ServicesPage = ({ selectedCity }) => {
       return;
     }
 
-    if (formData.basePrice === "" || isNaN(formData.basePrice)) {
-      toast.error("Valid base price is required");
-      return;
-    }
-
-    if (formData.pricingType === "HOURLY") {
-      if (formData.hourlyRate === "" || isNaN(formData.hourlyRate) || Number(formData.hourlyRate) <= 0) {
-        toast.error("Valid hourly rate is required for hourly services");
+    if (formData.pricingType === "DURATION") {
+      const unit = Number(formData.billingUnitMinutes) || 30;
+      if (formData.pricePerUnit === "" || isNaN(formData.pricePerUnit) || Number(formData.pricePerUnit) <= 0) {
+        toast.error("Valid price per billing unit is required");
         return;
       }
-      if (Number(formData.minHours) > Number(formData.maxHours)) {
-        toast.error("Minimum hours cannot be greater than maximum hours");
+      const minM = Number(formData.minDurationMinutes) || unit;
+      const maxM = Number(formData.maxDurationMinutes) || 240;
+      if (minM < unit || minM % unit !== 0) {
+        toast.error(`Minimum duration must be at least ${unit} minutes and a multiple of the billing unit`);
+        return;
+      }
+      if (maxM < minM || maxM % unit !== 0) {
+        toast.error(`Maximum duration must be greater than or equal to minimum duration and a multiple of ${unit}`);
+        return;
+      }
+    } else {
+      if (formData.basePrice === "" || isNaN(formData.basePrice)) {
+        toast.error("Valid base price is required");
         return;
       }
     }
 
     try {
       setSaving(true);
+      const isDur = formData.pricingType === "DURATION";
+      const unit = isDur ? (Number(formData.billingUnitMinutes) || 30) : 30;
+      const pUnit = isDur ? Number(formData.pricePerUnit) : null;
+      const minM = isDur ? (Number(formData.minDurationMinutes) || unit) : 30;
+      const maxM = isDur ? (Number(formData.maxDurationMinutes) || 240) : 240;
+
       const payload = {
         title: formData.title.trim(),
         tagline: formData.tagline?.trim(),
         description: formData.description?.trim(),
         badge: formData.badge?.trim() || null,
         iconUrl: formData.iconUrl || null,
-        basePrice: Number(formData.basePrice),
+        basePrice: isDur ? pUnit : Number(formData.basePrice),
+        fixedPrice: isDur ? null : Number(formData.basePrice),
         originalPrice: formData.originalPrice ? Number(formData.originalPrice) : 0,
         discountPrice: formData.discountPrice ? Number(formData.discountPrice) : null,
-        pricingType: formData.pricingType === "HOURLY" ? "HOURLY" : "FIXED",
-        hourlyRate: formData.pricingType === "HOURLY" ? Number(formData.hourlyRate) : null,
-        minHours: Number(formData.minHours) || 1,
-        maxHours: Number(formData.maxHours) || 8,
+        pricingType: isDur ? "DURATION" : "FIXED",
+        pricePerUnit: pUnit,
+        billingUnitMinutes: unit,
+        // Legacy 30-minute fields for older consumers.
+        pricePer30Minutes: isDur && unit === 30 ? pUnit : null,
+        minDurationMinutes: minM,
+        maxDurationMinutes: maxM,
+        durationStepMinutes: unit,
+        durationPricing: isDur ? {
+          pricePerUnit: pUnit,
+          billingUnitMinutes: unit,
+          pricePer30Minutes: unit === 30 ? pUnit : null,
+          minDurationMinutes: minM,
+          maxDurationMinutes: maxM,
+          durationStepMinutes: unit
+        } : undefined,
+        // Legacy hourly rate bridge for vendor timers
+        hourlyRate: isDur ? (pUnit * (60 / unit)) : null,
+        minHours: isDur ? (minM / 60) : 1,
+        maxHours: isDur ? (maxM / 60) : 8,
         allowCustomHours: !!formData.allowCustomHours,
         allowExtraHours: !!formData.allowExtraHours,
         allowExtraParts: !!formData.allowExtraParts,
-        gstPercentage: Number(formData.gstPercentage) || 18,
-        rating: Number(formData.rating) || 4.9,
-        ratingCount: formData.ratingCount || "237.6k",
+        adminRating: formData.rating === "" || formData.rating === null ? null : Number(formData.rating),
         status: formData.status || "active",
-        cityId: selectedCity || null,
-        cityIds: selectedCity ? [selectedCity] : []
+        zoneIds: formData.zoneIds || []
       };
 
       if (editingServiceId) {
@@ -252,23 +356,68 @@ const ServicesPage = ({ selectedCity }) => {
     }
   };
 
-  // Delete Service
-  const handleConfirmDelete = async () => {
+  // Open Delete Modal with Impact Analysis
+  const handleOpenDelete = async (service) => {
+    setServiceToDelete(service);
+    setServiceImpact(null);
+    setDeleteModalOpen(true);
+    setLoadingImpact(true);
+    try {
+      const res = await serviceService.getImpact(service._id || service.id);
+      if (res.success) {
+        setServiceImpact(res.data);
+      }
+    } catch (error) {
+      console.error("Failed to load service impact:", error);
+    } finally {
+      setLoadingImpact(false);
+    }
+  };
+
+  // Safe Deactivate from Delete Modal
+  const handleDeactivateFromDeleteModal = async () => {
     if (!serviceToDelete) return;
     const id = serviceToDelete._id || serviceToDelete.id;
-
+    setDeleting(true);
     try {
-      const res = await serviceService.delete(id);
+      const res = await serviceService.update(id, { status: "inactive" });
       if (res.success) {
-        toast.success("Service deleted successfully");
+        toast.success("Service safely deactivated (hidden from customers)");
         setDeleteModalOpen(false);
         setServiceToDelete(null);
+        window.dispatchEvent(new Event('adminUserAppCatalogUpdated'));
+        fetchServices();
+      } else {
+        toast.error(res.message || "Failed to deactivate service");
+      }
+    } catch (error) {
+      toast.error("Failed to deactivate service");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Permanent Delete Service (with cascade cleanup)
+  const handleConfirmDelete = async (force = false) => {
+    if (!serviceToDelete) return;
+    const id = serviceToDelete._id || serviceToDelete.id;
+    setDeleting(true);
+
+    try {
+      const res = await serviceService.delete(id, force);
+      if (res.success) {
+        toast.success("Service deleted and all linked references safely cleaned up");
+        setDeleteModalOpen(false);
+        setServiceToDelete(null);
+        window.dispatchEvent(new Event('adminUserAppCatalogUpdated'));
         fetchServices();
       } else {
         toast.error(res.message || "Failed to delete service");
       }
     } catch (error) {
-      toast.error("Failed to delete service");
+      toast.error(error?.response?.data?.message || "Failed to delete service");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -291,6 +440,16 @@ const ServicesPage = ({ selectedCity }) => {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Zone Filter */}
+          <select
+            value={zoneFilter}
+            onChange={(e) => setZoneFilter(e.target.value)}
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+          >
+            <option value="">All Zones</option>
+            {zones.map(z => <option key={z._id} value={z._id}>{z.name}</option>)}
+          </select>
+
           {/* Search Box */}
           <div className="relative">
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
@@ -354,6 +513,15 @@ const ServicesPage = ({ selectedCity }) => {
             const id = service._id || service.id;
             const hasDiscount =
               service.originalPrice && service.originalPrice > service.basePrice;
+            const assignedZoneNames = (service.zoneIds || [])
+              .map((zone) => {
+                if (typeof zone === 'object') return zone.name;
+                return zones.find((item) => String(item._id) === String(zone))?.name;
+              })
+              .filter(Boolean);
+            const zoneLabel = assignedZoneNames.length
+              ? assignedZoneNames.join(', ')
+              : 'All Zones';
 
             return (
               <div
@@ -379,10 +547,10 @@ const ServicesPage = ({ selectedCity }) => {
                     </span>
                   )}
 
-                  {/* Hourly Badge */}
-                  {service.pricingType === "HOURLY" && (
+                  {/* Duration / Hourly Badge */}
+                  {(service.pricingType === "DURATION" || service.pricingType === "HOURLY") && (
                     <span className="absolute bottom-2.5 left-2.5 px-2.5 py-0.5 bg-[#720C3E] text-white text-[10px] font-black uppercase tracking-wider rounded-md shadow-sm">
-                      Hourly
+                      Duration Based
                     </span>
                   )}
 
@@ -409,17 +577,24 @@ const ServicesPage = ({ selectedCity }) => {
                         {service.tagline}
                       </p>
                     )}
+                    <div
+                      className='mt-2 flex items-center gap-1 text-[10px] text-slate-500'
+                      title={'Assigned zones: ' + zoneLabel}
+                    >
+                      <FiMapPin className='w-3 h-3 shrink-0 text-[#720C3E]' />
+                      <span className='truncate'>Zones: {zoneLabel}</span>
+                    </div>
                   </div>
 
                   {/* Pricing & Status Row */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                     <div>
-                      {service.pricingType === "HOURLY" ? (
+                      {service.pricingType === "DURATION" || service.pricingType === "HOURLY" ? (
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-lg font-black text-slate-900">
-                            ₹{service.hourlyRate}
+                            ₹{service.pricePerUnit ?? service.durationPricing?.pricePerUnit ?? service.pricePer30Minutes ?? (service.hourlyRate ? service.hourlyRate * ((service.billingUnitMinutes ?? 30) / 60) : service.basePrice)}
                           </span>
-                          <span className="text-xs text-slate-400 font-medium">/hr</span>
+                          <span className="text-xs text-slate-500 font-semibold">/ {service.billingUnitMinutes ?? service.durationPricing?.billingUnitMinutes ?? 30} mins</span>
                         </div>
                       ) : (
                         <div className="flex items-baseline gap-1.5">
@@ -433,10 +608,10 @@ const ServicesPage = ({ selectedCity }) => {
                           )}
                         </div>
                       )}
-                      <span className="text-[10px] text-slate-400">
-                        {service.pricingType === "HOURLY"
-                          ? `${service.minHours ?? 1}–${service.maxHours ?? 8} hrs`
-                          : `GST: ${service.gstPercentage ?? 18}%`}
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {service.pricingType === "DURATION" || service.pricingType === "HOURLY"
+                          ? `Range: ${service.minDurationMinutes ?? 30}m – ${service.maxDurationMinutes ?? 240}m`
+                          : "GST: Global platform setting"}
                       </span>
                     </div>
 
@@ -471,10 +646,7 @@ const ServicesPage = ({ selectedCity }) => {
                         <FiEdit2 className="text-xs" /> Edit Info
                       </button>
                       <button
-                        onClick={() => {
-                          setServiceToDelete(service);
-                          setDeleteModalOpen(true);
-                        }}
+                        onClick={() => handleOpenDelete(service)}
                         className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
                         title="Delete Service"
                       >
@@ -494,16 +666,16 @@ const ServicesPage = ({ selectedCity }) => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingServiceId ? "Edit Service Info" : "Add New Service"}
-        maxWidth="max-w-xl"
+        maxWidth="max-w-2xl"
       >
-        <form onSubmit={handleSaveService} className="space-y-4">
+        <form onSubmit={handleSaveService} className="admin-service-form-fields space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Service Title <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
-              placeholder="e.g. Bathroom Cleaning, Kitchen Cleaning"
+              placeholder="e.g. Bathroom Cleaning, Kitchen Help, Dusting"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
@@ -531,7 +703,7 @@ const ServicesPage = ({ selectedCity }) => {
               </label>
               <input
                 type="text"
-                placeholder="e.g. NEW, POPULAR"
+                placeholder="e.g. POPULAR, BESTSELLER"
                 value={formData.badge}
                 onChange={(e) => setFormData({ ...formData, badge: e.target.value })}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
@@ -539,167 +711,191 @@ const ServicesPage = ({ selectedCity }) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Base Price (₹) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 400"
-                value={formData.basePrice}
-                onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Original Price / Strikethrough (₹)
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 500"
-                value={formData.originalPrice}
-                onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-              />
-            </div>
-          </div>
-
-          {/* Booking Type & Pricing Mode */}
+          {/* Pricing Model Selector */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-2">
-                Booking Type
+                Pricing Model <span className="text-red-500">*</span>
               </label>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, pricingType: "FIXED" })}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
                     formData.pricingType === "FIXED"
                       ? "bg-[#720C3E] text-white shadow-sm"
                       : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  Fixed Price
+                  <span>Fixed Price</span>
+                  <span className={`text-[10px] font-normal ${formData.pricingType === "FIXED" ? "text-pink-100" : "text-slate-400"}`}>
+                    Flat price per booking
+                  </span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, pricingType: "HOURLY" })}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    formData.pricingType === "HOURLY"
+                  onClick={() => setFormData({ ...formData, pricingType: "DURATION" })}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
+                    formData.pricingType === "DURATION"
                       ? "bg-[#720C3E] text-white shadow-sm"
                       : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  Hourly Rate
+                  <span>Duration Based</span>
+                  <span className={`text-[10px] font-normal ${formData.pricingType === "DURATION" ? "text-pink-100" : "text-slate-400"}`}>
+                    Admin-configured duration increments
+                  </span>
                 </button>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1.5">
-                {formData.pricingType === "HOURLY"
-                  ? "Users will select a number of hours; price scales with the hourly rate below."
-                  : "Uses the Base Price above as a single flat price for this service."}
-              </p>
             </div>
 
-            {formData.pricingType === "HOURLY" && (
-              <div className="space-y-4 pt-3 border-t border-slate-200">
+            {formData.pricingType === "FIXED" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-200">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Flat Base Price (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 199"
+                    value={formData.basePrice}
+                    onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                    required={formData.pricingType === "FIXED"}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Original Price / Strikethrough (₹)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 299"
+                    value={formData.originalPrice}
+                    onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                  />
+                </div>
+
+              </div>
+            ) : (
+              <div className="space-y-4 pt-2 border-t border-slate-200">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Hourly Rate (₹/hr) <span className="text-red-500">*</span>
+                      Price per billing unit (₹) <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
-                      placeholder="e.g. 300"
-                      value={formData.hourlyRate}
-                      onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
-                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                      required={formData.pricingType === "HOURLY"}
+                      placeholder="e.g. 100"
+                      value={formData.pricePerUnit}
+                      onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E] font-bold text-[#720C3E]"
+                      required={formData.pricingType === "DURATION"}
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Minimum Hours
+                      Billing Unit / Step
                     </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.minHours}
-                      onChange={(e) => setFormData({ ...formData, minHours: e.target.value })}
+                    <select
+                      value={formData.billingUnitMinutes}
+                      onChange={(e) => {
+                        const unit = Number(e.target.value);
+                        setFormData(prev => ({
+                          ...prev,
+                          billingUnitMinutes: unit,
+                          minDurationMinutes: unit,
+                          maxDurationMinutes: Math.max(unit, Number(prev.maxDurationMinutes) || 240)
+                        }));
+                      }}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                    />
+                    >
+                      <option value={15}>15 minutes</option>
+                      <option value={30}>30 minutes</option>
+                      <option value={60}>60 minutes</option>
+                    </select>
+                    <p className="text-[10px] text-slate-400 mt-1">Duration options and price blocks use this unit.</p>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Maximum Hours
+                      Minimum Duration
                     </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.maxHours}
-                      onChange={(e) => setFormData({ ...formData, maxHours: e.target.value })}
+                    <select
+                      value={formData.minDurationMinutes}
+                      onChange={(e) => setFormData({ ...formData, minDurationMinutes: Number(e.target.value) })}
                       className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
-                    />
+                    >
+                      <option value={15}>15 mins</option>
+                      <option value={30}>30 mins (0.5 hr)</option>
+                      <option value={60}>60 mins (1.0 hr)</option>
+                      <option value={90}>90 mins (1.5 hrs)</option>
+                      <option value={120}>120 mins (2.0 hrs)</option>
+                      <option value={180}>180 mins (3.0 hrs)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Maximum Duration
+                    </label>
+                    <select
+                      value={formData.maxDurationMinutes}
+                      onChange={(e) => setFormData({ ...formData, maxDurationMinutes: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#720C3E]"
+                    >
+                      <option value={15}>15 mins</option>
+                      <option value={30}>30 mins (0.5 hr)</option>
+                      <option value={60}>60 mins (1.0 hr)</option>
+                      <option value={90}>90 mins (1.5 hrs)</option>
+                      <option value={120}>120 mins (2.0 hrs)</option>
+                      <option value={180}>180 mins (3.0 hrs)</option>
+                      <option value={240}>240 mins (4.0 hrs)</option>
+                      <option value={300}>300 mins (5.0 hrs)</option>
+                      <option value={360}>360 mins (6.0 hrs)</option>
+                      <option value={480}>480 mins (8.0 hrs)</option>
+                    </select>
                   </div>
                 </div>
 
-                <div className="space-y-2.5">
-                  <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.allowCustomHours}
-                      onChange={(e) => setFormData({ ...formData, allowCustomHours: e.target.checked })}
-                      className="w-4 h-4 rounded border-slate-300 text-[#720C3E] focus:ring-[#720C3E]"
-                    />
-                    Allow user to enter custom hours
-                  </label>
+                {/* Live Dynamic Pricing Preview Card */}
+                {formData.pricePerUnit && Number(formData.pricePerUnit) > 0 && (
+                  <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-3.5 rounded-xl border border-slate-700 shadow-inner">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-pink-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <FiDollarSign className="text-xs" /> Dynamic Live Pricing Preview
+                      </span>
+                      <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-slate-300">
+                        Formula: (Mins ÷ {formData.billingUnitMinutes}) × ₹{formData.pricePerUnit}
+                      </span>
+                    </div>
 
-                  <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.allowExtraHours}
-                      onChange={(e) => setFormData({ ...formData, allowExtraHours: e.target.checked })}
-                      className="w-4 h-4 rounded border-slate-300 text-[#720C3E] focus:ring-[#720C3E]"
-                    />
-                    Allow vendor to request extra hours during the job
-                  </label>
-
-                  <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.allowExtraParts}
-                      onChange={(e) => setFormData({ ...formData, allowExtraParts: e.target.checked })}
-                      className="w-4 h-4 rounded border-slate-300 text-[#720C3E] focus:ring-[#720C3E]"
-                    />
-                    Allow vendor to add extra parts to the final bill
-                  </label>
-                </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                      {Array.from(
+                        { length: Math.floor(((Number(formData.maxDurationMinutes) || 240) - (Number(formData.minDurationMinutes) || 30)) / (Number(formData.billingUnitMinutes) || 30)) + 1 },
+                        (_, idx) => (Number(formData.minDurationMinutes) || 30) + idx * (Number(formData.billingUnitMinutes) || 30)
+                      ).slice(0, 8).map((mins) => (
+                        <div key={mins} className="bg-white/10 rounded-lg p-2 text-center border border-white/5">
+                          <p className="text-[11px] text-slate-300 font-medium">{mins} mins {mins >= 60 ? `(${mins / 60}h)` : ''}</p>
+                          <p className="text-sm font-black text-amber-400 mt-0.5">
+                            ₹{(mins / Number(formData.billingUnitMinutes || 30)) * Number(formData.pricePerUnit)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                GST (%)
-              </label>
-              <input
-                type="number"
-                value={formData.gstPercentage}
-                onChange={(e) => setFormData({ ...formData, gstPercentage: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Rating
+                Admin Rating (Optional)
               </label>
               <input
                 type="number"
@@ -708,6 +904,7 @@ const ServicesPage = ({ selectedCity }) => {
                 max="5"
                 value={formData.rating}
                 onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                placeholder="Leave empty to use real customer rating"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
               />
             </div>
@@ -725,6 +922,46 @@ const ServicesPage = ({ selectedCity }) => {
                 <option value="inactive">Inactive</option>
               </select>
             </div>
+          </div>
+
+          {/* Zone Assignment */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Zones
+            </label>
+            <p className="text-[10px] text-slate-400 mb-2">
+              Select where this service is bookable. Leave empty to make it available in every active zone.
+            </p>
+            {formZoneChoices.length === 0 ? (
+              <p className="text-xs text-slate-400">
+                No admin-created zones are available yet.
+              </p>
+            ) : !canEditZoneAssignments ? (
+              <div className="space-y-2">
+                <p className="text-[10px] text-slate-500">Assigned zones are read-only for this account.</p>
+                <div className="flex flex-wrap gap-2">
+                  {formZoneChoices.map(zone => (
+                    <span key={zone._id} className="inline-flex items-center px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg">
+                      {zone.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-36 overflow-y-auto">
+                {formZoneChoices.map(zone => (
+                  <label key={zone._id} className="flex items-center gap-2 text-xs bg-white rounded-lg px-2 py-1.5 border border-slate-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.zoneIds.includes(zone._id)}
+                      onChange={() => toggleFormZone(zone._id)}
+                      className="w-3.5 h-3.5 text-[#720C3E] rounded focus:ring-[#720C3E]"
+                    />
+                    <span className="truncate">{zone.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Thumbnail Upload */}
@@ -773,36 +1010,157 @@ const ServicesPage = ({ selectedCity }) => {
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
+      {/* Enhanced Delete & Impact Confirmation Modal */}
       <Modal
         isOpen={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        title="Delete Service"
-        maxWidth="max-w-md"
+        onClose={() => !deleting && setDeleteModalOpen(false)}
+        title="Delete Service Safety Check"
+        maxWidth="max-w-lg"
       >
         <div className="space-y-4">
-          <p className="text-xs text-slate-600">
-            Are you sure you want to delete{" "}
-            <span className="font-bold text-slate-800">
-              "{serviceToDelete?.title}"
-            </span>
-            ? This action cannot be undone.
-          </p>
-          <div className="flex items-center justify-end gap-3 pt-2">
+          {/* Target Service Info */}
+          <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+              {serviceToDelete?.iconUrl ? (
+                <img
+                  src={toAssetUrl(serviceToDelete.iconUrl)}
+                  alt={serviceToDelete.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <FiPackage className="text-xl text-slate-400" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-black text-slate-900 truncate">
+                  {serviceToDelete?.title}
+                </h4>
+                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${
+                  serviceToDelete?.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {serviceToDelete?.status}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Base Price: ₹{serviceToDelete?.basePrice || 0}
+              </p>
+            </div>
+          </div>
+
+          {/* Loading Impact State */}
+          {loadingImpact ? (
+            <div className="p-6 text-center space-y-2 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="w-6 h-6 border-2 border-[#720C3E] border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-xs font-bold text-slate-600">Analyzing service dependencies & live bookings...</p>
+            </div>
+          ) : serviceImpact ? (
+            <div className="space-y-3">
+              {/* Active Bookings Guard Alert */}
+              {serviceImpact.hasActiveBookings ? (
+                <div className="p-4 bg-rose-50 border-l-4 border-rose-600 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-2 text-rose-800 font-black text-xs">
+                    <FiAlertTriangle className="text-base text-rose-600 shrink-0" />
+                    <span>Active In-Progress Bookings Found ({serviceImpact.activeBookingsCount})</span>
+                  </div>
+                  <p className="text-xs text-rose-700 leading-relaxed">
+                    This service currently has <strong>{serviceImpact.activeBookingsCount} ongoing/pending booking(s)</strong> assigned to vendors. Permanently deleting it now will break customer live tracking and billing.
+                  </p>
+                  <p className="text-[11px] text-rose-800 font-semibold pt-1">
+                    👉 <strong>Recommendation:</strong> Click <strong>"Deactivate Service"</strong> below to hide it from new customers while letting active bookings complete safely.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-2xl">
+                  <p className="text-xs text-amber-800 font-medium">
+                    Permanent deletion will remove this service from the platform and trigger automatic cleanup across linked components.
+                  </p>
+                </div>
+              )}
+
+              {/* Linked References Grid */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                   Service Impact & Live Booking Check
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiImage className="text-base text-[#720C3E] mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.linkedBannersCount}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Banners</span>
+                  </div>
+
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiLayers className="text-base text-indigo-600 mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.crossSellCount}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Add-on Lists</span>
+                  </div>
+
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiTag className="text-base text-emerald-600 mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.linkedCouponsCount}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Coupons</span>
+                  </div>
+
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiShoppingCart className="text-base text-amber-600 mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.activeCartsCount}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">User Carts</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-2.5">
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiStar className="text-base text-violet-600 mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.linkedReviewsCount || 0}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Reviews</span>
+                  </div>
+
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
+                    <FiClock className="text-base text-rose-600 mx-auto mb-1" />
+                    <span className="text-base font-black text-slate-900 block">{serviceImpact.liveBookingsCount ?? serviceImpact.activeBookingsCount ?? 0}</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Live Bookings</span>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-3 border-t border-slate-200">
             <button
               type="button"
+              disabled={deleting}
               onClick={() => setDeleteModalOpen(false)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
             >
               Cancel
             </button>
+
+            {/* Deactivate Option (Safe) */}
             <button
               type="button"
-              onClick={handleConfirmDelete}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold"
+              disabled={deleting}
+              onClick={handleDeactivateFromDeleteModal}
+              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
             >
-              Delete Permanently
+              <FiShield />
+              {deleting ? "Processing..." : "Deactivate Service (Safe)"}
             </button>
+
+            {/* Permanent Delete Option */}
+            {!serviceImpact?.hasActiveBookings && (
+              <button
+                type="button"
+                disabled={deleting || loadingImpact}
+                onClick={() => handleConfirmDelete(false)}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <FiTrash2 />
+                {deleting ? "Deleting..." : "Permanently Delete"}
+              </button>
+            )}
           </div>
         </div>
       </Modal>

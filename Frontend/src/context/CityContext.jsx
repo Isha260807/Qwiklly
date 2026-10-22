@@ -5,21 +5,35 @@ const CityContext = createContext();
 
 export const useCity = () => useContext(CityContext);
 
+let cachedCities = null;
+let citiesInFlight = null;
+
 export const CityProvider = ({ children }) => {
   const [currentCity, setCurrentCity] = useState(null);
-  const [cities, setCities] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [cities, setCities] = useState(cachedCities || []);
+  const [loading, setLoading] = useState(!cachedCities);
 
   // Load cities and restore selection on mount
   useEffect(() => {
     const initCity = async () => {
       try {
-        setLoading(true);
-        // Fetch active cities from public API
-        const response = await api.get('/public/cities');
+        let fetchedCities = cachedCities;
+        if (!fetchedCities) {
+          if (!citiesInFlight) {
+            citiesInFlight = api.get('/public/cities').then(res => {
+              if (res.data?.success && res.data?.cities?.length > 0) {
+                cachedCities = res.data.cities;
+                return res.data.cities;
+              }
+              return [];
+            }).finally(() => {
+              citiesInFlight = null;
+            });
+          }
+          fetchedCities = await citiesInFlight;
+        }
 
-        if (response.data.success && response.data.cities.length > 0) {
-          const fetchedCities = response.data.cities;
+        if (fetchedCities && fetchedCities.length > 0) {
           setCities(fetchedCities);
 
           // Check if user has a saved city

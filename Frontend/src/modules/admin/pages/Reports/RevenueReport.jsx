@@ -2,16 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiDollarSign, FiTrendingUp, FiPieChart, FiDownload,
-  FiRefreshCw, FiSearch, FiCalendar, FiArrowUpRight, FiCreditCard,
-  FiCheckCircle, FiClock, FiShoppingBag, FiPercent
+  FiRefreshCw, FiSearch, FiCreditCard,
+  FiShoppingBag, FiPercent
 } from 'react-icons/fi';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Legend, Cell, PieChart, Pie
+  BarChart, Bar, Cell, PieChart, Pie
 } from 'recharts';
 import { toast } from 'react-hot-toast';
 import adminReportService from '../../../../services/adminReportService';
-import CardShell from '../UserCategories/components/CardShell';
 import { exportToCSV } from '../../../../utils/csvExport';
 
 const RevenueReport = () => {
@@ -56,7 +55,6 @@ const RevenueReport = () => {
     exportToCSV(data.revenueTrends, `revenue_trends_${period}`, [
       { key: '_id', label: 'Period' },
       { key: 'revenue', label: 'Total Revenue (₹)', type: 'currency' },
-      { key: 'commission', label: 'Platform Commission (₹)', type: 'currency' },
       { key: 'bookings', label: 'Total Bookings', type: 'number' }
     ]);
   };
@@ -70,7 +68,6 @@ const RevenueReport = () => {
     exportToCSV(data.revenueByService, `revenue_by_service_${period}`, [
       { key: '_id', label: 'Service' },
       { key: 'revenue', label: 'Revenue (₹)', type: 'currency' },
-      { key: 'commission', label: 'Commission (₹)', type: 'currency' },
       { key: 'count', label: 'Bookings', type: 'number' }
     ]);
   };
@@ -86,8 +83,7 @@ const RevenueReport = () => {
       { key: 'service', label: 'Service' },
       { key: 'customer', label: 'Customer' },
       { key: 'vendor', label: 'Vendor' },
-      { key: 'amount', label: 'Gross Amount (₹)', type: 'currency' },
-      { key: 'commission', label: 'Commission (₹)', type: 'currency' },
+      { key: 'amount', label: 'Booking Amount (₹)', type: 'currency' },
       { key: 'paymentMethod', label: 'Payment Method' },
       { key: 'status', label: 'Status' },
       { key: 'date', label: 'Date', type: 'date' }
@@ -107,11 +103,10 @@ const RevenueReport = () => {
 
   const summary = data?.summary || {
     totalRevenue: 0,
-    platformCommission: 0,
-    vendorPayout: 0,
+    salaryPaid: 0,
+    netAdminBalance: 0,
     totalBookings: 0,
     avgOrderValue: 0,
-    growth: '+0%'
   };
 
   return (
@@ -121,9 +116,9 @@ const RevenueReport = () => {
         <div>
           <h2 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
             <FiTrendingUp className="text-primary-600 w-4 h-4" />
-            Revenue & Financial Analytics
+            Booking Revenue & Salary Analytics
           </h2>
-          <p className="text-[11px] text-gray-400 mt-0.5">Real-time breakdown of GMV, commission margins, and vendor payouts</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">Real-time breakdown of booking revenue and salary expenses</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -167,37 +162,35 @@ const RevenueReport = () => {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
         <div className="bg-white p-3.5 rounded-xl border border-gray-100 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Gross Revenue (GMV)</span>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Booking Revenue</span>
             <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
               <FiDollarSign className="w-3.5 h-3.5" />
             </div>
           </div>
           <p className="text-lg font-black text-gray-900">₹{(summary.totalRevenue || 0).toLocaleString('en-IN')}</p>
-          <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5 mt-0.5">
-            <FiArrowUpRight className="w-3 h-3" /> {summary.growth || '+14.5%'} vs last cycle
-          </span>
+          <span className="text-[10px] text-gray-400 font-medium mt-0.5">All booking payments received by admin</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-xl border border-gray-100 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Platform Commission</span>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Salary Paid</span>
             <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
               <FiTrendingUp className="w-3.5 h-3.5" />
             </div>
           </div>
-          <p className="text-lg font-black text-emerald-700">₹{(summary.platformCommission || 0).toLocaleString('en-IN')}</p>
-          <span className="text-[10px] text-gray-400 font-medium mt-0.5">Avg 20% commission</span>
+          <p className="text-lg font-black text-emerald-700">₹{(summary.salaryPaid || 0).toLocaleString('en-IN')}</p>
+          <span className="text-[10px] text-gray-400 font-medium mt-0.5">Paid vendor payroll</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-xl border border-gray-100 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Vendor Payouts</span>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Net Admin Balance</span>
             <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
               <FiCreditCard className="w-3.5 h-3.5" />
             </div>
           </div>
-          <p className="text-lg font-black text-purple-700">₹{(summary.vendorPayout || 0).toLocaleString('en-IN')}</p>
-          <span className="text-[10px] text-gray-400 font-medium mt-0.5">Disbursed & Pending</span>
+          <p className="text-lg font-black text-purple-700">₹{(summary.netAdminBalance || 0).toLocaleString('en-IN')}</p>
+          <span className="text-[10px] text-gray-400 font-medium mt-0.5">After paid vendor salary</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-xl border border-gray-100 shadow-xs flex flex-col justify-between">
@@ -225,22 +218,19 @@ const RevenueReport = () => {
 
       {/* Main Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Revenue & Commission Area Trend */}
+        {/* Booking Revenue Trend */}
         <div className="bg-white rounded-xl p-4 shadow-xs border border-gray-100 lg:col-span-2">
           <div className="flex justify-between items-center mb-3">
             <div>
               <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
                 <FiTrendingUp className="text-primary-600" />
-                Revenue & Platform Commission Trends ({period.toUpperCase()})
+                Booking Revenue Trends ({period.toUpperCase()})
               </h3>
-              <p className="text-[10px] text-gray-400">Total gross transaction volume vs company profit margin</p>
+              <p className="text-[10px] text-gray-400">Total booking payment received by admin</p>
             </div>
             <div className="flex items-center gap-3 text-[11px] font-semibold">
               <span className="flex items-center gap-1.5 text-blue-600">
                 <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span> Total Revenue
-              </span>
-              <span className="flex items-center gap-1.5 text-emerald-600">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span> Commission
               </span>
             </div>
           </div>
@@ -257,10 +247,6 @@ const RevenueReport = () => {
                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#2874F0" stopOpacity={0.25} />
                       <stop offset="95%" stopColor="#2874F0" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorComm" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
@@ -295,15 +281,6 @@ const RevenueReport = () => {
                     strokeWidth={2.5}
                     fillOpacity={1}
                     fill="url(#colorRev)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="commission"
-                    name="Commission"
-                    stroke="#10B981"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#colorComm)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -380,7 +357,7 @@ const RevenueReport = () => {
           <div>
             <h3 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
               <FiShoppingBag className="text-primary-600" />
-              Top Services by Revenue & Margins
+              Top Services by Booking Revenue
             </h3>
             <p className="text-[10px] text-gray-400">Total earnings breakdown per catalog service</p>
           </div>
@@ -422,10 +399,9 @@ const RevenueReport = () => {
                     boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
                     fontSize: '11px'
                   }}
-                  formatter={(val, name) => [`₹${val.toLocaleString('en-IN')}`, name === 'revenue' ? 'Gross Revenue' : 'Commission']}
+                  formatter={(val, name) => [`₹${val.toLocaleString('en-IN')}`, 'Booking Revenue']}
                 />
-                <Bar dataKey="revenue" name="Gross Revenue" fill="#2874F0" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                <Bar dataKey="commission" name="Commission" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                <Bar dataKey="revenue" name="Booking Revenue" fill="#2874F0" radius={[4, 4, 0, 0]} maxBarSize={36} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -437,7 +413,7 @@ const RevenueReport = () => {
         <div className="p-3.5 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-3">
           <div>
             <h3 className="text-xs font-bold text-gray-900">Recent Revenue Transactions</h3>
-            <p className="text-[10px] text-gray-400">Order-level revenue and platform commission records</p>
+            <p className="text-[10px] text-gray-400">Order-level booking payment records</p>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -467,15 +443,14 @@ const RevenueReport = () => {
                 <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Booking Info</th>
                 <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Service</th>
                 <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Customer & Vendor</th>
-                <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Gross Amount</th>
-                <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Commission</th>
+                <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Booking Amount</th>
                 <th className="px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filteredTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="py-10 text-center text-xs text-gray-400">
+                  <td colSpan="5" className="py-10 text-center text-xs text-gray-400">
                     No revenue transactions found
                   </td>
                 </tr>
@@ -499,11 +474,6 @@ const RevenueReport = () => {
                     <td className="px-4 py-3 text-right">
                       <span className="text-xs font-extrabold text-gray-900">
                         ₹{(tx.amount || 0).toLocaleString('en-IN')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-xs font-extrabold text-emerald-600">
-                        +₹{(tx.commission || 0).toLocaleString('en-IN')}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">

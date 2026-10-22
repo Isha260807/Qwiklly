@@ -17,7 +17,10 @@ const { isSuperAdmin } = require('../../middleware/roleMiddleware');
  * @access  Private (Super Admin)
  */
 router.use(authenticate);
-router.use(isSuperAdmin);
+// Scope the Super Admin guard only to city endpoints. This router is mounted
+// at /api/admin alongside every other admin router, so a global guard here
+// would incorrectly block sub-admin requests to /users, /vendors, etc.
+router.use('/cities', isSuperAdmin);
 
 router.get('/cities', getAllCities);
 router.get('/cities/:id', getCity);

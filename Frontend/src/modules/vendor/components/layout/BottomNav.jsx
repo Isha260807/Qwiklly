@@ -15,6 +15,7 @@ const BottomNav = memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
   const [pendingJobsCount, setPendingJobsCount] = useState(0);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   // Load pending jobs count from localStorage
   useEffect(() => {
@@ -38,11 +39,52 @@ const BottomNav = memo(() => {
     };
   }, []);
 
+  // The mobile keyboard resizes the visual viewport, which can move a
+  // fixed bottom nav above the keyboard. Hide the nav while editing fields.
+  useEffect(() => {
+    const isEditableElementFocused = () => {
+      const activeElement = document.activeElement;
+      if (!activeElement) return false;
+      return ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeElement.tagName) &&
+        !activeElement.readOnly &&
+        !activeElement.disabled;
+    };
+
+    const updateKeyboardState = () => {
+      const viewport = window.visualViewport;
+      const viewportHeight = viewport?.height || window.innerHeight;
+      const keyboardResize = window.innerHeight - viewportHeight > 100;
+      const mobileFieldFocus =
+        window.innerWidth <= 768 && isEditableElementFocused();
+
+      setIsKeyboardOpen(keyboardResize || mobileFieldFocus);
+    };
+
+    const handleFocusOut = () => {
+      window.setTimeout(updateKeyboardState, 150);
+    };
+
+    updateKeyboardState();
+    const viewport = window.visualViewport;
+    window.addEventListener('resize', updateKeyboardState);
+    window.addEventListener('focusin', updateKeyboardState);
+    window.addEventListener('focusout', handleFocusOut);
+    viewport?.addEventListener('resize', updateKeyboardState);
+    viewport?.addEventListener('scroll', updateKeyboardState);
+
+    return () => {
+      window.removeEventListener('resize', updateKeyboardState);
+      window.removeEventListener('focusin', updateKeyboardState);
+      window.removeEventListener('focusout', handleFocusOut);
+      viewport?.removeEventListener('resize', updateKeyboardState);
+      viewport?.removeEventListener('scroll', updateKeyboardState);
+    };
+  }, []);
   // navItems without Workers
   const navItems = useMemo(() => [
     { id: 'home', path: '/vendor/dashboard', icon: HiOutlineHome, activeIcon: HiHome, label: 'Home' },
     { id: 'jobs', path: '/vendor/jobs', icon: HiOutlineBriefcase, activeIcon: HiBriefcase, label: 'Jobs', badge: pendingJobsCount },
-    { id: 'wallet', path: '/vendor/wallet', icon: FaRegCreditCard, activeIcon: FaWallet, label: 'Wallet' },
+    { id: 'wallet', path: '/vendor/wallet', icon: FaRegCreditCard, activeIcon: FaWallet, label: 'Earning' },
   ], [pendingJobsCount]);
 
   const getActiveTab = () => {
@@ -73,7 +115,7 @@ const BottomNav = memo(() => {
     (location.pathname.includes('/map') || location.pathname.includes('/alert/'))
   );
 
-  if (shouldHideNav) {
+  if (isKeyboardOpen || shouldHideNav) {
     return null;
   }
 

@@ -163,6 +163,8 @@ export const stopAlertRing = () => {
 
 // Emergency Alarm Audio Controller
 const emergencyAudioInstances = new Set();
+let emergencySynthOscillator = null;
+let emergencySynthGain = null;
 let emergencySynthInterval = null;
 let unlockAudioHandler = null;
 let isEmergencyAlarmStopped = false;
@@ -177,6 +179,69 @@ const removeEmergencyUnlockListeners = () => {
   }
 };
 
+const startSynthSiren = () => {
+  try {
+    initAudio();
+    if (!audioContext) return;
+
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => {});
+    }
+
+    stopSynthSiren();
+
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    osc.type = 'sawtooth'; // Piercing siren waveform
+    gain.gain.setValueAtTime(0.3, audioContext.currentTime);
+
+    let high = true;
+    osc.frequency.setValueAtTime(960, audioContext.currentTime);
+
+    emergencySynthInterval = setInterval(() => {
+      if (isEmergencyAlarmStopped || !audioContext) {
+        if (emergencySynthInterval) clearInterval(emergencySynthInterval);
+        return;
+      }
+      try {
+        high = !high;
+        const now = audioContext.currentTime;
+        osc.frequency.cancelScheduledValues(now);
+        osc.frequency.linearRampToValueAtTime(high ? 960 : 770, now + 0.05);
+      } catch (e) {}
+    }, 280);
+
+    osc.connect(gain);
+    gain.connect(audioContext.destination);
+    osc.start();
+
+    emergencySynthOscillator = osc;
+    emergencySynthGain = gain;
+  } catch (err) {
+    console.warn('[SOS Sound] Synth siren initialization error:', err);
+  }
+};
+
+const stopSynthSiren = () => {
+  if (emergencySynthInterval) {
+    clearInterval(emergencySynthInterval);
+    emergencySynthInterval = null;
+  }
+  if (emergencySynthOscillator) {
+    try {
+      emergencySynthOscillator.stop();
+      emergencySynthOscillator.disconnect();
+    } catch (e) {}
+    emergencySynthOscillator = null;
+  }
+  if (emergencySynthGain) {
+    try {
+      emergencySynthGain.disconnect();
+    } catch (e) {}
+    emergencySynthGain = null;
+  }
+};
+
 export const playEmergencyAlarm = (loop = true) => {
   try {
     isEmergencyAlarmStopped = false;
@@ -184,7 +249,10 @@ export const playEmergencyAlarm = (loop = true) => {
     stopEmergencyAlarm();
     isEmergencyAlarmStopped = false;
 
-    const soundUrls = ['/emergecyalarm.mp3', '/emergencyalrm.mp3', '/emergencyalarm.mp3'];
+    // Start Web Audio API siren immediately (instant synthesis, zero network delay)
+    startSynthSiren();
+
+    const soundUrls = ['/emergencyalarm.mp3', '/emergecyalarm.mp3', '/emergencyalrm.mp3'];
     let currentUrlIndex = 0;
 
     const createAndPlayAudio = (url) => {
@@ -206,7 +274,13 @@ export const playEmergencyAlarm = (loop = true) => {
               emergencyAudioInstances.delete(audio);
               return;
             }
-            console.log('🚨 [SOS Sound] Emergency alarm playing successfully:', url);
+            console.log('🚨 [SOS Sound] Emergency MP3 alarm playing successfully:', url);
+            // If MP3 is playing nicely, lower the synth volume to avoid harsh overlap
+            if (emergencySynthGain && audioContext) {
+              try {
+                emergencySynthGain.gain.setValueAtTime(0.12, audioContext.currentTime);
+              } catch (e) {}
+            }
           })
           .catch((err) => {
             if (isEmergencyAlarmStopped) return;
@@ -225,6 +299,13 @@ export const playEmergencyAlarm = (loop = true) => {
               if (isEmergencyAlarmStopped) {
                 removeEmergencyUnlockListeners();
                 return;
+              }
+              if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                  startSynthSiren();
+                }).catch(() => {});
+              } else {
+                startSynthSiren();
               }
               emergencyAudioInstances.forEach((inst) => {
                 inst.play().catch(() => {});
@@ -271,10 +352,7 @@ export const stopEmergencyAlarm = () => {
   });
   emergencyAudioInstances.clear();
 
-  if (emergencySynthInterval) {
-    clearInterval(emergencySynthInterval);
-    emergencySynthInterval = null;
-  }
+  stopSynthSiren();
 
   // Also stop any alert rings if active
   if (currentAudio) {

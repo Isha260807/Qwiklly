@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FiFacebook, FiTwitter, FiInstagram, FiLinkedin, FiMail, FiPhone, FiMapPin } from 'react-icons/fi';
 import Logo from '../../../../components/common/Logo';
@@ -40,9 +40,7 @@ const Footer = () => {
       links: [
         { label: 'My Bookings', path: '/user/my-bookings' },
         { label: 'My Wallet', path: '/user/wallet' },
-        { label: 'My Plan', path: '/user/my-plan' },
         { label: 'Register as Vendor', path: '/vendor/signup' },
-        { label: 'Register as Worker', path: '/worker/signup' },
       ]
     },
     {

@@ -5,6 +5,8 @@ import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { playNotificationSound, isSoundEnabled, playAlertRing } from '../utils/notificationSound';
 import { registerFCMToken } from '../services/pushNotificationService';
+import { handleLogout } from '../services/api';
+import formatDistance from '../utils/formatDistance';
 
 const SwipeableNotification = ({ t, data, onClick }) => {
   const x = useMotionValue(0);
@@ -70,6 +72,7 @@ const SOCKET_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '') || '
 
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
+  const [authVersion, setAuthVersion] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -84,17 +87,10 @@ export const SocketProvider = ({ children }) => {
 
   const userType = getUserType(location.pathname);
 
-  useEffect(() => {
-    if (!userType) {
-      if (socket) {
-        socket.disconnect();
-        setSocket(null);
-      }
-      return;
-    }
-
+  const getActiveToken = (type) => {
+    if (!type) return null;
     let tokenKey = 'accessToken';
-    switch (userType) {
+    switch (type) {
       case 'vendor':
         tokenKey = 'vendorAccessToken';
         break;
@@ -109,8 +105,39 @@ export const SocketProvider = ({ children }) => {
         tokenKey = 'accessToken';
         break;
     }
+    return sessionStorage.getItem(tokenKey) || localStorage.getItem(tokenKey);
+  };
 
-    const token = localStorage.getItem(tokenKey);
+  const currentToken = getActiveToken(userType);
+
+  // Login happens in the same browser tab, so storage changes alone do not
+  // rerun the socket effect. Bump the connection version after authentication.
+  useEffect(() => {
+    const handleAuthChange = () => setAuthVersion(version => version + 1);
+    window.addEventListener('vendor_session_authenticated', handleAuthChange);
+    window.addEventListener('admin_session_authenticated', handleAuthChange);
+    window.addEventListener('worker_session_authenticated', handleAuthChange);
+    window.addEventListener('user_session_authenticated', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+    return () => {
+      window.removeEventListener('vendor_session_authenticated', handleAuthChange);
+      window.removeEventListener('admin_session_authenticated', handleAuthChange);
+      window.removeEventListener('worker_session_authenticated', handleAuthChange);
+      window.removeEventListener('user_session_authenticated', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!userType) {
+      if (socket) {
+        socket.disconnect();
+        setSocket(null);
+      }
+      return;
+    }
+
+    const token = currentToken;
     // If no token, we don't connect
     if (!token) {
       if (socket) {
@@ -126,8 +153,6 @@ export const SocketProvider = ({ children }) => {
 
     // Disconnect previous if any
     if (socket) {
-      // Optimization: if we are already connected with same token/auth, maybe don't reconnect?
-      // But determining that is hard. Simpler to reconnect.
       socket.disconnect();
     }
 
@@ -143,7 +168,7 @@ export const SocketProvider = ({ children }) => {
       secure: true,
       rejectUnauthorized: false,
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
@@ -151,6 +176,36 @@ export const SocketProvider = ({ children }) => {
     });
 
     setSocket(newSocket);
+
+    let adminForcedLogoutHandled = false;
+    const handleAdminForcedLogout = (reason = 'blocked') => {
+      if (adminForcedLogoutHandled) return;
+      adminForcedLogoutHandled = true;
+      const wasDeleted = reason === 'deleted';
+      toast.error(
+        wasDeleted ? 'Your profile was deleted by admin.' : 'Blocked by admin',
+        { id: wasDeleted ? 'admin-deleted' : 'admin-blocked' }
+      );
+      handleLogout('admin');
+      newSocket.disconnect();
+    };
+    const handleBlockedAdmin = () => handleAdminForcedLogout('blocked');
+    const handleDeletedAdmin = () => handleAdminForcedLogout('deleted');
+    let vendorForcedLogoutHandled = false;
+    const handleVendorForcedLogout = (message = 'Your account was logged in on another device. Please login again.') => {
+      if (vendorForcedLogoutHandled) return;
+      vendorForcedLogoutHandled = true;
+      toast.error(message, { id: 'vendor-session-replaced' });
+      handleLogout('vendor');
+      newSocket.disconnect();
+    };
+    const handleVendorSessionReplaced = (data = {}) => {
+      handleVendorForcedLogout(data.message);
+    };
+    const handleVendorSessionInvalidated = () => {
+      newSocket.disconnect();
+    };
+
 
     newSocket.on('connect', () => {
       // console.log(`✅ ${userType.toUpperCase()} App Socket connected`);
@@ -189,10 +244,27 @@ export const SocketProvider = ({ children }) => {
     });
 
     newSocket.on('connect_error', (err) => {
-      // Silently handle typical connection errors to avoid spam, or log only critical ones
-      // console.error(`Socket connection error (${userType}):`, err);
+      const errorMessage = err?.message || '';
+      if (userType === 'admin') {
+        if (/ADMIN_DELETED|profile was deleted by admin/i.test(errorMessage)) {
+          handleDeletedAdmin();
+        } else if (/ADMIN_BLOCKED|blocked by admin/i.test(errorMessage)) {
+          handleBlockedAdmin();
+        }
+      } else if (userType === 'vendor' && /VENDOR_SESSION_REPLACED|another device|no longer active/i.test(errorMessage)) {
+        handleVendorForcedLogout('Your account was logged in on another device. Please login again.');
+      }
     });
 
+    if (userType === 'admin') {
+      newSocket.on('admin_blocked', handleBlockedAdmin);
+      newSocket.on('admin_profile_deleted', handleDeletedAdmin);
+    }
+
+    if (userType === 'vendor') {
+      newSocket.on('vendor_session_replaced', handleVendorSessionReplaced);
+      window.addEventListener('vendor_session_invalidated', handleVendorSessionInvalidated);
+    }
     // Listen for Emergency SOS Alerts (Admin)
     newSocket.on('emergency_sos', (data) => {
       console.log('🚨 EMERGENCY SOS ALERT RECEIVED:', data);
@@ -212,10 +284,11 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for generic notifications
     newSocket.on('notification', (data) => {
-      // If emergency_sos notification, update notification count/list and skip duplicate modal dispatch & generic sound
+      // If emergency_sos notification, ensure admin modal and sound trigger
       if (data.type === 'emergency_sos') {
         if (userType === 'admin') {
           window.dispatchEvent(new Event('adminNotificationsUpdated'));
+          window.dispatchEvent(new CustomEvent('adminEmergencySOSAlert', { detail: data.data || data }));
         }
         return;
       }
@@ -224,25 +297,13 @@ export const SocketProvider = ({ children }) => {
         playNotificationSound();
       }
 
-      // Show custom toast for all notifications
-      toast.custom((t) => (
-        <SwipeableNotification
-          t={t}
-          data={data}
-          onClick={() => {
-            toast.dismiss(t.id);
-            // Optional: navigate based on relatedId
-            if (data.relatedId) {
-              if (userType === 'vendor') navigate(`/vendor/booking/${data.relatedId}`);
-              else if (userType === 'worker') navigate(`/worker/job/${data.relatedId}`);
-              else navigate(`/user/booking/${data.relatedId}`);
-            }
-          }}
-        />
-      ), {
-        id: 'socket-notification', // Prevent stacking
-        duration: 3500, // Slightly longer to allow interaction/reading since it's dismissible
-        position: 'top-right'
+      const bookingNotificationId = data.relatedId || data.bookingId || data.data?.bookingId;
+      const notificationToastId = bookingNotificationId
+        ? 'booking-notification-' + String(bookingNotificationId) : 'socket-notification';
+      const notificationMessage = data.message || data.title || 'New notification';
+      toast.success(notificationMessage, {
+        id: notificationToastId,
+        duration: 3500
       });
 
       // Dispatch update events to refresh UI components
@@ -251,9 +312,17 @@ export const SocketProvider = ({ children }) => {
         window.dispatchEvent(new Event('vendorJobsUpdated'));
         window.dispatchEvent(new Event('vendorNotificationsUpdated'));
         window.dispatchEvent(new Event('vendorStatsUpdated'));
+
+        if (data.type === 'vendor_approved' || data.type === 'vendor_rejected') {
+          window.dispatchEvent(new CustomEvent('vendorStatusUpdated', { 
+            detail: { approvalStatus: data.type === 'vendor_approved' ? 'approved' : 'rejected' } 
+          }));
+          window.dispatchEvent(new Event('vendorDataUpdated'));
+        }
       }
       if (userType === 'user') {
         window.dispatchEvent(new Event('userBookingsUpdated'));
+        window.dispatchEvent(new Event('userNotificationsUpdated'));
       }
     });
 
@@ -263,6 +332,12 @@ export const SocketProvider = ({ children }) => {
       if (userType === 'user') window.dispatchEvent(new Event('userBookingsUpdated'));
       if (userType === 'vendor') window.dispatchEvent(new Event('vendorJobsUpdated'));
       if (userType === 'worker') window.dispatchEvent(new Event('workerJobsUpdated'));
+    });
+
+    // Listen for direct vendor approval status updates
+    newSocket.on('vendor_status_updated', (data) => {
+      window.dispatchEvent(new CustomEvent('vendorStatusUpdated', { detail: data }));
+      window.dispatchEvent(new Event('vendorDataUpdated'));
     });
 
     // Listen for special Vendor Booking Requests
@@ -282,9 +357,10 @@ export const SocketProvider = ({ children }) => {
           customerPhone: data.customerPhone,
           location: {
             address: data.address?.addressLine1 || 'Location shared',
-            distance: data.distance ? `${data.distance.toFixed(1)} km` : 'Near you'
+            distance: formatDistance(data.distance)
           },
           price: data.price,
+          distance: data.distance,
           vendorEarnings: data.vendorEarnings,
           serviceCategory: data.serviceCategory,
           brandName: data.brandName,
@@ -418,9 +494,15 @@ export const SocketProvider = ({ children }) => {
     }
 
     return () => {
+      newSocket.off('admin_blocked', handleBlockedAdmin);
+      newSocket.off('admin_profile_deleted', handleDeletedAdmin);
+      if (userType === 'vendor') {
+        newSocket.off('vendor_session_replaced', handleVendorSessionReplaced);
+        window.removeEventListener('vendor_session_invalidated', handleVendorSessionInvalidated);
+      }
       newSocket.disconnect();
     };
-  }, [userType]); // Only re-run if userType changes. Navigate is stable.
+  }, [userType, currentToken, authVersion]);
 
   return (
     <SocketContext.Provider value={socket}>

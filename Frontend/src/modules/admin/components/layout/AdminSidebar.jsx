@@ -13,6 +13,8 @@ import {
   FiBell,
   FiSettings,
   FiChevronDown,
+  FiChevronLeft,
+  FiChevronRight,
   FiX,
   FiPackage,
   FiStar,
@@ -20,9 +22,14 @@ import {
   FiLayout,
   FiImage,
   FiTag,
+  FiMapPin,
+  FiAlertTriangle,
+  FiLock,
 } from "react-icons/fi";
 import adminMenu from "../../config/adminMenu.json";
+import { canAccessAdminPath } from "../../../../components/auth/adminAccess";
 import dashboardService from "../../services/dashboardService";
+import { getAdminProfile } from "../../services/settingsService";
 
 // Icon mapping for menu items
 const iconMap = {
@@ -32,6 +39,7 @@ const iconMap = {
   Bookings: FiShoppingBag,
   "User Catalog": FiGrid,
   "Page Builder": FiLayout,
+  "Home Content": FiHome,
   Banners: FiImage,
   Coupons: FiTag,
   "Vendor Services": FiGrid,
@@ -43,6 +51,10 @@ const iconMap = {
   Settlements: FiDollarSign,
   Settings: FiSettings,
   Plans: FiPackage,
+  "Zone Management": FiMapPin,
+  "Support & SOS": FiAlertTriangle,
+  "Terms & Conditions": FiFileText,
+  "Privacy Policy": FiLock,
 };
 
 // Helper function to convert child name to route path
@@ -56,9 +68,9 @@ const getChildRoute = (parentRoute, childName) => {
     },
     "/admin/vendors": {
       "All Vendors": "/admin/vendors/all",
+      "Daily Attendance": "/admin/vendors/attendance",
       "Vendor Bookings": "/admin/vendors/bookings",
       "Vendor Analytics": "/admin/vendors/analytics",
-      "Vendor Payments": "/admin/vendors/payments",
     },
     "/admin/bookings": {
       "All Bookings": "/admin/bookings",
@@ -68,11 +80,13 @@ const getChildRoute = (parentRoute, childName) => {
     "/admin/user-categories": {
       "Manage Services": "/admin/user-categories/sections",
       "Page Builder": "/admin/user-categories/page-builder",
+      "Home Content": "/admin/user-categories/home-content",
+      "Banners": "/admin/banners",
     },
     "/admin/payments": {
       "Payment Overview": "/admin/payments/overview",
       "User Payments": "/admin/payments/users",
-      "Vendor Payments": "/admin/payments/vendors",
+      "Salary Payroll": "/admin/payments/vendors",
       "Admin Revenue": "/admin/payments/revenue",
       "Payment Reports": "/admin/payments/reports",
     },
@@ -93,44 +107,73 @@ const getChildRoute = (parentRoute, childName) => {
     },
     "/admin/settlements": {
       "Pending": "/admin/settlements/pending",
-      "Withdrawals": "/admin/settlements/withdrawals",
       "Vendors with Due": "/admin/settlements/vendors",
       "History": "/admin/settlements/history",
+    },
+    "/admin/support": {
+      "SOS Requests": "/admin/support/sos",
+      "Support Tickets": "/admin/support/tickets",
     },
   };
 
   return routeMap[parentRoute]?.[childName] || parentRoute;
 };
 
-const AdminSidebar = ({ isOpen, onClose }) => {
+const AdminSidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapse }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedItems, setExpandedItems] = useState({});
   const [isMobile, setIsMobile] = useState(false);
-  const [adminUser, setAdminUser] = useState({ name: 'Admin', email: '', role: 'admin' });
+  const isCollapsed = collapsed && !isMobile;
+  const [adminUser, setAdminUser] = useState({ name: 'Admin', email: '', role: 'sub_admin', permissions: [] });
   const [counts, setCounts] = useState({
     bookings: 0,
     vendors: 0,
-    withdrawals: 0,
-    pendingSettlements: 0
   });
 
   // Load admin user from storage
   useEffect(() => {
+    let stored = {};
     try {
       const storedData = sessionStorage.getItem('adminData') || localStorage.getItem('adminData');
-      const stored = JSON.parse(storedData || '{}');
+      stored = JSON.parse(storedData || '{}');
       if (stored.name || stored.email) {
         setAdminUser({
           name: stored.name || 'Admin',
           email: stored.email || '',
-          role: stored.role || 'admin'
+          role: stored.role || 'sub_admin',
+          permissions: stored.permissions || []
         });
       }
     } catch (e) {
       console.error('Failed to parse admin data:', e);
     }
+
+    // Permissions can be changed by the Super Admin while this account is
+    // already logged in. Refresh the profile so the sidebar reflects the
+    // latest module access without requiring a logout/login cycle.
+    const syncAdminProfile = async () => {
+      try {
+        const response = await getAdminProfile();
+        if (!response.success || !response.data) return;
+
+        const latest = { ...stored, ...response.data };
+        setAdminUser({
+          name: latest.name || 'Admin',
+          email: latest.email || '',
+          role: latest.role || 'sub_admin',
+          permissions: latest.permissions || []
+        });
+
+        const storage = sessionStorage.getItem('adminAccessToken') ? sessionStorage : localStorage;
+        storage.setItem('adminData', JSON.stringify(latest));
+      } catch (error) {
+        // Keep the cached permissions if the profile refresh is unavailable.
+      }
+    };
+
+    syncAdminProfile();
   }, []);
 
   // Filter menu items by role and search query
@@ -140,6 +183,9 @@ const AdminSidebar = ({ isOpen, onClose }) => {
       if (item.allowedRoles && !item.allowedRoles.includes(adminUser.role)) {
         return false;
       }
+      if (!canAccessAdminPath(item.route, adminUser)) {
+        return false;
+      }
       // Search filter
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -147,7 +193,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
       const childMatch = item.children && item.children.some(c => c.toLowerCase().includes(q));
       return titleMatch || childMatch;
     });
-  }, [adminUser.role, searchQuery]);
+  }, [adminUser, searchQuery]);
 
   // Group filtered menu by section
   const groupedSections = useMemo(() => {
@@ -172,8 +218,6 @@ const AdminSidebar = ({ isOpen, onClose }) => {
           setCounts({
             bookings: stats.pendingBookings || 0,
             vendors: stats.pendingVendors || 0,
-            withdrawals: stats.pendingWithdrawals || 0,
-            pendingSettlements: stats.pendingSettlements || 0
           });
         }
       } catch (error) {
@@ -222,8 +266,10 @@ const AdminSidebar = ({ isOpen, onClose }) => {
         return location.pathname === "/admin/dashboard";
       }
       const isChildRoute =
-        location.pathname.startsWith(item.route) &&
-        location.pathname !== item.route;
+        (location.pathname.startsWith(item.route) &&
+          location.pathname !== item.route) ||
+        (item.route === "/admin/user-categories" &&
+          (location.pathname === "/admin/banners" || location.pathname.startsWith("/admin/banners/")));
       return isChildRoute;
     });
     if (activeItem && activeItem.children && activeItem.children.length > 0) {
@@ -247,6 +293,9 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     if (route === "/admin/user-categories") {
       if (location.pathname.startsWith("/admin/user-categories/vendor-")) {
         return false;
+      }
+      if (location.pathname === "/admin/banners" || location.pathname.startsWith("/admin/banners/")) {
+        return true;
       }
     }
 
@@ -295,7 +344,8 @@ const AdminSidebar = ({ isOpen, onClose }) => {
         {/* Main Menu Item */}
         <div
           className={`
-            flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-200 cursor-pointer select-none
+            flex items-center gap-3 rounded-xl transition-all duration-200 cursor-pointer select-none
+            ${isCollapsed ? "justify-center px-2.5 py-2.5" : "px-3.5 py-2.5"}
             ${active
               ? "bg-[#720C3E] text-white shadow-md font-semibold"
               : "text-slate-300 hover:bg-slate-700/80 hover:text-white font-medium"
@@ -311,26 +361,26 @@ const AdminSidebar = ({ isOpen, onClose }) => {
           <Icon
             className={`text-lg flex-shrink-0 ${active ? "text-white" : "text-slate-400"}`}
           />
-          <span className="flex-1 text-sm">{item.title}</span>
+          <span className={`${isCollapsed ? "hidden" : "flex-1"} text-sm`} title={isCollapsed ? item.title : undefined}>{item.title}</span>
 
           {/* Badges */}
-          {item.title === "Bookings" && counts.bookings > 0 && (
+          {!isCollapsed && item.title === "Bookings" && counts.bookings > 0 && (
             <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-1">
               {counts.bookings > 99 ? '99+' : counts.bookings}
             </span>
           )}
-          {item.title === "Vendors" && counts.vendors > 0 && (
+          {!isCollapsed && item.title === "Vendors" && counts.vendors > 0 && (
             <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-1">
               {counts.vendors > 99 ? '99+' : counts.vendors}
             </span>
           )}
-          {item.title === "Settlements" && (counts.withdrawals + counts.pendingSettlements) > 0 && (
+          {!isCollapsed && item.title === "Settlements" && counts.pendingSettlements > 0 && (
             <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse mr-1">
-              {(counts.withdrawals + counts.pendingSettlements) > 99 ? '99+' : (counts.withdrawals + counts.pendingSettlements)}
+              {counts.pendingSettlements > 99 ? '99+' : counts.pendingSettlements}
             </span>
           )}
 
-          {hasChildren && (
+          {hasChildren && !isCollapsed && (
             <motion.div
               animate={{ rotate: isExpanded ? 180 : 0 }}
               transition={{ duration: 0.2 }}>
@@ -341,7 +391,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
 
         {/* Children Items */}
         <AnimatePresence>
-          {hasChildren && isExpanded && (
+          {hasChildren && isExpanded && !isCollapsed && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
@@ -373,11 +423,6 @@ const AdminSidebar = ({ isOpen, onClose }) => {
                           {counts.pendingSettlements}
                         </span>
                       )}
-                      {item.title === "Settlements" && child === "Withdrawals" && counts.withdrawals > 0 && (
-                        <span className="bg-orange-500 text-white text-[10px] h-4 min-w-[18px] px-1.5 flex items-center justify-center rounded-full">
-                          {counts.withdrawals}
-                        </span>
-                      )}
                     </div>
                   );
                 })}
@@ -393,9 +438,9 @@ const AdminSidebar = ({ isOpen, onClose }) => {
   const sidebarContent = (
     <div className="h-full w-full flex flex-col bg-slate-900 border-r border-slate-800 select-none">
       {/* 1. Header Section */}
-      <div className="px-4 py-4 border-b border-slate-800/90 bg-slate-950">
+      <div className={`${isCollapsed ? "px-2" : "px-4"} py-4 border-b border-slate-800/90 bg-slate-950`}>
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className={`flex items-center gap-3 min-w-0 ${isCollapsed ? "" : "flex-1"}`}>
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md flex-shrink-0"
               style={{
@@ -404,12 +449,12 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             >
               <FiUser className="text-white text-lg" />
             </div>
-            <div className="flex-1 min-w-0">
+            <div className={`flex-1 min-w-0 ${isCollapsed ? "hidden" : ""}`}>
               <h2 className="font-bold text-white text-sm truncate">
                 {adminUser.name}
               </h2>
               <p className="text-[11px] text-amber-400 font-semibold truncate flex items-center gap-1">
-                ⭐ {adminUser.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                ⭐ {adminUser.role === 'super_admin' ? 'Super Admin' : 'Sub Admin'}
               </p>
             </div>
           </div>
@@ -421,39 +466,62 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             aria-label="Close sidebar">
             <FiX className="text-lg" />
           </button>
+
+          <button
+            onClick={onToggleCollapse}
+            className="hidden lg:flex p-1.5 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0 text-slate-300"
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {isCollapsed ? <FiChevronRight className="text-lg" /> : <FiChevronLeft className="text-lg" />}
+          </button>
         </div>
       </div>
 
       {/* 2. Search Menu Box */}
-      <div className="px-3.5 pt-3 pb-1">
+      <div className={`px-3.5 pt-3 pb-1 ${isCollapsed ? "flex justify-center" : ""}`}>
         <div className="relative flex items-center">
-          <FiSearch className="absolute left-3.5 text-slate-400 text-sm pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search Menu..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#720C3E] focus:ring-1 focus:ring-[#720C3E] transition-all"
-          />
-          {searchQuery && (
+          {isCollapsed ? (
             <button
-              onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 text-slate-400 hover:text-white text-xs cursor-pointer"
+              type="button"
+              onClick={onToggleCollapse}
+              className="w-10 h-10 flex items-center justify-center bg-slate-800/80 border border-slate-700/80 rounded-xl text-slate-300 hover:text-white hover:border-[#720C3E] transition-all"
+              aria-label="Expand sidebar to search"
+              title="Expand sidebar to search"
             >
-              <FiX />
+              <FiSearch className="text-sm" />
             </button>
+          ) : (
+            <>
+              <FiSearch className="absolute left-3.5 text-slate-400 text-sm pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search Menu..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#720C3E] focus:ring-1 focus:ring-[#720C3E] transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 text-slate-400 hover:text-white text-xs cursor-pointer"
+                >
+                  <FiX />
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
 
       {/* 3. Grouped Navigation Menu */}
-      <nav className="flex-1 overflow-y-auto px-3.5 py-2 scrollbar-admin space-y-4">
+      <nav className={`flex-1 overflow-y-auto py-2 scrollbar-admin space-y-4 ${isCollapsed ? "px-2" : "px-3.5"}`}>
         {Object.entries(groupedSections).map(([sectionName, items]) => (
           <div key={sectionName} className="space-y-1">
             {/* Section Heading Title */}
-            {sectionName !== "MAIN" && (
+            {sectionName !== "MAIN" && !isCollapsed && (
               <div className="text-[10.5px] font-bold text-slate-400 tracking-wider uppercase px-2.5 pt-2 pb-1">
-                {sectionName}
+                {sectionName === 'FINANCE & SETTLEMENTS' ? 'FINANCE' : sectionName}
               </div>
             )}
 
@@ -503,7 +571,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
 
       {/* Sidebar - Desktop Fixed */}
       <div
-        className="hidden lg:flex fixed left-0 top-0 bottom-0 z-30 w-[315px]"
+        className={`hidden lg:flex fixed left-0 top-0 bottom-0 z-30 transition-[width] duration-300 ${isCollapsed ? "w-[104px]" : "w-[315px]"}`}
       >
         {sidebarContent}
       </div>

@@ -5,13 +5,18 @@ import { FaWallet } from 'react-icons/fa';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
 import { vendorDashboardService } from '../../services/dashboardService';
-import { acceptBooking, rejectBooking, assignWorker } from '../../services/bookingService';
+import {
+  acceptBooking,
+  rejectBooking,
+  assignWorker,
+  getIgnoredBookingIds,
+  rememberIgnoredBooking
+} from '../../services/bookingService';
 // Booking alert handled globally
 import { toast } from 'react-hot-toast';
 import { io } from 'socket.io-client';
 
 import { registerFCMToken } from '../../../../services/pushNotificationService';
-import LogoLoader from '../../../../components/common/LogoLoader';
 import StatsCards from './components/StatsCards';
 import PendingBookings from './components/PendingBookings';
 
@@ -39,19 +44,46 @@ const Dashboard = memo(() => {
     completedJobs: 0,
     rating: 0,
   });
-  const [vendorProfile, setVendorProfile] = useState({
-    name: 'Vendor Name',
-    businessName: 'Business Name',
-    photo: null,
-    service: []
-  });
+  const getInitialVendorProfile = () => {
+    try {
+      const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+      const services = profile.service || profile.services || profile.categories || [];
+      const servicesList = Array.isArray(services) ? services : (services ? [services] : []);
+      const hasBank = !!(
+        profile.bankDetails?.accountNumber ||
+        profile.bankDetails?.upiId ||
+        profile.bankDetails?.upiQrCode ||
+        profile.bankAccount?.accountNumber ||
+        profile.upiId ||
+        profile.payoutDetails?.upiId ||
+        profile.payoutDetails?.accountNumber
+      );
+      return {
+        name: profile.name || 'Vendor Name',
+        businessName: profile.businessName || 'Business Name',
+        photo: profile.profilePhoto || null,
+        service: servicesList,
+        payoutAdded: hasBank
+      };
+    } catch {
+      return {
+        name: 'Vendor Name',
+        businessName: 'Business Name',
+        photo: null,
+        service: [],
+        payoutAdded: false
+      };
+    }
+  };
+
+  const [vendorProfile, setVendorProfile] = useState(getInitialVendorProfile);
   const [recentJobs, setRecentJobs] = useState([]);
   const [pendingBookings, setPendingBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [globalConfig, setGlobalConfig] = useState({ maxSearchTime: 5, waveDuration: 60 });
 
-  const ignoredBookingIds = useRef(new Set());
+  const [error, setError] = useState('');
+  const [globalConfig, setGlobalConfig] = useState({ maxSearchTime: 5 });
+
+  const ignoredBookingIds = useRef(getIgnoredBookingIds());
 
   // Set background gradient
   useLayoutEffect(() => {
@@ -92,15 +124,22 @@ const Dashboard = memo(() => {
     });
 
     // Build pending bookings map
+    const vendorId = (() => {
+      try {
+        const vendorData = JSON.parse(localStorage.getItem('vendorData') || '{}');
+        return vendorData._id || vendorData.id || null;
+      } catch (e) {
+        return null;
+      }
+    })();
     const mergedMap = new Map();
-    const vendorData = JSON.parse(localStorage.getItem('vendorData') || '{}');
-    const vendorId = vendorData._id || vendorData.id;
-
     requestedBookings.forEach(b => {
       const id = String(b._id || b.id);
 
+      if (ignoredBookingIds.current.has(id)) return;
+
       // Find distance for this vendor if available
-      let distance = 'N/A';
+      let distance = 'In your service zone';
       if (b.potentialVendors && vendorId) {
         const potentialVendor = b.potentialVendors.find(pv =>
           String(pv.vendorId?._id || pv.vendorId) === String(vendorId)
@@ -120,8 +159,8 @@ const Dashboard = memo(() => {
           address: b.address?.addressLine1 || 'Address not available',
           distance: distance
         },
-        // Prioritize vendorEarnings, fallback to 90% of finalAmount if it's not a free plan (finalAmount > 0)
-        price: (b.vendorEarnings > 0 ? b.vendorEarnings : (b.finalAmount > 0 ? b.finalAmount * 0.9 : 0)).toFixed(2),
+        // Booking cards show the customer bill; salary is tracked separately in Earning.
+        price: Number(b.finalAmount || 0).toFixed(2),
         vendorEarnings: b.vendorEarnings, // Ensure it's explicitly passed
         timeSlot: {
           date: new Date(b.scheduledDate).toLocaleDateString(),
@@ -188,40 +227,90 @@ const Dashboard = memo(() => {
       serviceType: booking.serviceId?.title || 'Service',
       customerName: booking.userId?.name || 'Customer',
       location: booking.address?.addressLine1 || 'Address not available',
-      price: (booking.vendorEarnings > 0 ? booking.vendorEarnings : (booking.finalAmount ? booking.finalAmount * 0.9 : 0)).toFixed(2),
+      price: Number(booking.finalAmount || 0).toFixed(2),
       vendorEarnings: booking.vendorEarnings,
-      timeSlot: {
-        date: new Date(booking.scheduledDate).toLocaleDateString(),
-        time: booking.scheduledTime || 'Time not set'
-      },
+        timeSlot: {
+          date: new Date(booking.scheduledDate).toLocaleDateString(),
+          time: booking.scheduledTime || 'Time not set'
+        },
+      bookingType: booking.bookingType,
       status: booking.status,
       assignedTo: booking.workerId ? { name: booking.workerId.name } : null,
     }));
     setRecentJobs(recentJobsData);
 
-    // Load vendor profile from localStorage (once)
-    const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
-    setVendorProfile({
-      name: profile.name || 'Vendor Name',
-      businessName: profile.businessName || 'Business Name',
-      photo: profile.profilePhoto || null,
-      service: profile.service || []
-    });
+    // Load vendor profile from localStorage
+    try {
+      const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+      const services = profile.service || profile.services || profile.categories || [];
+      const servicesList = Array.isArray(services) ? services : (services ? [services] : []);
+      const hasBank = !!(
+        profile.bankDetails?.accountNumber ||
+        profile.bankDetails?.upiId ||
+        profile.bankDetails?.upiQrCode ||
+        profile.bankAccount?.accountNumber ||
+        profile.upiId ||
+        profile.payoutDetails?.upiId ||
+        profile.payoutDetails?.accountNumber
+      );
+      setVendorProfile({
+        name: profile.name || 'Vendor Name',
+        businessName: profile.businessName || 'Business Name',
+        photo: profile.profilePhoto || null,
+        service: servicesList,
+        payoutAdded: hasBank
+      });
+    } catch (e) {
+      console.error('Error updating vendor profile from localStorage:', e);
+    }
+  }, []);
+
+  // Sync profile when vendorDataUpdated or vendorProfileUpdated events occur
+  useEffect(() => {
+    const handleProfileSync = () => {
+      try {
+        const profile = JSON.parse(localStorage.getItem('vendorData') || '{}');
+        const services = profile.service || profile.services || profile.categories || [];
+        const servicesList = Array.isArray(services) ? services : (services ? [services] : []);
+        const hasBank = !!(
+          profile.bankDetails?.accountNumber ||
+          profile.bankDetails?.upiId ||
+          profile.bankDetails?.upiQrCode ||
+          profile.bankAccount?.accountNumber ||
+          profile.upiId ||
+          profile.payoutDetails?.upiId ||
+          profile.payoutDetails?.accountNumber
+        );
+        setVendorProfile({
+          name: profile.name || 'Vendor Name',
+          businessName: profile.businessName || 'Business Name',
+          photo: profile.profilePhoto || null,
+          service: servicesList,
+          payoutAdded: hasBank
+        });
+      } catch (err) {
+        console.error('Error syncing vendor profile:', err);
+      }
+    };
+
+    window.addEventListener('vendorProfileUpdated', handleProfileSync);
+    window.addEventListener('vendorDataUpdated', handleProfileSync);
+    return () => {
+      window.removeEventListener('vendorProfileUpdated', handleProfileSync);
+      window.removeEventListener('vendorDataUpdated', handleProfileSync);
+    };
   }, []);
 
   // Main data loader - useCallback to prevent recreation
   const loadDashboardData = useCallback(async (showSpinner = true) => {
     try {
-      if (showSpinner) setLoading(true);
       setError(null);
 
-      const response = await vendorDashboardService.getDashboardStats();
+      const response = await vendorDashboardService.getDashboardStats({ forceRefresh: !showSpinner });
       processApiResponse(response);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
       setError(String(err.message || 'Failed to load dashboard data'));
-    } finally {
-      setLoading(false);
     }
   }, [processApiResponse]);
 
@@ -258,9 +347,11 @@ const Dashboard = memo(() => {
     const handleShowAlert = (e) => {
       // e.detail contains the new booking job
       if (e.detail) {
+        const bookingId = String(e.detail.id || e.detail._id || '');
+        if (!bookingId || ignoredBookingIds.current.has(bookingId)) return;
         // Also add to pending if not present
         setPendingBookings(prev => {
-          if (prev.find(b => b.id === e.detail.id)) return prev;
+          if (prev.find(b => String(b.id || b._id) === bookingId)) return prev;
           return [e.detail, ...prev];
         });
       }
@@ -272,6 +363,7 @@ const Dashboard = memo(() => {
 
         // Add to ignored list so it doesn't come back on next fetch
         ignoredBookingIds.current.add(idToRemove);
+        rememberIgnoredBooking(idToRemove);
 
         // Remove from pending bookings state immediately
         setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== idToRemove));
@@ -305,6 +397,8 @@ const Dashboard = memo(() => {
     try {
       const response = await acceptBooking(bookingId);
       if (response.success) {
+        ignoredBookingIds.current.add(String(bookingId));
+        rememberIgnoredBooking(bookingId);
         toast.success('Booking accepted successfully!');
         setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== String(bookingId)));
 
@@ -323,22 +417,25 @@ const Dashboard = memo(() => {
   };
 
   const handleRejectAlert = async (bookingId) => {
+    ignoredBookingIds.current.add(String(bookingId));
+    rememberIgnoredBooking(bookingId);
     try {
       const response = await rejectBooking(bookingId);
       if (response.success) {
         toast.success('Booking rejected');
-        setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== String(bookingId)));
-
-        // Sync localStorage
-        const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
-        const updated = pendingJobs.filter(b => String(b.id || b._id) !== String(bookingId));
-        localStorage.setItem('vendorPendingJobs', JSON.stringify(updated));
-
-        window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: bookingId } }));
       }
     } catch (error) {
       console.error('Error rejecting:', error);
       toast.error('Failed to reject booking');
+    } finally {
+      setPendingBookings(prev => prev.filter(b => String(b.id || b._id) !== String(bookingId)));
+
+      // Sync localStorage and remove the alert from every vendor surface.
+      const pendingJobs = JSON.parse(localStorage.getItem('vendorPendingJobs') || '[]');
+      const updated = pendingJobs.filter(b => String(b.id || b._id) !== String(bookingId));
+      localStorage.setItem('vendorPendingJobs', JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('removeVendorBooking', { detail: { id: bookingId } }));
+      window.dispatchEvent(new Event('vendorJobsUpdated'));
     }
   };
 
@@ -377,6 +474,7 @@ const Dashboard = memo(() => {
     const s = String(status).toLowerCase();
     const statusColors = {
       'accepted': '#3B82F6',
+      'awaiting_payment': '#F59E0B',
       'confirmed': '#10B981',
       'assigned': '#8B5CF6',
       'journey_started': '#F59E0B',
@@ -396,6 +494,7 @@ const Dashboard = memo(() => {
       'requested': 'Requested',
       'searching': 'Searching',
       'accepted': 'Accepted',
+      'awaiting_payment': 'Payment Pending',
       'confirmed': 'Confirmed',
       'assigned': 'Assigned',
       'journey_started': 'On the way',
@@ -410,33 +509,8 @@ const Dashboard = memo(() => {
     };
     return labels[s] || status;
   };
-
-  // Show loading state
-  if (loading) {
-    return <LogoLoader />;
-  }
-
   // Show error state
   if (error) {
-    return (
-      <div className="min-h-screen pb-20 flex items-center justify-center" style={{ background: themeColors.backgroundGradient }}>
-        <div className="text-center px-6">
-          <div className="text-red-400 text-6xl mb-4">⚠️</div>
-          <h2 className="text-white text-xl font-semibold mb-2">Failed to Load Dashboard</h2>
-          <p className="text-gray-300 mb-6">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-white text-gray-900 px-6 py-3 rounded-lg font-medium hover:bg-gray-100 transition-colors"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Show error state
-  if (error && error.length > 0 && !loading) {
     return (
       <div className="min-h-screen pb-20 flex items-center justify-center" style={{ background: themeColors.backgroundGradient }}>
         <div className="text-center px-6">
@@ -460,30 +534,37 @@ const Dashboard = memo(() => {
 
       <main className="pt-2">
 
-        {/* Incomplete Profile Prompt */}
-        {(!vendorProfile.service || vendorProfile.service.length === 0) && (
-          <div className="px-4 pt-2 -mb-2">
-            <div
-              onClick={() => navigate('/vendor/profile')}
-              className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-r shadow-sm cursor-pointer hover:bg-orange-100 transition-colors"
-            >
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <FiClock className="h-5 w-5 text-orange-500" />
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm font-bold text-orange-700">Profile Incomplete</p>
-                  <p className="text-sm text-orange-600">
-                    Add services to your profile to start receiving bookings.
-                  </p>
-                </div>
-                <div className="ml-auto">
-                  <FiArrowRight className="h-4 w-4 text-orange-500" />
-                </div>
+        {/* Incomplete Profile Banner (Unified) */}
+        {((!vendorProfile.service || vendorProfile.service.length === 0) || !vendorProfile.payoutAdded) && (() => {
+          const noServices = !vendorProfile.service || vendorProfile.service.length === 0;
+          const noPayout = !vendorProfile.payoutAdded;
+          
+          let title = "QR Code Required";
+          let message = "Add your UPI QR code to receive payments.";
+          let targetPath = '/vendor/profile';
+
+          if (noServices && !noPayout) {
+            targetPath = '/vendor/profile';
+          } else if (!noServices && noPayout) {
+            targetPath = '/vendor/profile/payout';
+          }
+
+          return (
+            <div className="px-4 pt-2 -mb-2">
+              <div
+                onClick={() => navigate(targetPath)}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-xl cursor-pointer transition-all active:opacity-80"
+                style={{ background: 'rgba(114,12,62,0.06)', border: '1px solid rgba(114,12,62,0.18)' }}
+              >
+                <FiClock className="h-4 w-4 flex-shrink-0" style={{ color: '#720C3E' }} />
+                <p className="text-xs font-semibold flex-1" style={{ color: '#4D082A' }}>
+                  {title} — <span className="font-normal">{message}</span>
+                </p>
+                <FiArrowRight className="h-3.5 w-3.5 flex-shrink-0" style={{ color: '#720C3E' }} />
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Stats Cards - Optimized Component */}
         <StatsCards stats={stats} />
@@ -580,6 +661,13 @@ const Dashboard = memo(() => {
                               <p className="text-xs font-bold text-[#24151D]">{job.customerName}</p>
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 bg-[#FCEBF3] text-[#720C3E]">
                                 {job.serviceType || 'Service'}
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${job.bookingType === 'scheduled'
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                                  : 'bg-orange-50 text-orange-700 border border-orange-100'}`}
+                              >
+                                {job.bookingType === 'scheduled' ? 'SLOT BOOKING' : 'INSTANT BOOKING'}
                               </span>
                             </div>
 

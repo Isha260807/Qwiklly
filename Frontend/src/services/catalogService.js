@@ -1,6 +1,8 @@
 import api, { apiCache } from './api';
 import { uploadToCloudinary } from '../utils/cloudinaryUpload';
 
+const publicCatalogInFlight = new Map();
+
 /**
  * Catalog Service
  * Handles all API calls for Categories, Brands (formerly Services), Services (Sub-services), and Home Content
@@ -62,6 +64,8 @@ export const brandService = {
     const queryParams = new URLSearchParams();
     if (params.status) queryParams.append('status', params.status);
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
+    if (params.cityId) queryParams.append('cityId', params.cityId);
+    if (params.zoneId) queryParams.append('zoneId', params.zoneId);
     if (params.cityId) queryParams.append('cityId', params.cityId);
 
     const response = await api.get(`/admin/brands${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
@@ -126,7 +130,7 @@ export const serviceService = {
     const queryParams = new URLSearchParams();
     if (params.status) queryParams.append('status', params.status);
     if (params.brandId) queryParams.append('brandId', params.brandId);
-    if (params.cityId) queryParams.append('cityId', params.cityId);
+    if (params.zoneId) queryParams.append('zoneId', params.zoneId);
     if (params.search) queryParams.append('search', params.search);
 
     const response = await api.get(`/admin/services${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
@@ -142,18 +146,27 @@ export const serviceService = {
   // Create new service
   create: async (data) => {
     const response = await api.post('/admin/services', data);
+    apiCache.invalidatePrefix('public:');
     return response.data;
   },
 
   // Update service
   update: async (id, data) => {
     const response = await api.put(`/admin/services/${id}`, data);
+    apiCache.invalidatePrefix('public:');
     return response.data;
   },
 
   // Delete service
-  delete: async (id) => {
-    const response = await api.delete(`/admin/services/${id}`);
+  delete: async (id, force = false) => {
+    const response = await api.delete(`/admin/services/${id}${force ? '?force=true' : ''}`);
+    apiCache.invalidatePrefix('public:');
+    return response.data;
+  },
+
+  // Get service impact (pre-deletion check)
+  getImpact: async (id) => {
+    const response = await api.get(`/admin/services/${id}/impact`);
     return response.data;
   },
 
@@ -263,6 +276,8 @@ export const publicCatalogService = {
   getBrands: async (params = {}) => {
     const queryParams = new URLSearchParams();
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
+    if (params.cityId) queryParams.append('cityId', params.cityId);
+    if (params.zoneId) queryParams.append('zoneId', params.zoneId);
     if (params.categorySlug) queryParams.append('categorySlug', params.categorySlug);
     if (params.search) queryParams.append('search', params.search);
     if (params.cityId) queryParams.append('cityId', params.cityId);
@@ -285,16 +300,31 @@ export const publicCatalogService = {
     if (params.brandId) queryParams.append('brandId', params.brandId);
     if (params.brandSlug) queryParams.append('brandSlug', params.brandSlug);
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
+    if (params.cityId) queryParams.append('cityId', params.cityId);
+    if (params.zoneId) queryParams.append('zoneId', params.zoneId);
+    if (params.search) queryParams.append('search', params.search);
 
-    const cacheKey = `public:services:${queryParams.toString()}`;
+    const query = queryParams.toString();
+    const cacheKey = 'public:services:' + query;
     const cached = apiCache.get(cacheKey);
     if (cached) return cached;
 
-    const response = await api.get(`/public/services${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
-    if (response.data.success) {
-      apiCache.set(cacheKey, response.data, 120);
-    }
-    return response.data;
+    const existingRequest = publicCatalogInFlight.get(cacheKey);
+    if (existingRequest) return existingRequest;
+
+    const request = api.get('/public/services' + (query ? '?' + query : ''))
+      .then(response => {
+        if (response.data.success) {
+          apiCache.set(cacheKey, response.data, 120);
+        }
+        return response.data;
+      })
+      .finally(() => {
+        publicCatalogInFlight.delete(cacheKey);
+      });
+
+    publicCatalogInFlight.set(cacheKey, request);
+    return request;
   },
 
   // Get brand by slug (cached for 1 minute)
@@ -326,17 +356,32 @@ export const publicCatalogService = {
   },
 
   // Get consolidated home data (cached for 2 minutes)
-  getHomeData: async (cityId) => {
-    const cacheKey = `public:homeData:${cityId || 'default'}`;
+  getHomeData: async (cityId, zoneId) => {
+    const cacheKey = 'public:homeData:' + (cityId || 'default') + ':' + (zoneId || 'none');
     const cached = apiCache.get(cacheKey);
     if (cached) return cached;
 
-    const query = cityId ? `?cityId=${cityId}` : '';
-    const response = await api.get(`/public/home-data${query}`);
-    if (response.data.success) {
-      apiCache.set(cacheKey, response.data, 120); // 2 minutes
-    }
-    return response.data;
+    const existingRequest = publicCatalogInFlight.get(cacheKey);
+    if (existingRequest) return existingRequest;
+
+    const params = new URLSearchParams();
+    if (cityId) params.set('cityId', cityId);
+    if (zoneId) params.set('zoneId', zoneId);
+    const query = params.toString();
+
+    const request = api.get('/public/home-data' + (query ? '?' + query : ''))
+      .then(response => {
+        if (response.data.success) {
+          apiCache.set(cacheKey, response.data, 120);
+        }
+        return response.data;
+      })
+      .finally(() => {
+        publicCatalogInFlight.delete(cacheKey);
+      });
+
+    publicCatalogInFlight.set(cacheKey, request);
+    return request;
   },
 
   // Invalidate all public caches (useful after admin updates)

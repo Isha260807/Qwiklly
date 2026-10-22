@@ -1,8 +1,82 @@
+const mongoose = require('mongoose');
 const Category = require('../../models/Category');
 const Brand = require('../../models/Brand');
 const Service = require('../../models/UserService');
 const HomeContent = require('../../models/HomeContent');
 const Banner = require('../../models/Banner');
+const Review = require('../../models/Review');
+const Settings = require('../../models/Settings');
+const formatReviewCount = (count) => {
+  const total = Number(count) || 0;
+  if (!total) return '';
+  if (total < 1000) return String(total);
+  if (total < 1000000) {
+    const value = total / 1000;
+    return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)}k`;
+  }
+  const value = total / 1000000;
+  return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)}M`;
+};
+
+const getGlobalServiceGstPercentage = async () => {
+  const settings = await Settings.findOne({ type: 'global' })
+    .select('serviceGstPercentage')
+    .lean();
+
+  const percentage = Number(settings?.serviceGstPercentage);
+  return Number.isFinite(percentage) && percentage >= 0 ? percentage : 0;
+};
+const getServiceRatingStats = async (services = []) => {
+  const serviceIds = [...new Set(
+    services
+      .map(service => service?._id || service?.id)
+      .filter(id => id && mongoose.Types.ObjectId.isValid(id))
+      .map(id => String(id))
+  )];
+
+  if (!serviceIds.length) return new Map();
+
+  const stats = await Review.aggregate([
+    {
+      $match: {
+        serviceId: { $in: serviceIds.map(id => new mongoose.Types.ObjectId(id)) },
+        status: 'active',
+        rating: { $gte: 1, $lte: 5 }
+      }
+    },
+    {
+      $group: {
+        _id: '$serviceId',
+        averageRating: { $avg: '$rating' },
+        totalReviews: { $sum: 1 }
+      }
+    }
+  ]);
+
+  return new Map(stats.map(stat => [String(stat._id), {
+    averageRating: Number(Number(stat.averageRating || 0).toFixed(1)),
+    totalReviews: Number(stat.totalReviews || 0)
+  }]));
+};
+
+const getServiceRatingPayload = (service, ratingStatsByServiceId) => {
+  const stats = ratingStatsByServiceId.get(String(service?._id || service?.id)) || {};
+  const adminRating = Number(service?.adminRating);
+  const hasAdminRating = Number.isFinite(adminRating) && adminRating >= 1 && adminRating <= 5;
+  const liveRating = Number(stats.averageRating);
+  const rating = hasAdminRating
+    ? adminRating
+    : (Number.isFinite(liveRating) && liveRating > 0 ? liveRating : null);
+  const reviewCount = Number(stats.totalReviews || 0);
+  const ratingCount = formatReviewCount(reviewCount);
+
+  return {
+    rating,
+    reviews: ratingCount,
+    ratingCount,
+    reviewCount
+  };
+};
 
 /**
  * Public Catalog Controllers
@@ -164,6 +238,8 @@ const getPublicBrandBySlug = async (req, res) => {
 
     // Fetch services associated with this brand
     const brandServices = await Service.find({ brandId: brand._id, status: 'active' }).lean();
+    const brandRatingStats = await getServiceRatingStats(brandServices);
+    const globalServiceGstPercentage = await getGlobalServiceGstPercentage();
 
     // Map services to a default section structure for the frontend
     const servicesSection = {
@@ -174,8 +250,9 @@ const getPublicBrandBySlug = async (req, res) => {
         title: svc.title,
         subtitle: svc.description || '',
         price: svc.basePrice,
-        rating: "4.8", // Default rating
-        reviews: "1k+", // Default reviews
+        gstPercentage: globalServiceGstPercentage,
+        ...getServiceRatingPayload(svc, brandRatingStats),
+
         imageUrl: svc.iconUrl || brand.iconUrl || '',
         features: svc.description ? [svc.description] : [],
         duration: "60 min" // Default duration
@@ -227,18 +304,9 @@ const getPublicBrandBySlug = async (req, res) => {
  */
 const getPublicServices = async (req, res) => {
   try {
-    const { brandId, brandSlug, categoryId, cityId, search } = req.query;
+    const { brandId, brandSlug, categoryId, cityId, zoneId, search } = req.query;
 
     const query = { status: 'active' };
-
-    if (cityId) {
-      query.$or = [
-        { cityId: cityId },
-        { cityIds: cityId },
-        { cityIds: { $size: 0 } },
-        { cityIds: { $exists: false } }
-      ];
-    }
 
     if (brandId) {
       query.brandId = brandId;
@@ -262,12 +330,35 @@ const getPublicServices = async (req, res) => {
 
     const services = await Service.find(query)
       .populate('brandId', 'title iconUrl')
+      .populate('frequentlyAddedTogether', 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours adminRating rating ratingCount status zoneIds')
+      .populate('frequentlyAddedTogetherByZone.zoneId', 'name')
+      .populate('frequentlyAddedTogetherByZone.serviceIds', 'title slug iconUrl basePrice originalPrice discountPrice pricingType estimatedDurationMinutes pricePerUnit billingUnitMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationStepMinutes durationPricing hourlyRate minHours maxHours adminRating rating ratingCount status zoneIds')
       .sort({ displayOrder: 1, createdAt: -1 })
       .lean();
 
+    const globalServiceGstPercentage = await getGlobalServiceGstPercentage();
+
+    const ratingStatsByServiceId = await getServiceRatingStats([
+      ...services,
+      ...services.flatMap(service => [
+        ...(service.frequentlyAddedTogether || []),
+        ...((service.frequentlyAddedTogetherByZone || []).flatMap(entry => entry.serviceIds || []))
+      ])
+    ]);
+
     res.status(200).json({
       success: true,
-      services: services.map(svc => ({
+      services: services.map(svc => {
+        const zoneRecommendationGroup = zoneId
+          ? (svc.frequentlyAddedTogetherByZone || []).find(entry =>
+            String(entry.zoneId?._id || entry.zoneId) === String(zoneId)
+          )
+          : null;
+        const recommendedServices = zoneRecommendationGroup
+          ? zoneRecommendationGroup.serviceIds
+          : (svc.frequentlyAddedTogether || []);
+
+        return ({
         id: svc._id.toString(),
         title: svc.title,
         slug: svc.slug,
@@ -282,16 +373,26 @@ const getPublicServices = async (req, res) => {
         basePrice: svc.basePrice,
         originalPrice: svc.originalPrice || 0,
         discountPrice: svc.discountPrice || null,
-        gstPercentage: svc.gstPercentage ?? 18,
+        gstPercentage: globalServiceGstPercentage,
         pricingType: svc.pricingType || 'FIXED',
+        estimatedDurationMinutes: svc.estimatedDurationMinutes ?? 45,
+        pricePerUnit: svc.pricePerUnit ?? svc.durationPricing?.pricePerUnit ?? svc.pricePer30Minutes ?? (svc.hourlyRate ? svc.hourlyRate / 2 : null),
+        billingUnitMinutes: svc.billingUnitMinutes ?? svc.durationPricing?.billingUnitMinutes ?? 30,
+        durationStepMinutes: svc.durationStepMinutes ?? svc.durationPricing?.durationStepMinutes ?? svc.billingUnitMinutes ?? 30,
+        // Legacy fields are retained for older clients.
+        pricePer30Minutes: svc.pricePer30Minutes ?? (svc.billingUnitMinutes === 30 ? svc.pricePerUnit : null),
+        minDurationMinutes: svc.minDurationMinutes ?? svc.durationPricing?.minDurationMinutes ?? (svc.minHours ? svc.minHours * 60 : 30),
+        maxDurationMinutes: svc.maxDurationMinutes ?? svc.durationPricing?.maxDurationMinutes ?? (svc.maxHours ? svc.maxHours * 60 : 240),
+        durationPricing: svc.durationPricing || null,
         hourlyRate: svc.hourlyRate ?? null,
         minHours: svc.minHours ?? 1,
         maxHours: svc.maxHours ?? 8,
         allowCustomHours: svc.allowCustomHours ?? false,
         allowExtraHours: svc.allowExtraHours ?? true,
-        rating: svc.rating || 4.9,
-        reviews: svc.ratingCount || '4.9 (237.6k)',
-        ratingCount: svc.ratingCount || '4.9 (237.6k)',
+        // Keep the service visible in every city/zone catalog. The client
+        // uses this list only to label area availability; it is not a filter.
+        zoneIds: (svc.zoneIds || []).map(zoneId => zoneId.toString()),
+        ...getServiceRatingPayload(svc, ratingStatsByServiceId),
         badge: svc.badge || null,
         inclusions: svc.inclusions || [],
         whyLoveTitle: svc.whyLoveTitle || `Why Customers Love ${svc.title}`,
@@ -301,10 +402,44 @@ const getPublicServices = async (req, res) => {
         howItWorksTitle: svc.howItWorksTitle || "How it's done?",
         howItWorks: svc.howItWorks || [],
         faqs: svc.faqs || [],
+        frequentlyAddedTogether: recommendedServices
+          .filter(recommended => {
+            if (!recommended || recommended.status !== 'active') return false;
+            if (!zoneId) return true;
+            const recommendedZoneIds = (recommended.zoneIds || []).map(id => String(id?._id || id));
+            return recommendedZoneIds.length === 0 || recommendedZoneIds.includes(String(zoneId));
+          })
+          .map(recommended => ({
+            id: recommended._id.toString(),
+            title: recommended.title,
+            slug: recommended.slug,
+            icon: recommended.iconUrl || '',
+            iconUrl: recommended.iconUrl || '',
+            image: recommended.iconUrl || '',
+            imageUrl: recommended.iconUrl || '',
+            price: recommended.basePrice || 0,
+            basePrice: recommended.basePrice || 0,
+            originalPrice: recommended.originalPrice || 0,
+            discountPrice: recommended.discountPrice || null,
+            gstPercentage: globalServiceGstPercentage,
+            pricingType: recommended.pricingType || 'FIXED',
+            estimatedDurationMinutes: recommended.estimatedDurationMinutes ?? 45,
+            pricePerUnit: recommended.pricePerUnit ?? recommended.durationPricing?.pricePerUnit ?? recommended.pricePer30Minutes ?? null,
+            billingUnitMinutes: recommended.billingUnitMinutes ?? recommended.durationPricing?.billingUnitMinutes ?? 30,
+            durationStepMinutes: recommended.durationStepMinutes ?? recommended.durationPricing?.durationStepMinutes ?? 30,
+            minDurationMinutes: recommended.minDurationMinutes ?? recommended.durationPricing?.minDurationMinutes ?? 30,
+            maxDurationMinutes: recommended.maxDurationMinutes ?? recommended.durationPricing?.maxDurationMinutes ?? 240,
+            durationPricing: recommended.durationPricing || null,
+            hourlyRate: recommended.hourlyRate ?? null,
+            minHours: recommended.minHours ?? 1,
+            maxHours: recommended.maxHours ?? 8,
+            ...getServiceRatingPayload(recommended, ratingStatsByServiceId)
+          })),
         brandId: svc.brandId?._id,
         brandName: svc.brandId?.title,
         brandIcon: svc.brandId?.iconUrl
-      }))
+      });
+      })
     });
   } catch (error) {
     console.error('Get public services error:', error);
@@ -413,26 +548,21 @@ const getPublicHomeContent = async (req, res) => {
  */
 const getPublicHomeData = async (req, res) => {
   try {
-    const { cityId } = req.query;
+    const { cityId, zoneId } = req.query;
 
     const serviceQuery = { status: 'active' };
-    if (cityId) {
-      serviceQuery.$or = [
-        { cityId: cityId },
-        { cityIds: cityId },
-        { cityIds: { $size: 0 } },
-        { cityIds: { $exists: false } }
+    // Banners are zone-based - empty/missing zoneIds means shown everywhere
+    const bannerQuery = { isActive: true };
+    if (zoneId) {
+      bannerQuery.$or = [
+        { zoneIds: zoneId },
+        { zoneIds: { $size: 0 } },
+        { zoneIds: { $exists: false } }
       ];
     }
 
-    // Query banners
-    const bannerQuery = { isActive: true };
-    if (cityId) {
-      bannerQuery.$or = [{ cityId: cityId }, { cityId: null }];
-    }
-
     // Fetch all in parallel
-    const [categoriesRes, servicesRes, homeContent, bannersRes] = await Promise.all([
+    const [categoriesRes, servicesRes, homeContent, globalHomeContent, bannersRes] = await Promise.all([
       Category.find({ status: 'active', cityIds: cityId ? cityId : { $exists: true } })
         .select('title slug homeIconUrl homeBadge hasSaleBadge')
         .sort({ homeOrder: 1 })
@@ -441,12 +571,17 @@ const getPublicHomeData = async (req, res) => {
         .sort({ displayOrder: 1, createdAt: -1 })
         .lean(),
       HomeContent.getHomeContent(cityId),
+      cityId ? HomeContent.getHomeContent(null) : null,
       Banner.find(bannerQuery)
         .populate('targetCategoryId', 'title slug homeIconUrl')
         .populate('targetServiceId', 'title slug iconUrl')
         .sort({ order: 1, createdAt: -1 })
         .lean()
     ]);
+
+    const globalServiceGstPercentage = await getGlobalServiceGstPercentage();
+
+    const ratingStatsByServiceId = await getServiceRatingStats(servicesRes);
 
     const formattedCategories = categoriesRes.map(cat => ({
       id: cat._id.toString(),
@@ -471,10 +606,27 @@ const getPublicHomeData = async (req, res) => {
       basePrice: svc.basePrice,
       originalPrice: svc.originalPrice || 0,
       discountPrice: svc.discountPrice || null,
-      gstPercentage: svc.gstPercentage ?? 18,
-      rating: svc.rating || 4.9,
-      reviews: svc.ratingCount || '4.9 (237.6k)',
-      ratingCount: svc.ratingCount || '4.9 (237.6k)',
+      gstPercentage: globalServiceGstPercentage,
+      pricingType: svc.pricingType || 'FIXED',
+      estimatedDurationMinutes: svc.estimatedDurationMinutes ?? 45,
+      pricePerUnit: svc.pricePerUnit ?? svc.durationPricing?.pricePerUnit ?? svc.pricePer30Minutes ?? (svc.hourlyRate ? svc.hourlyRate / 2 : null),
+      billingUnitMinutes: svc.billingUnitMinutes ?? svc.durationPricing?.billingUnitMinutes ?? 30,
+      durationStepMinutes: svc.durationStepMinutes ?? svc.durationPricing?.durationStepMinutes ?? svc.billingUnitMinutes ?? 30,
+      pricePer30Minutes: svc.pricePer30Minutes ?? (svc.billingUnitMinutes === 30 ? svc.pricePerUnit : null),
+      minDurationMinutes: svc.minDurationMinutes ?? svc.durationPricing?.minDurationMinutes ?? (svc.minHours ? svc.minHours * 60 : 30),
+      maxDurationMinutes: svc.maxDurationMinutes ?? svc.durationPricing?.maxDurationMinutes ?? (svc.maxHours ? svc.maxHours * 60 : 240),
+      durationPricing: svc.durationPricing || null,
+      hourlyRate: svc.hourlyRate ?? null,
+      minHours: svc.minHours ?? 1,
+      maxHours: svc.maxHours ?? 8,
+      allowCustomHours: svc.allowCustomHours ?? false,
+      allowExtraHours: svc.allowExtraHours ?? true,
+      categoryId: svc.categoryId?.toString() || null,
+      brandId: svc.brandId?.toString() || null,
+      // Empty means available in every active zone. Non-empty is used by the
+      // client to show an unavailable badge without hiding the service.
+      zoneIds: (svc.zoneIds || []).map(zoneId => zoneId.toString()),
+      ...getServiceRatingPayload(svc, ratingStatsByServiceId),
       badge: svc.badge || null,
       inclusions: svc.inclusions || []
     }));
@@ -501,6 +653,7 @@ const getPublicHomeData = async (req, res) => {
     let formattedContent = null;
     if (homeContent) {
       const contentObj = homeContent.toObject();
+      const globalContentObj = globalHomeContent?.toObject?.() || contentObj;
       formattedContent = {
         banners: formattedBanners.length > 0 ? formattedBanners : (contentObj.banners || []).map(item => ({
           imageUrl: item.imageUrl,
@@ -546,6 +699,17 @@ const getPublicHomeData = async (req, res) => {
           })),
           order: section.order
         })),
+        trustSection: {
+          isVisible: globalContentObj.trustSection?.isVisible ?? true,
+          title: globalContentObj.trustSection?.title || 'Relax, your home is in professional hands',
+          trustedBy: globalContentObj.trustSection?.trustedBy || '15 lakh',
+          trustedLabel: globalContentObj.trustSection?.trustedLabel || 'Families',
+          rating: globalContentObj.trustSection?.rating || '',
+          ratingLabel: globalContentObj.trustSection?.ratingLabel || '3 Lakh+ Ratings',
+          imageUrl: globalContentObj.trustSection?.imageUrl || '/Homster xpert .png',
+          cartCta: globalContentObj.trustSection?.cartCta || 'Go to cart',
+          emptyCartCta: globalContentObj.trustSection?.emptyCartCta || 'Browse services'
+        },
         isBannersVisible: contentObj.isBannersVisible ?? true,
         isPromosVisible: contentObj.isPromosVisible ?? true,
         isCuratedVisible: contentObj.isCuratedVisible ?? true,
@@ -578,16 +742,21 @@ const getPublicHomeData = async (req, res) => {
  */
 const getPublicBanners = async (req, res) => {
   try {
-    const { cityId, bannerType, position } = req.query;
+    const { zoneId, bannerType, position } = req.query;
     const query = { isActive: true };
 
     if (bannerType && bannerType !== 'all') query.bannerType = bannerType;
     if (position && position !== 'all') query.position = position;
 
-    if (cityId) {
-      query.$or = [{ cityId: cityId }, { cityId: null }];
+    // Empty/missing zoneIds means the banner is shown in every zone
+    if (zoneId) {
+      query.$or = [
+        { zoneIds: zoneId },
+        { zoneIds: { $size: 0 } },
+        { zoneIds: { $exists: false } }
+      ];
     } else {
-      query.cityId = null;
+      query.$or = [{ zoneIds: { $size: 0 } }, { zoneIds: { $exists: false } }];
     }
 
     const banners = await Banner.find(query)

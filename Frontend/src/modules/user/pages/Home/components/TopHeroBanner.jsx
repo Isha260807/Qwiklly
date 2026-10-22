@@ -23,6 +23,8 @@ const TopHeroBanner = memo(({
   const [isHovered, setIsHovered] = useState(false);
   const timerRef = useRef(null);
   const containerRef = useRef(null);
+  const gestureRef = useRef(null);
+  const suppressClickRef = useRef(false);
 
   // Filter only Top Hero banners
   const heroBanners = (banners || []).filter(
@@ -51,6 +53,17 @@ const TopHeroBanner = memo(({
   }
 
   const currentBanner = displayBanners[currentIndex] || displayBanners[0];
+  const bannerImageUrl = toAssetUrl(currentBanner.imageUrl);
+  const optimizedBannerSrc = optimizeCloudinaryUrl(bannerImageUrl, {
+    width: 720,
+    quality: 'auto:good',
+    dpr: 1
+  });
+  const bannerSrcSet = bannerImageUrl.includes('cloudinary.com')
+    ? [480, 720, 960, 1280]
+      .map(width => `${optimizeCloudinaryUrl(bannerImageUrl, { width, quality: 'auto:good', dpr: 1 })} ${width}w`)
+      .join(', ')
+    : undefined;
 
   const handleNext = (e) => {
     e?.stopPropagation();
@@ -60,6 +73,56 @@ const TopHeroBanner = memo(({
   const handlePrev = (e) => {
     e?.stopPropagation();
     setCurrentIndex(prev => (prev - 1 + displayBanners.length) % displayBanners.length);
+  };
+
+  const handlePointerDown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+    gestureRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false
+    };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
+  const handlePointerMove = (e) => {
+    if (!gestureRef.current) return;
+
+    const distanceX = Math.abs(e.clientX - gestureRef.current.startX);
+    const distanceY = Math.abs(e.clientY - gestureRef.current.startY);
+    if (Math.max(distanceX, distanceY) > 8) {
+      gestureRef.current.moved = true;
+    }
+  };
+
+  const handlePointerUp = (e) => {
+    const gesture = gestureRef.current;
+    if (!gesture) return;
+
+    const distanceX = e.clientX - gesture.startX;
+    const distanceY = e.clientY - gesture.startY;
+    const isSwipe = gesture.moved && Math.abs(distanceX) >= 40 && Math.abs(distanceX) > Math.abs(distanceY);
+
+    if (isSwipe && displayBanners.length > 1) {
+      setCurrentIndex(prev => (
+        distanceX < 0
+          ? (prev + 1) % displayBanners.length
+          : (prev - 1 + displayBanners.length) % displayBanners.length
+      ));
+    }
+
+    // Do not open the banner link after a swipe or a vertical drag.
+    suppressClickRef.current = gesture.moved;
+    gestureRef.current = null;
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+      e.currentTarget.releasePointerCapture?.(e.pointerId);
+    }
+  };
+
+  const handlePointerCancel = () => {
+    gestureRef.current = null;
+    suppressClickRef.current = true;
   };
 
   const handleClick = (banner) => {
@@ -92,6 +155,14 @@ const TopHeroBanner = memo(({
     }
   };
 
+  const handleBannerCardClick = () => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    handleClick(currentBanner);
+  };
+
   return (
     <div
       ref={containerRef}
@@ -101,9 +172,14 @@ const TopHeroBanner = memo(({
     >
       {/* Banner Carousel Card */}
       <div
-        onClick={() => handleClick(currentBanner)}
+        onClick={handleBannerCardClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         className="relative overflow-hidden rounded-2xl md:rounded-3xl cursor-pointer shadow-md hover:shadow-xl transition-all duration-300 bg-slate-100 h-[150px] sm:h-[190px] md:h-[230px] lg:h-[260px] xl:h-[280px] w-full border border-black/5"
         style={{
+          touchAction: 'pan-y',
           boxShadow: '0 6px 20px -4px rgba(0, 0, 0, 0.1), 0 3px 6px -2px rgba(0, 0, 0, 0.05)'
         }}
       >
@@ -118,7 +194,9 @@ const TopHeroBanner = memo(({
           >
             {/* Banner Image */}
             <img
-              src={optimizeCloudinaryUrl(toAssetUrl(currentBanner.imageUrl), { quality: 'auto:best', dpr: '2.0' })}
+              src={optimizedBannerSrc}
+              srcSet={bannerSrcSet}
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1200px"
               alt={currentBanner.title || 'Special Offer'}
               className="w-full h-full object-cover object-center rounded-2xl md:rounded-3xl"
               style={{
@@ -127,9 +205,16 @@ const TopHeroBanner = memo(({
                 backfaceVisibility: 'hidden'
               }}
               loading="eager"
+              fetchPriority="high"
               decoding="async"
               onError={(e) => {
-                e.target.src = 'https://placehold.co/1200x500/720C3E/white?text=Special+Offers';
+                if (e.currentTarget.dataset.originalFallback !== 'true' && bannerImageUrl) {
+                  e.currentTarget.dataset.originalFallback = 'true';
+                  e.currentTarget.removeAttribute('srcset');
+                  e.currentTarget.src = bannerImageUrl;
+                  return;
+                }
+                e.currentTarget.src = 'https://placehold.co/1200x500/720C3E/white?text=Special+Offers';
               }}
             />
 
@@ -143,6 +228,21 @@ const TopHeroBanner = memo(({
                 }}
               >
                 {currentBanner.badgeText}
+              </div>
+            )}
+
+            {(currentBanner.title || currentBanner.subtitle || currentBanner.tagline) && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-3 pt-10 sm:px-5 sm:pb-5 sm:pt-14 text-white bg-gradient-to-t from-black/75 via-black/35 to-transparent">
+                {currentBanner.title && (
+                  <h2 className="max-w-[85%] truncate text-sm font-black drop-shadow-md sm:text-xl md:text-2xl">
+                    {currentBanner.title}
+                  </h2>
+                )}
+                {(currentBanner.subtitle || currentBanner.tagline) && (
+                  <p className="mt-0.5 max-w-[90%] truncate text-[10px] font-semibold text-white/90 drop-shadow sm:text-xs md:text-sm">
+                    {currentBanner.subtitle || currentBanner.tagline}
+                  </p>
+                )}
               </div>
             )}
 

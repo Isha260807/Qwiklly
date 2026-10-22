@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { ADMIN_ROLES, ADMIN_PERMISSIONS, DEFAULT_SUB_ADMIN_PERMISSIONS } = require('../utils/constants');
 
 const adminSchema = new mongoose.Schema({
   name: {
@@ -21,13 +22,29 @@ const adminSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['super_admin', 'admin'],
-    default: 'admin'
+    enum: Object.values(ADMIN_ROLES),
+    default: ADMIN_ROLES.SUB_ADMIN
+  },
+  permissions: {
+    type: [String],
+    enum: Object.values(ADMIN_PERMISSIONS),
+    default: function () {
+      return this.role === ADMIN_ROLES.SUPER_ADMIN
+        ? []
+        : [...DEFAULT_SUB_ADMIN_PERMISSIONS];
+    }
+  },
+  // Kept for backwards compatibility with older records. Administrator access
+  // is global and is controlled only by the permissions field.
+  zoneIds: {
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Zone' }],
+    default: [],
+    index: true
   },
   cityId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'City',
-    default: null // null implies Super Admin or access to all cities (if logic allows)
+    default: null // Deprecated compatibility field; access is controlled by zoneIds.
   },
   cityName: {
     type: String,
@@ -40,6 +57,22 @@ const adminSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  // Keep a deletion tombstone so an already logged-in admin can be ended
+  // immediately and a later login can show the correct reason.
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    default: null
   },
   lastLogin: {
     type: Date

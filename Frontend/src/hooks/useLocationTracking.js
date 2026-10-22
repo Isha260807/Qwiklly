@@ -36,7 +36,7 @@ export const useLocationTracking = (socket, bookingId, isActive, options = {}) =
   }, []);
 
   // Sync to Firebase Realtime Database
-  const syncToFirebase = useCallback((lat, lng, heading) => {
+  const syncToFirebase = useCallback((lat, lng, heading, accuracy, timestamp) => {
     if (!db || !bookingId) return;
     try {
       const trackingRef = ref(db, `trackings/${bookingId}`);
@@ -44,7 +44,8 @@ export const useLocationTracking = (socket, bookingId, isActive, options = {}) =
         lat,
         lng,
         heading: heading || 0,
-        updatedAt: Date.now()
+        accuracy: Number.isFinite(accuracy) ? accuracy : null,
+        updatedAt: timestamp || Date.now()
       });
     } catch (error) {
       console.error('[Firebase Tracking] Error updating location:', error);
@@ -55,8 +56,11 @@ export const useLocationTracking = (socket, bookingId, isActive, options = {}) =
   const emitLocation = useCallback((position) => {
     if (!socket || !bookingId) return;
 
-    const { latitude, longitude, heading } = position.coords;
+    const { latitude, longitude, heading, accuracy } = position.coords;
     const now = Date.now();
+    const timestamp = Number(position.timestamp) || now;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return;
+    if (timestamp < now - 60000) return;
 
     // Check time interval
     if (now - lastEmitTimeRef.current < interval) {
@@ -81,11 +85,13 @@ export const useLocationTracking = (socket, bookingId, isActive, options = {}) =
       bookingId,
       lat: latitude,
       lng: longitude,
-      heading: heading || 0
+      heading: heading || 0,
+      accuracy: Number.isFinite(accuracy) ? accuracy : null,
+      timestamp
     });
 
     // 2. Sync to Firebase (for real-time high-performance tracking)
-    syncToFirebase(latitude, longitude, heading);
+    syncToFirebase(latitude, longitude, heading, accuracy, timestamp);
 
     lastEmitTimeRef.current = now;
     lastPositionRef.current = { lat: latitude, lng: longitude };
@@ -101,6 +107,8 @@ export const useLocationTracking = (socket, bookingId, isActive, options = {}) =
       }
       return;
     }
+
+    socket.emit('join_tracking', bookingId);
 
     // Start watching position
     if (navigator.geolocation) {
@@ -134,16 +142,20 @@ export const useLocationTracking = (socket, bookingId, isActive, options = {}) =
       navigator.geolocation.getCurrentPosition(
         (position) => {
           if (socket && bookingId) {
-            const { latitude, longitude, heading } = position.coords;
+            const { latitude, longitude, heading, accuracy } = position.coords;
+            const timestamp = Number(position.timestamp) || Date.now();
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
             // 1. Socket
             socket.emit('update_location', {
               bookingId,
               lat: latitude,
               lng: longitude,
-              heading: heading || 0
+              heading: heading || 0,
+              accuracy: Number.isFinite(accuracy) ? accuracy : null,
+              timestamp
             });
             // 2. Firebase
-            syncToFirebase(latitude, longitude, heading);
+            syncToFirebase(latitude, longitude, heading, accuracy, timestamp);
             
             lastPositionRef.current = { lat: latitude, lng: longitude };
           }

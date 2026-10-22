@@ -6,7 +6,8 @@ const {
   register,
   login,
   logout,
-  verifyLogin
+  verifyLogin,
+  validateReferralCodeRequest
 } = require('../../controllers/userControllers/userAuthController');
 // ...
 
@@ -36,6 +37,7 @@ const registerValidation = [
   // Phone/OTP/VerificationToken validation handled in controller logic for flexibility
 ];
 
+router.post('/validate-referral', validateReferralCodeRequest);
 // Routes
 router.post('/send-otp', sendOTPValidation, sendOTP);
 router.post('/verify-login', verifyLoginValidation, verifyLogin); // New Unified Entry

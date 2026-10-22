@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from 'react-hot-toast';
 import { apiCache } from '../utils/apiCache';
 
 // API Base URL
@@ -76,6 +77,26 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+    const requestRole = getTokenKeys(originalRequest?.url).role;
+    const vendorSessionReplaced =
+      requestRole === 'vendor' &&
+      error.response?.status === 401 &&
+      (
+        error.response?.data?.code === 'VENDOR_SESSION_REPLACED' ||
+        /another device|no longer active/i.test(error.response?.data?.message || '')
+      );
+
+    // A replaced vendor session must not enter token refresh; its refresh token
+    // is invalid for the new device as well.
+    if (vendorSessionReplaced) {
+      processQueue(error, null);
+      isRefreshing = false;
+      toast.error('Your account was logged in on another device. Please login again.', {
+        id: 'vendor-session-replaced'
+      });
+      handleLogout('vendor');
+      return Promise.reject(error);
+    }
 
     // If error is 401 and we haven't tried to refresh yet
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -141,15 +162,51 @@ api.interceptors.response.use(
         // Refresh failed, logout
         processQueue(refreshError, null);
         isRefreshing = false;
+        const vendorRefreshSessionReplaced =
+          role === 'vendor' &&
+          refreshError.response?.status === 401 &&
+          (
+            refreshError.response?.data?.code === 'VENDOR_SESSION_REPLACED' ||
+            /another device|no longer active/i.test(refreshError.response?.data?.message || '')
+          );
+        if (vendorRefreshSessionReplaced) {
+          toast.error('Your account was logged in on another device. Please login again.', {
+            id: 'vendor-session-replaced'
+          });
+        }
+        if (role === 'admin' && refreshError.response?.data?.code === 'ADMIN_DELETED') {
+          toast.error('Your profile was deleted by admin.', { id: 'admin-deleted' });
+        } else if (role === 'admin' && refreshError.response?.data?.code === 'ADMIN_BLOCKED') {
+          toast.error('Blocked by admin', { id: 'admin-blocked' });
+        }
         handleLogout(role);
         return Promise.reject(refreshError);
       }
     }
 
-    // Handle 403 Forbidden - Role mismatch or Invalid Token
+    // A blocked admin must be logged out immediately. Keep ordinary module
+    // permission 403s non-destructive so a missing module does not log out a
+    // valid session.
     if (error.response?.status === 403) {
       console.error('Access Denied (403):', error.response.data.message);
-      // Removed automatic logout to prevent login loops during debugging
+      const { role } = getTokenKeys(originalRequest.url);
+      const isAdminLoginRequest = originalRequest.url?.includes('/admin/auth/login');
+      const isDeletedAdmin = role === 'admin' && (
+        error.response.data.code === 'ADMIN_DELETED' ||
+        /profile was deleted by admin/i.test(error.response.data.message || '')
+      );
+      const isBlockedAdmin = role === 'admin' && (
+        error.response.data.code === 'ADMIN_BLOCKED' ||
+        /blocked by admin/i.test(error.response.data.message || '')
+      );
+
+      if (isDeletedAdmin && !isAdminLoginRequest) {
+        toast.error('Your profile was deleted by admin.', { id: 'admin-deleted' });
+        handleLogout('admin');
+      } else if (isBlockedAdmin && !isAdminLoginRequest) {
+        toast.error('Blocked by admin', { id: 'admin-blocked' });
+        handleLogout('admin');
+      }
     }
 
     return Promise.reject(error);
@@ -179,21 +236,23 @@ export const handleLogout = (role = null) => {
     localStorage.removeItem(`${prefix}Data`);
   };
 
-  if (role === 'vendor') {
-    clearTokens('vendor');
-    if (window.location.pathname !== '/vendor/login') {
-      window.location.href = '/vendor/login';
+  const dispatchRedirect = (targetPath) => {
+    if (window.location.pathname !== targetPath) {
+      window.dispatchEvent(new CustomEvent('auth_redirect', { detail: { path: targetPath } }));
     }
+  };
+
+  if (role === 'vendor') {
+    window.dispatchEvent(new Event('vendor_session_invalidated'));
+
+    clearTokens('vendor');
+    dispatchRedirect('/vendor/login');
   } else if (role === 'worker') {
     clearTokens('worker');
-    if (window.location.pathname !== '/worker/login') {
-      window.location.href = '/worker/login';
-    }
+    dispatchRedirect('/worker/login');
   } else if (role === 'admin') {
     clearTokens('admin');
-    if (window.location.pathname !== '/admin/login') {
-      window.location.href = '/admin/login';
-    }
+    dispatchRedirect('/admin/login');
   } else {
     // User
     localStorage.removeItem('accessToken');
@@ -201,6 +260,8 @@ export const handleLogout = (role = null) => {
     localStorage.removeItem('userData');
     sessionStorage.removeItem('accessToken');
     sessionStorage.removeItem('refreshToken');
+    sessionStorage.removeItem('userData');
+
     const isGuestAllowedPage =
       window.location.pathname === '/user' ||
       window.location.pathname === '/user/' ||
@@ -208,7 +269,7 @@ export const handleLogout = (role = null) => {
       window.location.pathname.includes('/login');
 
     if (!isGuestAllowedPage) {
-      window.location.href = '/user/login';
+      dispatchRedirect('/user/login');
     }
   }
 };

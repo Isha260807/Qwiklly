@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { FiUser, FiMail, FiPhone, FiFileText, FiUpload, FiX, FiArrowRight, FiChevronLeft, FiCheckCircle, FiCamera } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
@@ -7,6 +7,7 @@ import { register, sendOTP as sendVendorOTP } from '../services/authService';
 import LogoLoader from '../../../components/common/LogoLoader';
 import Logo from '../../../components/common/Logo';
 import { compressImage } from '../../../utils/imageCompression';
+import uploadToCloudinary from '../../../utils/cloudinaryUpload';
 
 import { z } from "zod";
 
@@ -107,7 +108,6 @@ const VendorSignup = () => {
 
     try {
       let fileToUpload = file;
-      let previewUrl = '';
 
       // Compress if it is an image
       if (file.type.startsWith('image/')) {
@@ -118,7 +118,7 @@ const VendorSignup = () => {
             quality: 0.8
           });
           fileToUpload = compressedFile;
-          toast.dismiss(loadingToast); // Dismiss compression loading
+          // Keep the loading state visible while the document uploads.
         } catch (compressionError) {
           console.error("Compression failed, using original file", compressionError);
           toast.error("Compression failed, using original");
@@ -126,28 +126,28 @@ const VendorSignup = () => {
         }
       }
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        previewUrl = reader.result;
-        setFormData(prev => ({
-          ...prev,
-          documents: [...prev.documents.filter(d => d.type !== type), { type, file: fileToUpload, url: previewUrl }]
-        }));
-        setDocumentPreview(prev => ({
-          ...prev,
-          [type]: previewUrl
-        }));
-        setUploadingDocs(prev => ({ ...prev, [type]: false }));
-        toast.success("Image uploaded", { duration: 2000 });
-      };
+      // Keep only the Cloudinary URL in the registration payload. Sending
+      // multiple base64 documents with the final form can make the request
+      // take minutes on a mobile connection.
+      const previewUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(fileToUpload);
+      });
+      const documentUrl = await uploadToCloudinary(fileToUpload, 'vendors/documents');
 
-      reader.onerror = () => {
-        console.error("FileReader failed");
-        toast.error("Failed to read file");
-        setUploadingDocs(prev => ({ ...prev, [type]: false }));
-      };
-
-      reader.readAsDataURL(fileToUpload);
+      setFormData(prev => ({
+        ...prev,
+        documents: [...prev.documents.filter(d => d.type !== type), { type, file: fileToUpload, url: documentUrl }]
+      }));
+      setDocumentPreview(prev => ({
+        ...prev,
+        [type]: previewUrl
+      }));
+      setUploadingDocs(prev => ({ ...prev, [type]: false }));
+      toast.dismiss(loadingToast);
+      toast.success("Document uploaded", { duration: 2000 });
 
     } catch (error) {
       console.error("Upload processing error", error);
@@ -182,7 +182,7 @@ const VendorSignup = () => {
     });
 
     if (!validationResult.success) {
-      validationResult.error.errors.forEach(err => toast.error(err.message));
+      validationResult.error.issues.forEach(err => toast.error(err.message));
       return;
     }
 
@@ -220,14 +220,29 @@ const VendorSignup = () => {
         const response = await register(registerData);
 
         if (response.success) {
-          toast.success(
-            <div className="flex flex-col">
-              <span className="font-bold">Application Submitted!</span>
-              <span className="text-xs">Your vendor account is pending admin approval.</span>
-            </div>,
-            { icon: <FiCheckCircle className="text-[#D68F35]" />, duration: 5000 }
-          );
-          navigate('/vendor/login');
+          if (response.accessToken) {
+            localStorage.setItem('vendorAccessToken', response.accessToken);
+            localStorage.setItem('vendorRefreshToken', response.refreshToken);
+            localStorage.setItem('vendorData', JSON.stringify(response.vendor));
+            window.dispatchEvent(new Event('vendor_session_authenticated'));
+            toast.success(
+              <div className="flex flex-col">
+                <span className="font-bold">Application Submitted!</span>
+                <span className="text-xs">Your vendor profile is currently under review.</span>
+              </div>,
+              { icon: <FiCheckCircle className="text-[#347989]" />, duration: 5000 }
+            );
+            navigate('/vendor/dashboard', { replace: true });
+          } else {
+            toast.success(
+              <div className="flex flex-col">
+                <span className="font-bold">Application Submitted!</span>
+                <span className="text-xs">Your vendor account is pending admin approval.</span>
+              </div>,
+              { icon: <FiCheckCircle className="text-[#D68F35]" />, duration: 5000 }
+            );
+            navigate('/vendor/login');
+          }
         } else {
           toast.error(response.message || 'Registration failed');
         }

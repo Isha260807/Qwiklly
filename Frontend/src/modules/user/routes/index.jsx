@@ -1,5 +1,6 @@
-﻿import React, { lazy, Suspense } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import React, { lazy, Suspense } from 'react';
+import { isChunkLoadError, reloadOnceForNewVersion, hardReload } from '../../../utils/chunkReload';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import PageTransition from '../components/common/PageTransition';
 import BottomNav from '../components/layout/BottomNav';
 import Footer from '../components/layout/Footer';
@@ -12,6 +13,10 @@ import useAppNotifications from '../../../hooks/useAppNotifications.jsx';
 const lazyLoad = (importFunc) => {
   return lazy(() => {
     return Promise.resolve(importFunc()).catch((error) => {
+      // Stale chunk after a new deploy: reload once to pick up the new build.
+      if (isChunkLoadError(error) && reloadOnceForNewVersion()) {
+        return new Promise(() => {}); // keep Suspense fallback while the page reloads
+      }
       console.error('User Module - Lazy Load Error:', error);
       // Failed to load user page
       // Return a fallback component wrapped in a Promise
@@ -32,7 +37,7 @@ const lazyLoad = (importFunc) => {
 
               <div className="flex flex-col gap-3">
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={hardReload}
                   className="px-6 py-3 rounded-xl text-white font-bold transition-all duration-300 hover:opacity-90 active:scale-95 shadow-lg shadow-teal-500/20"
                   style={{ backgroundColor: '#00a6a6' }}
                 >
@@ -53,11 +58,13 @@ const lazyLoad = (importFunc) => {
   });
 };
 
+import Login from '../pages/login';
+import Signup from '../pages/signup';
+
 // Lazy load all user pages for code splitting with error handling
 const Home = lazyLoad(() => import('../pages/Home'));
 const Rewards = lazyLoad(() => import('../pages/Rewards'));
 const Account = lazyLoad(() => import('../pages/Account'));
-const Native = lazyLoad(() => import('../pages/Native'));
 const Cart = lazyLoad(() => import('../pages/Cart'));
 const Checkout = lazyLoad(() => import('../pages/Checkout'));
 const MyBookings = lazyLoad(() => import('../pages/MyBookings'));
@@ -65,7 +72,6 @@ const BookingDetails = lazyLoad(() => import('../pages/BookingDetails'));
 const BookingTrack = lazyLoad(() => import('../pages/BookingTrack'));
 const BookingConfirmation = lazyLoad(() => import('../pages/BookingConfirmation'));
 const Settings = lazyLoad(() => import('../pages/Settings'));
-const ManagePaymentMethods = lazyLoad(() => import('../pages/ManagePaymentMethods'));
 const ManageAddresses = lazyLoad(() => import('../pages/ManageAddresses'));
 const Wallet = lazyLoad(() => import('../pages/Wallet'));
 const MyPlan = lazyLoad(() => import('../pages/MyPlan'));
@@ -74,8 +80,6 @@ const MyRating = lazyLoad(() => import('../pages/MyRating'));
 const AboutQwiklly = lazyLoad(() => import('../pages/AboutHomster'));
 const UpdateProfile = lazyLoad(() => import('../pages/UpdateProfile'));
 const SelectLocation = lazyLoad(() => import('../pages/SelectLocation'));
-const Login = lazyLoad(() => import('../pages/login'));
-const Signup = lazyLoad(() => import('../pages/signup'));
 const Notifications = lazyLoad(() => import('../pages/Notifications'));
 const HelpSupport = lazyLoad(() => import('../pages/HelpSupport'));
 const CancellationPolicy = lazyLoad(() => import('../pages/CancellationPolicy'));
@@ -84,6 +88,7 @@ const ServiceDetails = lazyLoad(() => import('../pages/ServiceDetails'));
 // Loading fallback component
 import LogoLoader from '../../../components/common/LogoLoader';
 import { themeColors } from '../../../theme';
+
 
 const LoadingFallback = () => (
   <LogoLoader />
@@ -116,6 +121,7 @@ const UserRoutes = () => {
 
   return (
     <ErrorBoundary>
+
       {/* Global Brand Mesh Gradient Background across all User Pages */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div
@@ -142,18 +148,17 @@ const UserRoutes = () => {
       </div>
 
       {/* Main content area - leaves space for bottom nav when needed */}
-      <div className={`relative z-10 ${shouldShowBottomNav ? "pb-14" : ""}`}>
+      <div className={`relative z-10 ${shouldShowBottomNav ? "pb-10 sm:pb-12" : ""}`}>
         <Suspense fallback={<LoadingFallback />}>
           <PageTransition>
             <Routes>
               {/* Public routes */}
               <Route path="/login" element={<PublicRoute userType="user"><Login /></PublicRoute>} />
               <Route path="/signup" element={<PublicRoute userType="user"><Signup /></PublicRoute>} />
-              <Route path="/location" element={<SelectLocation />} />
+              <Route path="/location" element={<Navigate to="/user" replace state={{ autoFetchLocation: true }} />} />
 
               {/* Home is accessible for guests and logged-in users */}
               <Route path="/" element={<Home />} />
-              <Route path="/native" element={<ProtectedRoute userType="user"><Native /></ProtectedRoute>} />
 
               <Route path="/rewards" element={<ProtectedRoute userType="user"><Rewards /></ProtectedRoute>} />
               <Route path="/account" element={<ProtectedRoute userType="user"><Account /></ProtectedRoute>} />
@@ -164,13 +169,13 @@ const UserRoutes = () => {
               <Route path="/booking/:id/track" element={<ProtectedRoute userType="user"><BookingTrack /></ProtectedRoute>} />
               <Route path="/booking-confirmation/:id" element={<ProtectedRoute userType="user"><BookingConfirmation /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute userType="user"><Settings /></ProtectedRoute>} />
-              <Route path="/manage-payment-methods" element={<ProtectedRoute userType="user"><ManagePaymentMethods /></ProtectedRoute>} />
               <Route path="/manage-addresses" element={<ProtectedRoute userType="user"><ManageAddresses /></ProtectedRoute>} />
               <Route path="/wallet" element={<ProtectedRoute userType="user"><Wallet /></ProtectedRoute>} />
               <Route path="/my-plan" element={<ProtectedRoute userType="user"><MyPlan /></ProtectedRoute>} />
               <Route path="/my-plan/:id" element={<ProtectedRoute userType="user"><PlanDetails /></ProtectedRoute>} />
               <Route path="/my-rating" element={<ProtectedRoute userType="user"><MyRating /></ProtectedRoute>} />
               <Route path="/about-Qwiklly" element={<ProtectedRoute userType="user"><AboutQwiklly /></ProtectedRoute>} />
+              <Route path="/about-qwiklly" element={<ProtectedRoute userType="user"><AboutQwiklly /></ProtectedRoute>} />
               <Route path="/update-profile" element={<ProtectedRoute userType="user"><UpdateProfile /></ProtectedRoute>} />
               <Route path="/notifications" element={<ProtectedRoute userType="user"><Notifications /></ProtectedRoute>} />
               <Route path="/help-support" element={<ProtectedRoute userType="user"><HelpSupport /></ProtectedRoute>} />

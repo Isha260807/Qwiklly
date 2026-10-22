@@ -1,8 +1,8 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { FiArrowLeft, FiShoppingCart, FiTrash2, FiMinus, FiPlus, FiPhone, FiHome, FiClock, FiEdit2, FiCheckCircle, FiInfo, FiCreditCard, FiShield, FiCheck } from 'react-icons/fi';
-import { MdStar } from 'react-icons/md';
+import { MdAccountBalanceWallet, MdStar } from 'react-icons/md';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
 import AddressSelectionModal from './components/AddressSelectionModal';
@@ -11,12 +11,66 @@ import VendorSearchModal from './components/VendorSearchModal';
 import CouponSection from './components/CouponSection';
 import { bookingService } from '../../../../services/bookingService';
 import { paymentService } from '../../../../services/paymentService';
+import { walletService } from '../../../../services/walletService';
 import { cartService } from '../../../../services/cartService';
 import { configService } from '../../../../services/configService';
+import api from '../../../../services/api';
 import { getPlans } from '../../services/planService';
 import { userAuthService } from '../../../../services/authService';
 import { useCart } from '../../../../context/CartContext';
 import LiveBookingCard from '../../components/booking/LiveBookingCard';
+
+// Scheduled bookings can be made up to one month ahead (vendor availability is
+// marked by admin for the same window).
+const BOOKING_WINDOW_DAYS = 30;
+const DEFAULT_LEAD_TIME_HOURS = 0.5;
+
+const normalizeLeadTimeHours = (value) => {
+  const parsed = Number(value);
+  // Treat the old 1-hour default as the new 30-minute product default.
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed === 1) return DEFAULT_LEAD_TIME_HOURS;
+  return parsed;
+};
+
+// Zone/serviceability errors from the backend (see MATCH_FAILURE_REASONS in
+// Backend/utils/constants.js) carry a `code` + friendly `message` - surface
+// that message directly instead of a generic failure toast when present.
+const SERVICEABILITY_CODES = [
+  'OUT_OF_SERVICE_ZONE',
+  'ZONE_INACTIVE',
+  'SERVICE_NOT_AVAILABLE_IN_ZONE',
+  'INVALID_LOCATION'
+];
+
+// The Home page's currently-browsed location (GPS auto-detect or manually
+// picked pin) is what the zone "coming soon" banner and the Book button's
+// serviceability check were validated against. If Checkout instead defaults
+// to a separately-stored saved profile address (which may be older/less
+// precise, or simply a different address than the one just browsed), the
+// zone check at booking time can disagree with what the user already saw
+// on Home - producing a confusing "not available here" right after Home
+// showed everything as bookable. Prefer the Home location whenever it has
+// real coordinates, so both checks are always looking at the same point.
+const getBrowsingLocation = () => {
+  const lat = parseFloat(localStorage.getItem('userLat'));
+  const lng = parseFloat(localStorage.getItem('userLng'));
+  const savedAddress = localStorage.getItem('currentAddress');
+  if (Number.isNaN(lat) || Number.isNaN(lng) || !savedAddress || savedAddress === 'Select Location') {
+    return null;
+  }
+  return { address: savedAddress, lat, lng, type: 'home' };
+};
+
+const getServiceabilityErrorMessage = (error) => {
+  const data = error?.response?.data;
+  if (data && SERVICEABILITY_CODES.includes(data.code)) {
+    if (data.nearestZone?.name) {
+      return `${data.message} Nearest service area: ${data.nearestZone.name} (${data.nearestZone.distanceKm}km away).`;
+    }
+    return data.message;
+  }
+  return null;
+};
 
 const toAssetUrl = (url) => {
   if (!url) return '';
@@ -52,6 +106,9 @@ const Checkout = () => {
   const [bookingRequest, setBookingRequest] = useState(null);
   const [searchingVendors, setSearchingVendors] = useState(false);
   const [showVendorModal, setShowVendorModal] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [useWallet, setUseWallet] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState('online'); // 'online' | 'pay_at_home'
 
   const [loading, setLoading] = useState(true);
@@ -62,6 +119,8 @@ const Checkout = () => {
   const [instantBookingCharges, setInstantBookingCharges] = useState(0);
   const [gstPercentage, setGstPercentage] = useState(0);
   const [bookingType, setBookingType] = useState('instant'); // 'instant' | 'scheduled'
+  // Admin-marked vendor availability for the selected date (SLOT bookings only)
+  const [slotAvailability, setSlotAvailability] = useState({ key: null, map: {} });
 
   // Coupon State
   const [appliedCoupon, setAppliedCoupon] = useState(null);
@@ -73,7 +132,7 @@ const Checkout = () => {
     slotEndHour: 21,
     slotIntervalMins: 60,
     maxDaysInAdvance: 7,
-    leadTimeHours: 1,
+    leadTimeHours: DEFAULT_LEAD_TIME_HOURS,
     slotServiceDurationMins: 45,
     disabledSlots: []
   });
@@ -99,6 +158,26 @@ const Checkout = () => {
   }, []);
 
   // Load user data and cart
+  useEffect(() => {
+    let cancelled = false;
+    const loadWalletBalance = async () => {
+      try {
+        const response = await walletService.getBalance();
+        if (!cancelled && response.success) {
+          setWalletBalance(Number(response.data?.balance || 0));
+        }
+      } catch {
+        // Wallet is optional; keep the normal online payment flow available.
+        if (!cancelled) setWalletBalance(0);
+      } finally {
+        if (!cancelled) setWalletLoading(false);
+      }
+    };
+    loadWalletBalance();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   useEffect(() => {
     const loadUserData = () => {
       const storedUserData = localStorage.getItem('userData');
@@ -148,13 +227,17 @@ const Checkout = () => {
                 slotEndHour: response.settings.slotEndHour ?? 21,
                 slotIntervalMins: response.settings.slotIntervalMins ?? 60,
                 maxDaysInAdvance: response.settings.maxDaysInAdvance ?? 7,
-                leadTimeHours: response.settings.leadTimeHours ?? 1,
+                leadTimeHours: normalizeLeadTimeHours(response.settings.leadTimeHours),
                 slotServiceDurationMins: response.settings.slotServiceDurationMins ?? 45,
                 disabledSlots: response.settings.disabledSlots || []
               });
             }
 
-            if (response.user?.addresses?.length > 0) {
+            const browsingLocation = getBrowsingLocation();
+            if (browsingLocation) {
+              setAddress(browsingLocation.address);
+              setAddressDetails(browsingLocation);
+            } else if (response.user?.addresses?.length > 0) {
               const defaultAddr = response.user.addresses.find(a => a.isDefault) || response.user.addresses[0];
               setAddress(defaultAddr.addressLine1);
               setHouseNumber(defaultAddr.addressLine2 || '');
@@ -182,14 +265,20 @@ const Checkout = () => {
                 slotEndHour: response.settings.slotEndHour ?? 21,
                 slotIntervalMins: response.settings.slotIntervalMins ?? 60,
                 maxDaysInAdvance: response.settings.maxDaysInAdvance ?? 7,
-                leadTimeHours: response.settings.leadTimeHours ?? 1,
+                leadTimeHours: normalizeLeadTimeHours(response.settings.leadTimeHours),
                 slotServiceDurationMins: response.settings.slotServiceDurationMins ?? 45,
                 disabledSlots: response.settings.disabledSlots || []
               });
             }
 
-            // Set Addresses
-            if (response.user?.addresses?.length > 0) {
+            // Set Addresses - prefer the location currently browsed on Home
+            // (same coordinates the zone/serviceability checks already used)
+            // over a possibly older/different saved profile address.
+            const browsingLocation = getBrowsingLocation();
+            if (browsingLocation) {
+              setAddress(browsingLocation.address);
+              setAddressDetails(browsingLocation);
+            } else if (response.user?.addresses?.length > 0) {
               const defaultAddr = response.user.addresses.find(a => a.isDefault) || response.user.addresses[0];
               setAddress(defaultAddr.addressLine1);
               setHouseNumber(defaultAddr.addressLine2 || '');
@@ -204,8 +293,18 @@ const Checkout = () => {
               });
             }
 
-            // Set Cart Items
+            // Use the same cart endpoint as the Cart page so checkout always
+            // reflects the items the user just added. Keep checkout-data as a
+            // fallback for older sessions or temporary cart API failures.
             let items = response.cartItems || [];
+            try {
+              const cartResponse = await cartService.getCart();
+              if (cartResponse.success && Array.isArray(cartResponse.data)) {
+                items = cartResponse.data;
+              }
+            } catch (cartError) {
+              console.warn('Failed to refresh cart for checkout; using checkout data:', cartError);
+            }
             if (category) {
               const normalizedCategory = category.toLowerCase().trim();
               items = items.filter(item => {
@@ -299,6 +398,59 @@ const Checkout = () => {
     }, 200);
   };
 
+  // Duration services use the configured billing unit instead of quantity.
+  const handleDurationChange = (itemId, direction) => {
+    const item = cartItems.find(i => (i._id || i.id) === itemId);
+    if (!item) return;
+
+    const unit = Number(item.billingUnitMinutes || item.card?.billingUnitMinutes || 30);
+    const minDuration = Number(item.minDurationMinutes || item.card?.minDurationMinutes || unit);
+    const maxDuration = Number(item.maxDurationMinutes || item.card?.maxDurationMinutes || 480);
+    const currentDuration = Number(item.durationMinutes || item.card?.durationMinutes || ((item.hours || 0) * 60) || minDuration);
+    const nextDuration = Math.max(minDuration, Math.min(maxDuration, currentDuration + (direction * unit)));
+    if (nextDuration === currentDuration) return;
+
+    const pricePerUnit = Number(
+      item.pricePerUnit
+      || item.card?.pricePerUnit
+      || item.pricePer30Minutes
+      || item.card?.pricePer30Minutes
+      || item.unitPrice
+      || 0
+    );
+    const nextPrice = (nextDuration / unit) * pricePerUnit;
+
+    setCartItems(prev => prev.map(it => {
+      if ((it._id || it.id) !== itemId) return it;
+      return {
+        ...it,
+        durationMinutes: nextDuration,
+        hours: nextDuration / 60,
+        serviceCount: 1,
+        price: nextPrice,
+        ...(it.card ? {
+          card: {
+            ...it.card,
+            durationMinutes: nextDuration,
+            duration: `${nextDuration} mins`,
+            hours: nextDuration / 60,
+            price: nextPrice
+          }
+        } : {})
+      };
+    }));
+
+    if (updateTimerRef.current[itemId]) clearTimeout(updateTimerRef.current[itemId]);
+    updateTimerRef.current[itemId] = setTimeout(async () => {
+      try {
+        await cartService.updateItem(itemId, undefined, nextDuration);
+        fetchCartGlobal();
+      } catch (error) {
+        console.error('Failed to sync duration update:', error);
+        toast.error('Failed to sync duration');
+      }
+    }, 200);
+  };
   const handleRemoveItem = async (itemId) => {
     // 1. Instant Optimistic Removal (0ms)
     setCartItems(prev => prev.filter(item => (item._id || item.id) !== itemId));
@@ -356,17 +508,29 @@ const Checkout = () => {
         brandName: item.sectionTitle || item.brand || '',
         brandIcon: item.sectionIcon || null,
         serviceId: (typeof item.serviceId === 'object' ? (item.serviceId?._id || item.serviceId?.id) : item.serviceId) || undefined,
-        hours: item.hours || item.card?.hours || undefined,
+        pricingType: item.pricingType || item.card?.pricingType || undefined,
+        durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+        estimatedDurationMinutes: item.serviceId?.estimatedDurationMinutes || item.estimatedDurationMinutes || item.card?.estimatedDurationMinutes || undefined,
+        pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
+        billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
+        pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
+        hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined),
         card: {
           title: item.card?.title || item.title,
           subtitle: item.card?.subtitle || item.description || '',
           price: item.card?.price || item.price || 0,
           originalPrice: item.card?.originalPrice || item.originalPrice || null,
-          duration: item.card?.duration || item.duration || '',
+          duration: item.card?.duration || item.duration || (item.durationMinutes ? `${item.durationMinutes} mins` : ''),
           description: item.card?.description || item.description || '',
           imageUrl: item.card?.imageUrl || item.icon || '',
           features: item.card?.features || [],
-          hours: item.hours || item.card?.hours || undefined
+          pricingType: item.pricingType || item.card?.pricingType || undefined,
+          durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+          estimatedDurationMinutes: item.serviceId?.estimatedDurationMinutes || item.estimatedDurationMinutes || item.card?.estimatedDurationMinutes || undefined,
+          pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
+          billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
+          pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
+          hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined)
         },
         quantity: item.serviceCount || 1
       }));
@@ -425,6 +589,7 @@ const Checkout = () => {
         },
 
         paymentMethod: 'online',
+        useWalletPayment: Boolean(useWallet && amountToPay > 0),
         bookedItems: bookedItemsData
       });
 
@@ -432,6 +597,12 @@ const Checkout = () => {
         setBookingRequest(response.data);
 
         // If the backend returns an assigned vendor immediately (rare but possible)
+        if (isSlotBooking && response.data._id) {
+          setShowVendorModal(false);
+          setSearchingVendors(false);
+          navigate(`/user/booking-confirmation/${response.data._id}`, { replace: true });
+          return;
+        }
         if (response.data.vendorId && (response.data.status === 'ACCEPTED' || response.data.status === 'ASSIGNED')) {
           setCurrentStep('accepted');
           setAcceptedVendor({
@@ -441,6 +612,13 @@ const Checkout = () => {
             estimatedTime: '15-30 min'
           });
           setSearchingVendors(false); // Finished search
+        } else if (response.data.status === 'cancelled') {
+          // Zone/service/radius matching found zero candidate vendors - the
+          // booking was auto-cancelled server-side, so don't show the
+          // searching modal for it.
+          setShowVendorModal(false);
+          setSearchingVendors(false);
+          toast.error(response.data.cancellationReason || 'No professionals available right now in your area. Booking has been cancelled.');
         } else {
           // Normal flow: Entered pooling/searching
           setCurrentStep('waiting'); // Waiting for vendor acceptance
@@ -448,7 +626,7 @@ const Checkout = () => {
         }
       }
     } catch (error) {
-      toast.error('Failed to initiate booking request. Please try again.');
+      toast.error(getServiceabilityErrorMessage(error) || 'Failed to initiate booking request. Please try again.');
       setShowVendorModal(false);
       setSearchingVendors(false);
     }
@@ -532,6 +710,9 @@ const Checkout = () => {
   // Search for nearby vendors
   // Unified Upfront Booking & Online Payment Handler
   const handleBookAndPay = async () => {
+    // Every scheduled booking (fixed-price or duration/hourly) is assigned to a vendor silently.
+    const isSlotBooking = bookingType === 'scheduled';
+
     // 1. Validation
     if (!addressDetails) {
       setShowAddressModal(true);
@@ -558,17 +739,29 @@ const Checkout = () => {
         brandName: item.sectionTitle || item.brand || '',
         brandIcon: item.sectionIcon || null,
         serviceId: (typeof item.serviceId === 'object' ? (item.serviceId?._id || item.serviceId?.id) : item.serviceId) || undefined,
-        hours: item.hours || item.card?.hours || undefined,
+        pricingType: item.pricingType || item.card?.pricingType || undefined,
+        durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+        estimatedDurationMinutes: item.serviceId?.estimatedDurationMinutes || item.estimatedDurationMinutes || item.card?.estimatedDurationMinutes || undefined,
+        pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
+        billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
+        pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
+        hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined),
         card: {
           title: item.card?.title || item.title || 'Unknown Service',
           subtitle: item.card?.subtitle || item.description || '',
           price: item.card?.price || item.price || 0,
           originalPrice: item.card?.originalPrice || item.originalPrice || null,
-          duration: item.card?.duration || item.duration || '',
+          duration: item.card?.duration || item.duration || (item.durationMinutes ? `${item.durationMinutes} mins` : ''),
           description: item.card?.description || item.description || '',
           imageUrl: item.card?.imageUrl || item.icon || '',
           features: item.card?.features || [],
-          hours: item.hours || item.card?.hours || undefined
+          pricingType: item.pricingType || item.card?.pricingType || undefined,
+          durationMinutes: item.durationMinutes || item.card?.durationMinutes || undefined,
+          estimatedDurationMinutes: item.serviceId?.estimatedDurationMinutes || item.estimatedDurationMinutes || item.card?.estimatedDurationMinutes || undefined,
+          pricePerUnit: item.pricePerUnit || item.card?.pricePerUnit || undefined,
+          billingUnitMinutes: item.billingUnitMinutes || item.card?.billingUnitMinutes || undefined,
+          pricePer30Minutes: item.pricePer30Minutes || item.card?.pricePer30Minutes || undefined,
+          hours: item.hours || item.card?.hours || (item.durationMinutes ? item.durationMinutes / 60 : undefined)
         },
         quantity: item.serviceCount || 1
       }));
@@ -610,6 +803,7 @@ const Checkout = () => {
         scheduledTime: finalTimeDisplay,
         timeSlot: timeSlotObj,
         paymentMethod: amountToPay === 0 ? 'plan_benefit' : 'online',
+        useWalletPayment: Boolean(useWallet && amountToPay > 0),
         amount: amountToPay,
         basePrice: totalOriginalPrice,
         discount: savings,
@@ -638,17 +832,40 @@ const Checkout = () => {
       const booking = bookingResponse.data;
       setBookingRequest(booking);
 
+      // Keep the cart intact when a SLOT is unavailable so the user can
+      // choose another time without rebuilding the booking.
+      if (!(isSlotBooking && booking.status === 'cancelled')) {
+        try {
+          if (category) await removeCategoryGlobal(category);
+          else await clearCartGlobal();
+          setCartItems([]);
+        } catch { /* Cart synchronization is best effort. */ }
+      }
+
+      if (booking.status === 'cancelled') {
+        // SLOT availability is resolved silently by the backend. Keep the
+        // user-facing failure limited to the selected slot's availability.
+        toast.error(isSlotBooking
+          ? 'This slot is currently unavailable. Please select another time slot.'
+          : (booking.cancellationReason || 'No professionals available right now in your area. Booking has been cancelled.'));
+        setSearchingVendors(false);
+        return;
+      }
+
+      if (isSlotBooking) {
+        setSearchingVendors(false);
+        navigate(`/user/booking-confirmation/${booking._id}`, {
+          replace: true,
+          state: { normalSlotBooking: !hasHourlyItems }
+        });
+        return;
+      }
+
       if (amountToPay === 0) {
         toast.success('Booking confirmed under membership plan!');
       } else {
         toast.success('Booking request sent! You can pay once a professional accepts.');
       }
-
-      try {
-        if (category) await removeCategoryGlobal(category);
-        else await clearCartGlobal();
-        setCartItems([]);
-      } catch (e) { }
 
       // Payment (for paid bookings) now happens after a vendor accepts, not at creation time.
       setShowVendorModal(true);
@@ -657,7 +874,7 @@ const Checkout = () => {
     } catch (error) {
       toast.dismiss();
       console.error('Booking flow error:', error);
-      toast.error('Something went wrong. Please try again.');
+      toast.error(getServiceabilityErrorMessage(error) || 'Something went wrong. Please try again.');
       setSearchingVendors(false);
     }
   };
@@ -865,12 +1082,14 @@ const Checkout = () => {
 
   const planSavings = totalOriginalPrice - itemTotal;
   const taxableAmount = Math.max(0, itemTotal - couponDiscount);
-  const taxesAndFee = itemTotal === 0 ? 0 : Math.round((taxableAmount * gstPercentage) / 100);
+  const taxesAndFee = itemTotal === 0 ? 0 : Math.round((itemTotal * gstPercentage) / 100);
   const finalVisitedFee = itemTotal === 0 ? 0 : visitedFee;
   const finalInstantFee = (bookingType === 'instant' && itemTotal > 0) ? instantBookingCharges : 0;
 
   const totalAmount = itemTotal === 0 ? 0 : (taxableAmount + taxesAndFee + finalVisitedFee + finalInstantFee);
   const amountToPay = totalAmount;
+  const walletApplicableAmount = Math.min(walletBalance, amountToPay);
+  const onlinePayableAmount = Math.max(0, amountToPay - (useWallet ? walletApplicableAmount : 0));
 
   // Helper for Free Plan Full Breakdown Display
   const displayTax = totalAmount === 0 ? Math.round((totalOriginalPrice * gstPercentage) / 100) : taxesAndFee;
@@ -878,25 +1097,94 @@ const Checkout = () => {
   const displayInstantFee = totalAmount === 0 ? (bookingType === 'instant' ? instantBookingCharges : 0) : finalInstantFee;
   const displaySavings = totalAmount === 0 ? (totalOriginalPrice + displayTax + displayFee + displayInstantFee) : (planSavings + couponDiscount);
   const savings = displaySavings;
+  // Every cart item contributes to the vendor's occupancy. Duration-priced
+  // items use the selected duration; fixed-price items use the admin-configured
+  // estimated execution time. No buffer is added here.
+  const getItemServiceDuration = (item) => {
+    const itemType = String(item.pricingType || item.card?.pricingType || item.serviceId?.pricingType || '').toUpperCase();
+    if (['HOURLY', 'DURATION'].includes(itemType)) {
+      return Number(
+        item.durationMinutes || item.card?.durationMinutes
+          || ((item.hours || item.card?.hours || 0) * 60)
+      ) || 0;
+    }
 
-  // Date and time slot helper functions
+    // Fixed services use the global Admin Settings duration.
+    return Number(slotConfig.slotServiceDurationMins) || 45;
+  };
+  const totalServiceDurationMins = cartItems.reduce(
+    (sum, item) => sum + (getItemServiceDuration(item) * (item.serviceCount || 1)),
+    0
+  );
+
+  // Scheduled bookings are auto-assigned from the admin-marked vendor schedule, so
+  // only the dates/slots a vendor is actually available for (the union across
+  // zone vendors) are offered. Duration/hourly services need that many consecutive
+  // slots, so their booked duration is sent along.
+  const isSlotBookingMode = bookingType === 'scheduled';
+  const hasHourlyItems = cartItems.some(item => {
+    const itemType = item.pricingType || item.card?.pricingType;
+    return ['HOURLY', 'DURATION'].includes(String(itemType || '').toUpperCase())
+      || Boolean(item.hours || item.card?.hours);
+  });
+  // Mixed carts reserve the sum of all service execution times.
+  const slotDurationMins = totalServiceDurationMins || Number(slotConfig.slotServiceDurationMins || 45);
+  const hasAddressCoords = typeof addressDetails?.lat === 'number' && typeof addressDetails?.lng === 'number';
+  const slotServiceId = cartItems[0]
+    ? (typeof cartItems[0].serviceId === 'object'
+      ? cartItems[0].serviceId?._id || cartItems[0].serviceId?.id
+      : cartItems[0].serviceId)
+    : null;
+  const slotAvailabilityKey = (isSlotBookingMode && hasAddressCoords && slotServiceId)
+    ? `${slotServiceId}|${addressDetails.lat}|${addressDetails.lng}|${slotDurationMins}`
+    : null;
+  const slotsLoaded = slotAvailabilityKey !== null && slotAvailability.key === slotAvailabilityKey;
+  const toDateKey = (date) => date.toISOString().slice(0, 10);
+
+  useEffect(() => {
+    if (!slotAvailabilityKey) return;
+    let cancelled = false;
+
+    api.get('/public/slot-availability', {
+      params: {
+        serviceId: slotServiceId,
+        lat: addressDetails.lat,
+        lng: addressDetails.lng,
+        ...(slotDurationMins > 0 ? { durationMins: slotDurationMins } : {})
+      }
+    })
+      .then(res => {
+        if (!cancelled) setSlotAvailability({ key: slotAvailabilityKey, map: res.data?.availability || {} });
+      })
+      .catch(() => {
+        if (!cancelled) setSlotAvailability({ key: slotAvailabilityKey, map: {} });
+      });
+
+    return () => { cancelled = true; };
+  }, [slotAvailabilityKey]);
+
   const getDates = () => {
     const dates = [];
     const today = new Date();
-    const daysCount = slotConfig.maxDaysInAdvance || 7;
-    for (let i = 0; i < daysCount; i++) {
+    for (let i = 0; i < BOOKING_WINDOW_DAYS; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
       dates.push(date);
     }
-    return dates;
+    // Slot bookings: only dates on which at least one slot can be booked
+    return (isSlotBookingMode && slotsLoaded)
+      ? dates.filter(date => getTimeSlots(date).length > 0)
+      : dates;
   };
 
-  const getTimeSlots = () => {
+  const getTimeSlots = (forDate = selectedDate) => {
     const startHour = Number(slotConfig.slotStartHour ?? 9);
     const endHour = Number(slotConfig.slotEndHour ?? 21);
     const interval = Number(slotConfig.slotIntervalMins || 60);
     const disabled = slotConfig.disabledSlots || [];
+    const vendorSlots = (isSlotBookingMode && slotsLoaded && forDate)
+      ? (slotAvailability.map[toDateKey(forDate)] || [])
+      : [];
 
     const allSlots = [];
     let currentTotalMinutes = startHour * 60;
@@ -917,8 +1205,10 @@ const Checkout = () => {
       const displayM = m === 0 ? '00' : String(m).padStart(2, '0');
       const display = `${displayH}:${displayM} ${ampm}`;
 
-      // Only include active / enabled slots
-      if (!disabled.includes(valStr)) {
+      // Slot bookings list exactly the vendor-available slots; other bookings use
+      // the global slot setup (hours/interval minus blocked slots).
+      const isListed = isSlotBookingMode ? vendorSlots.includes(valStr) : !disabled.includes(valStr);
+      if (isListed) {
         allSlots.push({
           value: valStr,
           end: endStr,
@@ -932,17 +1222,32 @@ const Checkout = () => {
 
     // If today is selected, filter out slots within the minimum lead time
     const now = new Date();
-    const isToday = selectedDate && selectedDate.toDateString() === now.toDateString();
+    const isToday = forDate && forDate.toDateString() === now.toDateString();
 
     if (!isToday) {
       return allSlots;
     }
 
-    const leadHours = Number(slotConfig.leadTimeHours ?? 1);
-    const currentMinutes = (now.getHours() * 60) + now.getMinutes() + (leadHours * 60);
+    const leadTimeHours = normalizeLeadTimeHours(slotConfig.leadTimeHours);
+    const currentMinutes = (now.getHours() * 60) + now.getMinutes()
+      + (leadTimeHours * 60);
 
     return allSlots.filter(slot => slot.startMinutes >= currentMinutes);
   };
+
+  // Shown instead of the generic empty state while vendor slots can't be listed yet
+  const slotStatusMessage = !isSlotBookingMode ? null
+    : !hasAddressCoords ? 'Select your address to see available slots'
+      : !slotsLoaded ? 'Checking available slots...'
+        : getDates().length === 0 ? 'No slots available'
+          : !selectedDate ? 'Select a date to see available slots'
+            : null;
+
+  // Drop a previously picked time that isn't bookable on the selected date
+  useEffect(() => {
+    if (!isSlotBookingMode || !slotsLoaded || !selectedTime) return;
+    if (!getTimeSlots().some(slot => slot.value === selectedTime)) setSelectedTime(null);
+  }, [slotAvailability, selectedDate]);
 
   const formatDate = (date) => {
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -977,7 +1282,7 @@ const Checkout = () => {
     return (
       <div className="min-h-screen bg-transparent pb-32">
         <header 
-          className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+          className="fixed top-0 inset-x-0 z-50 h-16 sm:h-[68px] text-white shadow-md select-none px-4 flex items-center justify-between"
           style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
         >
           <div className="flex items-center gap-3">
@@ -991,6 +1296,7 @@ const Checkout = () => {
             <h1 className="text-base sm:text-lg font-bold text-white tracking-tight">Your cart</h1>
           </div>
         </header>
+        <div className="h-16 sm:h-[68px]" aria-hidden="true" />
         <main className="px-4 py-4">
           <div className="flex flex-col items-center justify-center py-20">
             <FiShoppingCart className="w-16 h-16 text-gray-300 mb-4" />
@@ -1006,7 +1312,7 @@ const Checkout = () => {
     <div className="min-h-screen bg-transparent pb-80">
       {/* Theme Gradient Header */}
       <header 
-        className="sticky top-0 z-40 text-white shadow-md select-none px-4 py-2.5 sm:py-3 flex items-center justify-between"
+        className="fixed top-0 inset-x-0 z-50 h-16 sm:h-[68px] text-white shadow-md select-none px-4 flex items-center justify-between"
         style={{ background: 'linear-gradient(135deg, #720C3E 0%, #9A2459 100%)' }}
       >
         <div className="flex items-center gap-3">
@@ -1022,6 +1328,7 @@ const Checkout = () => {
           </h1>
         </div>
       </header>
+        <div className="h-16 sm:h-[68px]" aria-hidden="true" />
 
       <main className="px-4 py-4">
         {/* Savings Banner */}
@@ -1044,104 +1351,118 @@ const Checkout = () => {
           </div>
         )}
 
-        {/* Cart Items */}
-        <div className="space-y-4 mb-4">
-          {cartItems.map((item) => {
-            const brandName = item.brand || item.sectionTitle;
-            const categoryName = item.categoryTitle || item.category;
+        {/* Cart Items — single unified card */}
+        <div className="bg-white border border-[#E8D9DF]/70 rounded-2xl shadow-sm mb-4 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#F0E8EC]"
+            style={{ background: 'linear-gradient(135deg, #720C3E08 0%, #9A245908 100%)' }}>
+            <p className="text-xs font-semibold text-gray-500">
+              {cartItems.length} {cartItems.length === 1 ? 'Service' : 'Services'} Selected
+            </p>
+            <span className="text-sm font-extrabold text-[#720C3E]">
+              ₹{cartItems.reduce((s, i) => s + (i.price || 0), 0).toLocaleString('en-IN')}
+            </span>
+          </div>
 
-            return (
-              <div key={item._id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm relative overflow-hidden">
-                {/* Brand Header */}
-                {(brandName || categoryName) && (
-                  <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-50">
-                    {item.sectionIcon ? (
-                      <img src={toAssetUrl(item.sectionIcon)} className="w-5 h-5 rounded-md object-cover border border-gray-100" alt="" />
+          {/* Rows */}
+          <div className="divide-y divide-[#F0E8EC]">
+            {cartItems.map((item, index) => {
+              const itemKey = item._id || item.id || `co-item-${index}`;
+              const img = item.sectionIcon || item.icon || item.iconUrl || item.image || item.imageUrl;
+              const imgUrl = img ? toAssetUrl(img) : null;
+              const itemType = String(item.pricingType || item.card?.pricingType || '').toUpperCase();
+              const isDurationItem = itemType === 'DURATION' || Boolean(item.durationMinutes || item.card?.durationMinutes);
+              const durationUnit = Number(item.billingUnitMinutes || item.card?.billingUnitMinutes || 30);
+              const shownDuration = Number(item.durationMinutes || item.card?.durationMinutes || ((item.hours || 0) * 60) || durationUnit);
+              return (
+                <div key={itemKey} className="flex items-start gap-3 px-4 py-3">
+                  {/* Icon */}
+                  <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 bg-[#FFF7FA] border border-[#E8D9DF]/60 flex items-center justify-center mt-0.5">
+                    {imgUrl ? (
+                      <img src={imgUrl} alt={item.title} className="w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
                     ) : (
-                      <div className="w-5 h-5 rounded-md bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-500">
-                        {(brandName || "B").charAt(0)}
-                      </div>
-                    )}
-                    <div className="flex flex-col leading-none">
-                      {brandName && <span className="text-xs font-bold text-gray-900">{brandName}</span>}
-                      {categoryName && <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mt-0.5">{categoryName}</span>}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1 pr-4">
-                    <h3 className="text-base font-bold text-gray-900 mb-1 leading-snug">{item.title}</h3>
-                    {item.description && (
-                      <p className="text-sm text-gray-600 line-clamp-2">{item.description}</p>
-                    )}
-                    {item.duration && (
-                      <div className="flex items-center gap-1 mt-2 text-xs text-gray-500">
-                        <FiClock className="w-3 h-3" />
-                        {item.duration}
-                      </div>
+                      <span className="text-xs font-bold text-[#720C3E] uppercase">{(item.title || item.category || 'S').charAt(0)}</span>
                     )}
                   </div>
-                  {!item.isPlan && (
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg p-0.5">
-                        <button
-                          onClick={() => handleQuantityChange(item._id, -1)}
-                          className="p-1.5 hover:bg-white rounded-md transition-all shadow-sm"
-                        >
-                          <FiMinus className="w-3.5 h-3.5 text-gray-600" />
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 leading-snug">{item.title}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
+                      {item.category || item.categoryTitle}
+                      {item.durationMinutes ? ` · ${item.durationMinutes} mins` : item.hours ? ` · ${item.hours} hr` : ''}
+                      {item.description ? ` · ${item.description}` : ''}
+                    </p>
+                  </div>
+
+                  {/* Right: duration/quantity controls on top, price below */}
+                  <div className="shrink-0 flex flex-col items-end gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      {!item.isPlan && (isDurationItem ? (
+                        <div className="flex items-center gap-0.5 rounded-md border border-[#E8D9DF] bg-[#FFF7FA] px-0.5 py-0.5">
+                          <button
+                            onClick={() => handleDurationChange(item._id, -1)}
+                            disabled={shownDuration <= Number(item.minDurationMinutes || item.card?.minDurationMinutes || durationUnit)}
+                            className="w-6 h-6 rounded-md text-[#831843] text-sm leading-none hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label={`Decrease duration by ${durationUnit} minutes`}
+                          >
+                            −
+                          </button>
+                          <div className="min-w-[36px] text-center leading-none">
+                            <div className="text-xs font-black text-[#831843]">{shownDuration}</div>
+                            <div className="text-[8px] font-semibold text-slate-400 mt-0.5">Minutes</div>
+                          </div>
+                          <button
+                            onClick={() => handleDurationChange(item._id, 1)}
+                            disabled={shownDuration >= Number(item.maxDurationMinutes || item.card?.maxDurationMinutes || 480)}
+                            className="w-6 h-6 rounded-md bg-[#831843] text-white text-sm leading-none hover:bg-[#720C3E] disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label={`Increase duration by ${durationUnit} minutes`}
+                          >
+                            +
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center bg-[#FFF7FA] border border-[#E8D9DF] rounded-lg overflow-hidden">
+                          <button onClick={() => handleQuantityChange(item._id, -1)}
+                            className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all">
+                            <FiMinus className="w-2.5 h-2.5" />
+                          </button>
+                          <span className="text-[11px] font-extrabold text-[#720C3E] min-w-[14px] text-center px-0.5">{item.serviceCount || 1}</span>
+                          <button onClick={() => handleQuantityChange(item._id, 1)}
+                            className="w-5 h-5 flex items-center justify-center text-[#720C3E] hover:bg-[#F8E8EF] active:scale-95 transition-all">
+                            <FiPlus className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                      {!item.isPlan && (
+                        <button onClick={() => handleRemoveItem(item._id)}
+                          className="p-1 hover:bg-rose-50 text-rose-400 hover:text-rose-600 rounded-lg transition-colors">
+                          <FiTrash2 className="w-3.5 h-3.5" />
                         </button>
-                        <span className="w-6 text-center text-sm font-bold text-gray-900">{item.serviceCount || 1}</span>
-                        <button
-                          onClick={() => handleQuantityChange(item._id, 1)}
-                          className="p-1.5 hover:bg-white rounded-md transition-all shadow-sm"
-                        >
-                          <FiPlus className="w-3.5 h-3.5 text-gray-900" />
-                        </button>
-                      </div>
+                      )}
                     </div>
-                  )}
-                  {!item.isPlan && (
-                    <button
-                      onClick={() => handleRemoveItem(item._id)}
-                      className="absolute top-3 right-3 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                    >
-                      <FiTrash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-extrabold text-[#720C3E]">
+                        {calculateItemPrice(item) === 0
+                          ? <span className="text-green-600 text-xs">Free</span>
+                          : `₹${(item.price || 0).toLocaleString('en-IN')}`}
+                      </span>
+                      {(() => {
+                        const unitOriginalPrice = item.originalPrice || (item.price / (item.serviceCount || 1));
+                        const originalTotal = unitOriginalPrice * (item.serviceCount || 1);
+                        if (calculateItemPrice(item) > 0 && originalTotal > item.price) {
+                          return <span className="text-[11px] text-gray-400 line-through">₹{originalTotal.toLocaleString('en-IN')}</span>;
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-black">
-                    {calculateItemPrice(item) === 0 ? (
-                      <span className="text-green-600">Free</span>
-                    ) : (
-                      `₹${(item.price || 0).toLocaleString('en-IN')}`
-                    )}
-                  </span>
-                  {calculateItemPrice(item) === 0 && (
-                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full border border-green-200">
-                      WITH PLAN
-                    </span>
-                  )}
-                  {calculateItemPrice(item) > 0 && (() => {
-                    const unitPrice = item.unitPrice || (item.price / (item.serviceCount || 1));
-                    const unitOriginalPrice = item.originalPrice || unitPrice;
-                    const currentTotal = item.price;
-                    const originalTotal = unitOriginalPrice * (item.serviceCount || 1);
-                    if (originalTotal > currentTotal) {
-                      return (
-                        <span className="text-sm text-gray-400 line-through">
-                          ₹{originalTotal.toLocaleString('en-IN')}
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
-                </div>
-              </div>
-            )
-          })}
+              );
+            })}
+          </div>
         </div>
+
 
         {/* ... */}
 
@@ -1187,61 +1508,75 @@ const Checkout = () => {
         )}
 
         {/* Payment Method Selection Card */}
-        <div className="bg-white border-2 border-slate-100 rounded-2xl p-4 mb-4 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <FiCreditCard className="w-4 h-4 text-emerald-600" />
+        <div className="bg-white border border-slate-100 rounded-xl p-3 mb-4 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+              <FiCreditCard className="w-3.5 h-3.5 text-emerald-600" />
               Payment Method
             </h3>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 flex items-center gap-1">
-              <FiShield className="w-3 h-3" /> 100% Secure
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-100 flex items-center gap-1">
+              <FiShield className="w-2.5 h-2.5" /> 100% Secure
             </span>
           </div>
 
           {totalAmount === 0 ? (
-            <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-500 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-                  ★
-                </div>
+            <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-400 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-xs">★</div>
                 <div>
-                  <p className="text-sm font-bold text-slate-900">Membership Plan Benefit</p>
-                  <p className="text-xs text-green-700 font-medium">Free service under {planBenefits.name || 'active plan'}</p>
+                  <p className="text-xs font-bold text-slate-900">Membership Plan Benefit</p>
+                  <p className="text-[10px] text-green-700 font-medium">Free under {planBenefits.name || 'active plan'}</p>
                 </div>
               </div>
-              <div className="w-5 h-5 rounded-full bg-green-600 text-white flex items-center justify-center">
-                <FiCheck className="w-3.5 h-3.5" />
+              <div className="w-4 h-4 rounded-full bg-green-600 text-white flex items-center justify-center">
+                <FiCheck className="w-2.5 h-2.5" />
               </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between p-3.5 bg-emerald-50/40 border-2 border-emerald-500 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-emerald-200 flex items-center justify-center shadow-xs">
-                    <FiCreditCard className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-slate-900">Online Payment</p>
-                      <span className="text-[9px] font-extrabold bg-emerald-600 text-white px-1.5 py-0.5 rounded">UPI / CARDS</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Google Pay, PhonePe, Paytm, Cards, NetBanking, Wallets</p>
-                  </div>
+            <div className="space-y-2">
+            <label className={`flex items-center justify-between gap-2 p-2.5 mb-2 rounded-lg border ${walletApplicableAmount > 0 ? 'bg-amber-50/60 border-amber-200 cursor-pointer' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-white border border-amber-200 flex items-center justify-center shadow-xs shrink-0">
+                  <MdAccountBalanceWallet className="w-4 h-4 text-amber-600" />
                 </div>
-                <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <FiCheck className="w-3.5 h-3.5" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900">Use Wallet Balance</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+                    {walletLoading ? 'Checking wallet...' : walletApplicableAmount > 0 ? `Available: INR ${walletBalance.toLocaleString('en-IN')}` : 'No wallet balance available'}
+                  </p>
                 </div>
               </div>
-
-              {/* Payment Partners Badges */}
-              <div className="flex items-center justify-between px-2 pt-1 text-[10px] text-slate-400 font-medium">
-                <span>Powered by Razorpay</span>
-                <span className="flex items-center gap-1.5 font-mono text-[9px] text-slate-500">
-                  <span className="px-1.5 py-0.5 bg-slate-100 rounded">UPI</span>
-                  <span className="px-1.5 py-0.5 bg-slate-100 rounded">Cards</span>
-                  <span className="px-1.5 py-0.5 bg-slate-100 rounded">NetBanking</span>
-                </span>
+              <input
+                type="checkbox"
+                checked={useWallet}
+                onChange={(event) => setUseWallet(event.target.checked)}
+                disabled={walletLoading || walletApplicableAmount <= 0 || searchingVendors}
+                className="w-4 h-4 accent-amber-600 shrink-0"
+              />
+            </label>
+            {useWallet && walletApplicableAmount > 0 && (
+              <div className="flex items-center justify-between px-2.5 mb-2 text-[10px] font-semibold text-slate-600">
+                <span>Wallet INR {walletApplicableAmount.toLocaleString('en-IN')}</span>
+                <span>Online INR {onlinePayableAmount.toLocaleString('en-IN')}</span>
               </div>
+            )}
+            <div className="flex items-center justify-between p-2.5 bg-emerald-50/40 border border-emerald-400 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-white border border-emerald-200 flex items-center justify-center shadow-xs">
+                  <FiCreditCard className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-bold text-slate-900">Online Payment</p>
+                    <span className="text-[8px] font-extrabold bg-emerald-600 text-white px-1 py-0.5 rounded">UPI/CARDS</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">GPay · PhonePe · Paytm · Cards · NetBanking</p>
+                </div>
+              </div>
+              <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <FiCheck className="w-2.5 h-2.5" />
+              </div>
+            </div>
             </div>
           )}
         </div>
@@ -1614,14 +1949,11 @@ const Checkout = () => {
         onSave={handleTimeSlotSave}
         getDates={getDates}
         getTimeSlots={getTimeSlots}
+        slotStatusMessage={slotStatusMessage}
         formatDate={formatDate}
         isDateSelected={isDateSelected}
         isTimeSelected={isTimeSelected}
-        approxDuration={
-          cartItems.some((i) => i.hours)
-            ? Math.max(...cartItems.map((i) => (i.hours || 0) * 60))
-            : (slotConfig.slotServiceDurationMins || 45)
-        }
+        approxDuration={totalServiceDurationMins || (slotConfig.slotServiceDurationMins || 45)}
       />
     </div>
   );

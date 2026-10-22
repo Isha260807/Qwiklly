@@ -31,6 +31,7 @@ const notificationSchema = new mongoose.Schema({
     enum: [
       'booking_created',
       'booking_request',      // New booking request to vendor
+      'scheduled_booking_assigned', // Slot booking assigned to vendor
       'booking_requested',    // New booking created confirmation to user
       'booking_accepted',     // Vendor accepted booking
       'booking_confirmed',
@@ -56,11 +57,15 @@ const notificationSchema = new mongoose.Schema({
       'review_submitted',
       'vendor_approved',
       'vendor_rejected',
+      'vendor_approval_request',
       'wallet_topup',
+      'salary_payment_received',
       'payout_requested',
       'payout_processed',
       'vendor_withdrawal_request',
       'emergency_sos',
+      'support_ticket',
+      'support_ticket_update',
       'general'
     ],
     index: true
@@ -83,7 +88,7 @@ const notificationSchema = new mongoose.Schema({
   },
   relatedType: {
     type: String,
-    enum: ['booking', 'payment', 'user', 'vendor', 'service', 'withdrawal', 'sos'],
+    enum: ['booking', 'payment', 'payroll', 'user', 'vendor', 'service', 'withdrawal', 'sos', 'support_ticket'],
     default: null
   },
   // Notification Status

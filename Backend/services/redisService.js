@@ -307,6 +307,32 @@ const getLiveLocation = async (bookingId) => {
   }
 };
 
+
+// Cache the latest driving route snapshot so a customer can recover it without
+// issuing another Google Directions request after reconnecting or reopening.
+const setLiveRoute = async (bookingId, route, ttlSeconds = 300) => {
+  if (!isRedisConnected() || !bookingId || !route) return false;
+  try {
+    const key = `live:route:${bookingId}`;
+    await redis.setex(key, ttlSeconds, JSON.stringify({ ...route, timestamp: Date.now() }));
+    return true;
+  } catch (error) {
+    console.error('[Redis] setLiveRoute error:', error);
+    return false;
+  }
+};
+
+const getLiveRoute = async (bookingId) => {
+  if (!isRedisConnected() || !bookingId) return null;
+  try {
+    const key = `live:route:${bookingId}`;
+    const data = await redis.get(key);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error('[Redis] getLiveRoute error:', error);
+    return null;
+  }
+};
 module.exports = {
   initRedis,
   getRedis,
@@ -328,5 +354,7 @@ module.exports = {
   clearBookingSearchCache,
   // Live tracking
   setLiveLocation,
-  getLiveLocation
+  getLiveLocation,
+  setLiveRoute,
+  getLiveRoute
 };

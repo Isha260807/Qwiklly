@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 import Modal from '../../components/Modal';
 import Button from '../../components/Button';
 import adminSettlementService from '../../../../services/adminSettlementService';
+import { adminSalaryService } from '../../../../services/salaryService';
 import { getSettings } from '../../services/settingsService';
 import { exportToCSV } from '../../../../utils/csvExport';
 
@@ -24,6 +25,8 @@ const SettlementManagement = () => {
   const [vendors, setVendors] = useState([]);
   const [history, setHistory] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
+  const [salaryPayments, setSalaryPayments] = useState([]);
+  const [salarySummary, setSalarySummary] = useState({});
   const [actionLoading, setActionLoading] = useState(false);
   const [settings, setSettings] = useState(null);
 
@@ -40,15 +43,14 @@ const SettlementManagement = () => {
   // Tab Definitions
   const navTabs = [
     { path: '/admin/settlements/pending', tabKey: 'pending', label: 'Pending Settlements', icon: FiClock },
-    { path: '/admin/settlements/withdrawals', tabKey: 'withdrawals', label: 'Withdrawal Requests', icon: FiArrowUpRight },
-    { path: '/admin/settlements/vendors', tabKey: 'vendors', label: 'Vendors with Due', icon: FiUsers },
+    { path: '/admin/settlements/salary', tabKey: 'salary', label: 'Salary Settlements', icon: FiCreditCard },
     { path: '/admin/settlements/history', tabKey: 'history', label: 'Settlement History', icon: FiTrendingUp },
   ];
 
   // Determine active tab from URL
   useEffect(() => {
     const path = location.pathname.split('/').pop();
-    if (['pending', 'vendors', 'history', 'withdrawals'].includes(path)) {
+    if (['pending', 'salary', 'history'].includes(path)) {
       setActiveTab(path);
     } else {
       setActiveTab('pending');
@@ -78,6 +80,12 @@ const SettlementManagement = () => {
       } else if (activeTab === 'history') {
         const res = await adminSettlementService.getSettlementHistory();
         if (res.success) setHistory(res.data || []);
+      } else if (activeTab === 'salary') {
+        const res = await adminSalaryService.getAllPayments({ limit: 100 });
+        if (res.success) {
+          setSalaryPayments(res.data || []);
+          setSalarySummary(res.summary || {});
+        }
       } else if (activeTab === 'withdrawals') {
         const res = await adminSettlementService.getWithdrawalRequests();
         if (res.success) setWithdrawals(res.data || []);
@@ -110,23 +118,6 @@ const SettlementManagement = () => {
     setSelectedItem(item);
     setModalInput('');
     setActiveModal('reject_settlement');
-  };
-
-  const openBlockVendor = (vendor) => {
-    setSelectedItem(vendor);
-    setModalInput('');
-    setActiveModal('block_vendor');
-  };
-
-  const openUnblockVendor = (vendor) => {
-    setSelectedItem(vendor);
-    setActiveModal('unblock_vendor');
-  };
-
-  const openUpdateLimit = (vendor) => {
-    setSelectedItem(vendor);
-    setModalInput(vendor.cashLimit || 10000);
-    setActiveModal('update_limit');
   };
 
   const openApproveWithdrawal = (item) => {
@@ -178,56 +169,6 @@ const SettlementManagement = () => {
       }
     } catch (error) {
       toast.error('Failed to reject settlement');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleBlockVendor = async () => {
-    if (!modalInput.trim()) return toast.error('Blocking reason is required');
-    try {
-      setActionLoading(true);
-      const res = await adminSettlementService.blockVendor(selectedItem._id, modalInput);
-      if (res.success) {
-        toast.success('Vendor blocked');
-        loadData();
-        closeModals();
-      }
-    } catch (error) {
-      toast.error('Failed to block vendor');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUpdateLimitSubmit = async () => {
-    if (!modalInput || isNaN(modalInput)) return toast.error('Valid limit required');
-    try {
-      setActionLoading(true);
-      const res = await adminSettlementService.updateCashLimit(selectedItem._id, parseInt(modalInput));
-      if (res.success) {
-        toast.success('Limit updated');
-        loadData();
-        closeModals();
-      }
-    } catch (error) {
-      toast.error('Failed to update limit');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUnblockVendorSubmit = async () => {
-    try {
-      setActionLoading(true);
-      const res = await adminSettlementService.unblockVendor(selectedItem._id);
-      if (res.success) {
-        toast.success('Vendor unblocked');
-        loadData();
-        closeModals();
-      }
-    } catch (error) {
-      toast.error('Failed to unblock vendor');
     } finally {
       setActionLoading(false);
     }
@@ -306,6 +247,23 @@ const SettlementManagement = () => {
         { key: 'status', label: 'Status' },
         { key: 'requestDate', label: 'Request Date', type: 'date' }
       ]);
+    } else if (activeTab === 'salary' && salaryPayments.length > 0) {
+      exportToCSV(salaryPayments, 'salary_settlements', [
+        { key: 'vendorId.name', label: 'Vendor Name' },
+        { key: 'vendorId.businessName', label: 'Business Name' },
+        { key: 'periodType', label: 'Period' },
+        { key: 'periodStart', label: 'Period Start', type: 'date' },
+        { key: 'periodEnd', label: 'Period End', type: 'date' },
+        { key: 'bookingEarningsAmount', label: 'Booking Earnings', type: 'currency' },
+        { key: 'salaryAmount', label: 'Salary', type: 'currency' },
+        { key: 'bonusAmount', label: 'Bonus', type: 'currency' },
+        { key: 'incentiveAmount', label: 'Incentive', type: 'currency' },
+        { key: 'adjustmentAmount', label: 'Adjustment', type: 'currency' },
+        { key: 'totalAmount', label: 'Total Paid', type: 'currency' },
+        { key: 'paymentMethod', label: 'Payment Method' },
+        { key: 'paymentReference', label: 'Reference' },
+        { key: 'paidAt', label: 'Paid At', type: 'datetime' }
+      ]);
     } else if (activeTab === 'pending' && pendingSettlements.length > 0) {
       exportToCSV(pendingSettlements, 'pending_settlements', [
         { key: 'vendorId.name', label: 'Vendor Name' },
@@ -324,7 +282,42 @@ const SettlementManagement = () => {
   const renderDashboardCards = () => {
     let cards = [];
 
-    if (activeTab === 'withdrawals') {
+    if (activeTab === 'salary') {
+      cards = [
+        {
+          title: 'Total Salary Paid',
+          value: `₹${(salarySummary.totalAmount || 0).toLocaleString('en-IN')}`,
+          icon: FiCreditCard,
+          color: 'text-emerald-600',
+          bg: 'bg-emerald-50',
+          border: 'border-gray-100'
+        },
+        {
+          title: 'Salary Payments',
+          value: salarySummary.paymentCount || salaryPayments.length,
+          icon: FiCheckCircle,
+          color: 'text-blue-600',
+          bg: 'bg-blue-50',
+          border: 'border-gray-100'
+        },
+        {
+          title: 'Salary + Bonus',
+          value: `₹${((salarySummary.salaryAmount || 0) + (salarySummary.bonusAmount || 0)).toLocaleString('en-IN')}`,
+          icon: FiTrendingUp,
+          color: 'text-purple-600',
+          bg: 'bg-purple-50',
+          border: 'border-gray-100'
+        },
+        {
+          title: 'Incentive Paid',
+          value: `₹${(salarySummary.incentiveAmount || 0).toLocaleString('en-IN')}`,
+          icon: FiDollarSign,
+          color: 'text-orange-600',
+          bg: 'bg-orange-50',
+          border: 'border-gray-100'
+        }
+      ];
+    } else if (activeTab === 'withdrawals') {
       const pendingCount = withdrawals.length;
       const pendingAmount = withdrawals.reduce((sum, w) => sum + (w.amount || 0), 0);
 
@@ -359,46 +352,6 @@ const SettlementManagement = () => {
           icon: FiCheckCircle,
           color: 'text-purple-600',
           bg: 'bg-purple-50',
-          border: 'border-gray-100'
-        }
-      ];
-    } else if (activeTab === 'vendors') {
-      const totalVendors = vendors.length;
-      const totalDue = vendors.reduce((sum, v) => sum + (v.amountDue || 0), 0);
-      const blockedCount = vendors.filter(v => v.isBlocked).length;
-      const totalLimit = vendors.reduce((sum, v) => sum + (v.cashLimit || 0), 0);
-
-      cards = [
-        {
-          title: 'Total Due from Vendors',
-          value: `₹${totalDue.toLocaleString('en-IN')}`,
-          icon: FiDollarSign,
-          color: 'text-red-600',
-          bg: 'bg-red-50',
-          border: 'border-gray-100'
-        },
-        {
-          title: 'Vendors with Dues',
-          value: totalVendors,
-          icon: FiUsers,
-          color: 'text-blue-600',
-          bg: 'bg-blue-50',
-          border: 'border-gray-100'
-        },
-        {
-          title: 'Blocked Vendors',
-          value: blockedCount,
-          icon: FiAlertCircle,
-          color: 'text-orange-600',
-          bg: 'bg-orange-50',
-          border: 'border-gray-100'
-        },
-        {
-          title: 'Total Cash Limit',
-          value: `₹${(totalLimit / 100000).toFixed(1)}L`,
-          icon: FiCheck,
-          color: 'text-indigo-600',
-          bg: 'bg-indigo-50',
           border: 'border-gray-100'
         }
       ];
@@ -443,37 +396,39 @@ const SettlementManagement = () => {
         }
       ];
     } else {
+      const pendingCount = pendingSettlements.length;
+      const pendingAmount = pendingSettlements.reduce((sum, s) => sum + (s.amount || 0), 0);
       cards = [
         {
-          title: 'Total Due to Admin',
-          value: `₹${(dashboard?.totalDueToAdmin || 0).toLocaleString('en-IN')}`,
+          title: 'Total Pending Settlements',
+          value: `₹${pendingAmount.toLocaleString('en-IN')}`,
           icon: FiDollarSign,
-          color: 'text-red-600',
-          bg: 'bg-red-50',
-          border: 'border-gray-100'
-        },
-        {
-          title: 'Pending Settlements',
-          value: dashboard?.pendingSettlements?.count || pendingSettlements.length || 0,
-          icon: FiClock,
           color: 'text-orange-600',
           bg: 'bg-orange-50',
           border: 'border-gray-100'
         },
         {
-          title: "Today's Collection",
-          value: `₹${(dashboard?.todayCashCollected?.amount || 0).toLocaleString('en-IN')}`,
-          icon: FiTrendingUp,
+          title: 'Pending Requests',
+          value: pendingCount,
+          icon: FiClock,
           color: 'text-blue-600',
           bg: 'bg-blue-50',
           border: 'border-gray-100'
         },
         {
-          title: 'Weekly Collection',
-          value: `₹${(dashboard?.weeklySettlements?.amount || 0).toLocaleString('en-IN')}`,
+          title: 'Settled to Vendors',
+          value: `₹${(dashboard?.totalSettled || 0).toLocaleString('en-IN')}`,
           icon: FiCheckCircle,
           color: 'text-emerald-600',
           bg: 'bg-emerald-50',
+          border: 'border-gray-100'
+        },
+        {
+          title: 'Active Vendors',
+          value: dashboard?.activeVendors || 'All Online',
+          icon: FiUsers,
+          color: 'text-purple-600',
+          bg: 'bg-purple-50',
           border: 'border-gray-100'
         }
       ];
@@ -537,6 +492,19 @@ const SettlementManagement = () => {
     const matchesSearch = !q || name.includes(q) || business.includes(q) || ref.includes(q);
     const matchesStatus = statusFilter === 'all' || w.status === statusFilter;
     return matchesSearch && matchesStatus;
+  });
+
+  const filteredSalaryPayments = salaryPayments.filter(payment => {
+    const q = search.toLowerCase();
+    const name = (payment.vendorId?.name || '').toLowerCase();
+    const business = (payment.vendorId?.businessName || '').toLowerCase();
+    const phone = (payment.vendorId?.phone || '').toLowerCase();
+    const ref = (payment.paymentReference || '').toLowerCase();
+    const matchesSearch = !q || name.includes(q) || business.includes(q) || phone.includes(q) || ref.includes(q);
+    const salaryStatus = statusFilter === 'approved' ? 'paid' : statusFilter;
+    const matchesStatus = statusFilter === 'all' || payment.status === salaryStatus;
+    const matchesMethod = methodFilter === 'all' || payment.paymentMethod === methodFilter;
+    return matchesSearch && matchesStatus && matchesMethod;
   });
 
   // --- Render Helpers ---
@@ -613,98 +581,6 @@ const SettlementManagement = () => {
             </div>
           </div>
         ))}
-      </div>
-    )
-  );
-
-  const renderVendorsList = () => (
-    filteredVendors.length === 0 ? (
-      <div className="text-center py-16">
-        <FiCheckCircle className="w-10 h-10 mx-auto mb-2 text-emerald-400" />
-        <p className="text-gray-700 font-bold text-sm">All vendors are clear!</p>
-        <p className="text-xs text-gray-400 mt-0.5">No vendors currently have pending dues exceeding their limit.</p>
-      </div>
-    ) : (
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[700px]">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/75">
-              <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Vendor Details</th>
-              <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Cash Limit Status</th>
-              <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Amount Due</th>
-              <th className="px-4 py-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {filteredVendors.map(vendor => (
-              <tr key={vendor._id} className="hover:bg-gray-50/70 transition-colors">
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${vendor.isBlocked ? 'bg-red-500' : 'bg-primary-600'}`}>
-                      {vendor.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="font-bold text-gray-900 text-xs">{vendor.name}</p>
-                      <p className="text-[10px] text-gray-400">{vendor.businessName} • {vendor.phone}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 text-right">
-                  <div className="flex flex-col items-end">
-                    <p className="text-xs font-semibold text-gray-700 mb-1">
-                      ₹{Math.abs(vendor.dues || vendor.amountDue || 0).toLocaleString('en-IN')} <span className="text-gray-400">/</span> ₹{(vendor.cashLimit || 10000).toLocaleString('en-IN')}
-                    </p>
-                    <div className="w-28 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${vendor.isBlocked ? 'bg-red-500' : 'bg-primary-600'}`}
-                        style={{ width: `${Math.min(((vendor.amountDue || 0) / (vendor.cashLimit || 10000)) * 100, 100)}%` }}
-                      />
-                    </div>
-                    {vendor.isBlocked && <span className="text-[9px] text-red-600 font-bold mt-0.5 uppercase tracking-wide">Blocked</span>}
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 text-right">
-                  <span className="font-extrabold text-red-600 text-sm">
-                    ₹{(vendor.amountDue || 0).toLocaleString('en-IN')}
-                  </span>
-                </td>
-                <td className="px-4 py-3.5 text-right">
-                  <div className="flex justify-end gap-1.5">
-                    <button
-                      onClick={() => navigate(`/admin/settlements/vendor/${vendor._id}`)}
-                      className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="View Ledger"
-                    >
-                      <FiEye className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => openUpdateLimit(vendor)}
-                      className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Update Cash Limit"
-                    >
-                      <FiDollarSign className="w-4 h-4" />
-                    </button>
-                    {vendor.isBlocked ? (
-                      <button
-                        onClick={() => openUnblockVendor(vendor)}
-                        className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-amber-200 transition-colors"
-                      >
-                        Unblock
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => openBlockVendor(vendor)}
-                        className="px-2.5 py-1 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-red-100 transition-colors"
-                      >
-                        Block
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     )
   );
@@ -816,16 +692,66 @@ const SettlementManagement = () => {
                       <span className="font-mono font-bold text-gray-800">{request.transactionReference}</span>
                     </div>
                   )}
-                  {request.bankDetails && (
+                  {(request.bankDetails || request.vendorId?.bankDetails) && (
                     <div className="pt-1.5 border-t border-gray-200/60 mt-1.5 text-[10px]">
-                      <p className="font-bold text-gray-400 uppercase mb-0.5">Bank Details</p>
-                      <div className="grid grid-cols-2 gap-1 text-gray-700">
-                        {Object.entries(request.bankDetails).map(([key, val]) => (
-                          <div key={key} className="truncate">
-                            <span className="text-gray-400 capitalize">{key}:</span> <span className="font-semibold">{val}</span>
+                      <p className="font-bold text-gray-500 uppercase mb-1">Payout Account / UPI / QR</p>
+                      {(() => {
+                        const b = request.bankDetails || request.vendorId?.bankDetails || {};
+                        return (
+                          <div className="space-y-1.5 bg-white p-2 rounded-lg border border-gray-100">
+                            {b.upiQrCode && (
+                              <div className="flex items-center gap-2 p-1 bg-emerald-50/60 rounded border border-emerald-100/60 mb-1">
+                                <img
+                                  src={b.upiQrCode}
+                                  alt="Vendor QR"
+                                  className="w-10 h-10 object-contain rounded border border-gray-200 bg-white"
+                                />
+                                <div>
+                                  <span className="text-[10px] font-bold text-emerald-800 block">QR Code Uploaded</span>
+                                  <a
+                                    href={b.upiQrCode}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[9px] text-emerald-600 font-semibold underline"
+                                  >
+                                    View & Scan QR
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+                            {b.upiId && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-semibold">UPI ID:</span>
+                                <span className="font-bold text-emerald-700 font-mono">{b.upiId}</span>
+                              </div>
+                            )}
+                            {b.accountNumber && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-semibold">A/C No:</span>
+                                <span className="font-bold text-gray-800 font-mono">{b.accountNumber}</span>
+                              </div>
+                            )}
+                            {b.ifscCode && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-semibold">IFSC:</span>
+                                <span className="font-bold text-gray-800 font-mono">{b.ifscCode}</span>
+                              </div>
+                            )}
+                            {b.accountHolderName && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-semibold">Holder:</span>
+                                <span className="font-semibold text-gray-800">{b.accountHolderName}</span>
+                              </div>
+                            )}
+                            {b.bankName && (
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-400 font-semibold">Bank:</span>
+                                <span className="font-semibold text-gray-800">{b.bankName}</span>
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -859,6 +785,53 @@ const SettlementManagement = () => {
     )
   );
 
+  const renderSalaryPayments = () => {
+    if (filteredSalaryPayments.length === 0) {
+      return React.createElement('div', { className: 'text-center py-16' }, [
+        React.createElement(FiCreditCard, { key: 'icon', className: 'w-10 h-10 mx-auto mb-2 text-gray-300' }),
+        React.createElement('p', { key: 'title', className: 'text-gray-700 font-bold text-sm' }, 'No salary settlements found'),
+        React.createElement('p', { key: 'hint', className: 'text-xs text-gray-400 mt-0.5' }, 'Payments marked done from Vendor Salary Wallets will appear here.')
+      ]);
+    }
+    return React.createElement('div', { className: 'space-y-3' }, filteredSalaryPayments.map((payment) => {
+      const vendor = payment.vendorId || {};
+      const customTotal = (payment.customItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      const period = payment.periodType === 'week' ? 'Weekly salary' : payment.periodType === 'month' ? 'Monthly salary' : 'Custom salary';
+      const statusClass = payment.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : payment.status === 'cancelled' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200';
+      const breakdown = [
+        ['Booking earning', payment.bookingEarningsAmount],
+        ['Salary', payment.salaryAmount],
+        ['Bonus', payment.bonusAmount],
+        ['Incentive', payment.incentiveAmount],
+        ['Adjustment', payment.adjustmentAmount],
+        ['Custom items', customTotal]
+      ];
+      return React.createElement('div', { key: payment._id, className: 'rounded-xl border border-gray-100 bg-white p-4 shadow-sm hover:shadow-md transition-all' }, [
+        React.createElement('div', { key: 'header', className: 'flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4' }, [
+          React.createElement('div', { key: 'vendor', className: 'flex items-start gap-3' }, [
+            React.createElement('div', { key: 'avatar', className: 'w-10 h-10 rounded-full bg-primary-50 text-primary-700 flex items-center justify-center font-bold text-sm shrink-0' }, (vendor.name || 'V').charAt(0).toUpperCase()),
+            React.createElement('div', { key: 'details' }, [
+              React.createElement('h3', { key: 'name', className: 'text-sm font-bold text-gray-900' }, vendor.name || 'Vendor'),
+              React.createElement('p', { key: 'business', className: 'text-[10px] text-gray-500 mt-0.5' }, vendor.businessName || vendor.phone || vendor.email || 'Salary vendor'),
+              React.createElement('p', { key: 'period', className: 'text-[10px] text-gray-400 mt-1' }, period + ' / ' + formatDate(payment.periodStart) + ' - ' + formatDate(payment.periodEnd))
+            ])
+          ]),
+          React.createElement('div', { key: 'amount', className: 'text-left lg:text-right' }, [
+            React.createElement('p', { key: 'total', className: 'text-xl font-extrabold text-emerald-700' }, '₹' + (payment.totalAmount || 0).toLocaleString('en-IN')),
+            React.createElement('span', { key: 'status', className: 'inline-flex mt-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border ' + statusClass }, payment.status || 'paid')
+          ])
+        ]),
+        React.createElement('div', { key: 'breakdown', className: 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-4 rounded-lg bg-gray-50 p-3 border border-gray-100' }, breakdown.map(([label, amount]) => React.createElement('div', { key: label }, [
+          React.createElement('p', { key: 'label', className: 'text-[9px] uppercase tracking-wide text-gray-400 font-bold' }, label),
+          React.createElement('p', { key: 'amount', className: 'text-xs font-bold text-gray-800 mt-0.5' }, '₹' + (amount || 0).toLocaleString('en-IN'))
+        ]))),
+        React.createElement('div', { key: 'footer', className: 'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3 pt-3 border-t border-gray-100 text-[10px] text-gray-500' }, [
+          React.createElement('span', { key: 'paid' }, 'Paid ' + formatDate(payment.paidAt || payment.createdAt) + ' / ' + (payment.paymentMethod || 'Payment method not set')),
+          React.createElement('span', { key: 'reference', className: 'font-mono' }, payment.paymentReference || 'No payment reference')
+        ])
+      ]);
+    }));
+  };
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
       {/* Top Sub-Navigation Tabs */}
@@ -910,7 +883,7 @@ const SettlementManagement = () => {
 
         {/* Dropdowns & Buttons */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {activeTab === 'pending' && (
+          {(activeTab === 'pending' || activeTab === 'salary') && (
             <select
               value={methodFilter}
               onChange={(e) => setMethodFilter(e.target.value)}
@@ -923,7 +896,7 @@ const SettlementManagement = () => {
             </select>
           )}
 
-          {(activeTab === 'history' || activeTab === 'withdrawals') && (
+          {(activeTab === 'history' || activeTab === 'withdrawals' || activeTab === 'salary') && (
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -965,7 +938,7 @@ const SettlementManagement = () => {
         ) : (
           <div className="p-4">
             {activeTab === 'pending' && renderPendingSettlements()}
-            {activeTab === 'vendors' && renderVendorsList()}
+            {activeTab === 'salary' && renderSalaryPayments()}
             {activeTab === 'history' && renderHistoryList()}
             {activeTab === 'withdrawals' && renderWithdrawalsList()}
           </div>
@@ -1023,92 +996,6 @@ const SettlementManagement = () => {
               className="bg-red-600 hover:bg-red-700 text-white text-xs"
             >
               Reject Settlement
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Block Vendor Modal */}
-      <Modal
-        isOpen={activeModal === 'block_vendor'}
-        onClose={closeModals}
-        title="Block Vendor"
-        size="sm"
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-gray-600">
-            Blocking <span className="font-bold">{selectedItem?.name}</span> will prevent them from accepting new cash jobs.
-          </p>
-          <textarea
-            value={modalInput}
-            onChange={(e) => setModalInput(e.target.value)}
-            placeholder="Reason for blocking..."
-            className="w-full p-2.5 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all"
-            rows={3}
-          />
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="ghost" onClick={closeModals}>Cancel</Button>
-            <Button
-              onClick={handleBlockVendor}
-              isLoading={actionLoading}
-              className="bg-red-600 hover:bg-red-700 text-white text-xs"
-            >
-              Block Vendor
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Unblock Vendor Modal */}
-      <Modal
-        isOpen={activeModal === 'unblock_vendor'}
-        onClose={closeModals}
-        title="Unblock Vendor"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-xs text-gray-600">
-            Are you sure you want to unblock <span className="font-bold text-gray-900">{selectedItem?.name}</span>?
-          </p>
-          <div className="flex justify-end gap-2 mt-6">
-            <Button variant="ghost" onClick={closeModals}>Cancel</Button>
-            <Button
-              onClick={handleUnblockVendorSubmit}
-              isLoading={actionLoading}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-            >
-              Unblock Vendor
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Update Cash Limit Modal */}
-      <Modal
-        isOpen={activeModal === 'update_limit'}
-        onClose={closeModals}
-        title="Update Cash Limit"
-        size="sm"
-      >
-        <div className="space-y-3">
-          <p className="text-xs text-gray-600">
-            Set maximum allowed cash dues limit for <span className="font-bold text-gray-900">{selectedItem?.name}</span>:
-          </p>
-          <input
-            type="number"
-            value={modalInput}
-            onChange={(e) => setModalInput(e.target.value)}
-            className="w-full p-2.5 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none"
-            placeholder="e.g., 10000"
-          />
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="ghost" onClick={closeModals}>Cancel</Button>
-            <Button
-              onClick={handleUpdateLimitSubmit}
-              isLoading={actionLoading}
-              className="bg-primary-600 hover:bg-primary-700 text-white text-xs"
-            >
-              Save Limit
             </Button>
           </div>
         </div>

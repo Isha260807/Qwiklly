@@ -1,6 +1,7 @@
 const User = require('../../models/User');
 const Booking = require('../../models/Booking');
 const { validationResult } = require('express-validator');
+const { getAdminUserCityFilter, getAdminBookingCityFilter } = require('../../utils/adminCityScope');
 
 /**
  * Get all users with filters and pagination
@@ -17,7 +18,7 @@ const getAllUsers = async (req, res) => {
     } = req.query;
 
     // Build query
-    const query = {};
+    const query = { ...getAdminUserCityFilter(req) };
 
     if (isActive !== undefined) {
       query.isActive = isActive === 'true';
@@ -77,7 +78,7 @@ const getUserDetails = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id).select('-password');
+    const user = await User.findOne({ _id: id, ...getAdminUserCityFilter(req) }).select('-password');
 
     if (!user) {
       return res.status(404).json({
@@ -89,7 +90,7 @@ const getUserDetails = async (req, res) => {
     // Get user booking stats
     const bookingStats = await Booking.aggregate([
       {
-        $match: { userId: user._id }
+        $match: { userId: user._id, ...getAdminBookingCityFilter(req) }
       },
       {
         $group: {
@@ -141,7 +142,7 @@ const toggleUserStatus = async (req, res) => {
     const { id } = req.params;
     const { isActive } = req.body;
 
-    const user = await User.findById(id);
+    const user = await User.findOne({ _id: id, ...getAdminUserCityFilter(req) });
 
     if (!user) {
       return res.status(404).json({
@@ -174,7 +175,7 @@ const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id);
+    const user = await User.findOne({ _id: id, ...getAdminUserCityFilter(req) });
 
     if (!user) {
       return res.status(404).json({
@@ -209,7 +210,12 @@ const getUserBookings = async (req, res) => {
     const { status, page = 1, limit = 20 } = req.query;
 
     // Build query
-    const query = { userId: id };
+    const scopedUser = await User.findOne({ _id: id, ...getAdminUserCityFilter(req) }).select('_id');
+    if (!scopedUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const query = { userId: id, ...getAdminBookingCityFilter(req) };
     if (status) {
       query.status = status;
     }
@@ -253,7 +259,7 @@ const getUserWalletTransactions = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id).select('wallet');
+    const user = await User.findOne({ _id: id, ...getAdminUserCityFilter(req) }).select('wallet');
 
     if (!user) {
       return res.status(404).json({
@@ -266,7 +272,8 @@ const getUserWalletTransactions = async (req, res) => {
     const transactions = await Booking.find({
       userId: id,
       paymentMethod: 'wallet',
-      paymentStatus: 'success'
+      paymentStatus: 'success',
+      ...getAdminBookingCityFilter(req)
     })
       .select('bookingNumber finalAmount createdAt')
       .sort({ createdAt: -1 })
@@ -295,7 +302,7 @@ const getAllUserBookings = async (req, res) => {
   try {
     const { status, page = 1, limit = 20, search } = req.query;
 
-    const query = {};
+    const query = { ...getAdminBookingCityFilter(req) };
 
     if (status && status !== 'all') {
       query.status = { $regex: new RegExp(`^${status}$`, 'i') };
@@ -304,6 +311,7 @@ const getAllUserBookings = async (req, res) => {
     // Search by user name, phone, email, bookingNumber, serviceName
     if (search) {
       const users = await User.find({
+        ...getAdminUserCityFilter(req),
         $or: [
           { name: { $regex: search, $options: 'i' } },
           { phone: { $regex: search, $options: 'i' } },

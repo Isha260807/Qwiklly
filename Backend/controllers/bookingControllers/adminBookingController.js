@@ -1,6 +1,10 @@
 const Booking = require('../../models/Booking');
+const Vendor = require('../../models/Vendor');
+const Zone = require('../../models/Zone');
 const { validationResult } = require('express-validator');
-const { BOOKING_STATUS } = require('../../utils/constants');
+const { BOOKING_STATUS, VENDOR_STATUS } = require('../../utils/constants');
+const { findQualifiedVendors } = require('../../services/vendorMatchService');
+const { getAdminBookingCityFilter, getAdminVendorCityFilter } = require('../../utils/adminCityScope');
 
 /**
  * Get all bookings with filters and search
@@ -13,6 +17,7 @@ const getAllBookings = async (req, res) => {
       userId,
       vendorId,
       workerId,
+      zoneId,
       startDate,
       endDate,
       search,
@@ -21,12 +26,14 @@ const getAllBookings = async (req, res) => {
     } = req.query;
 
     // Build query
-    const query = {};
+    const query = { ...getAdminBookingCityFilter(req) };
+
+    if (zoneId) query.zoneId = zoneId;
 
     if (status && status !== 'ALL_STATUS' && status !== 'ALL') {
       const s = status.toLowerCase();
       if (s === 'pending') {
-        query.status = { $in: ['pending', 'searching', 'requested', 'awaiting_payment'] };
+        query.status = { $in: ['pending', 'searching', 'requested', 'awaiting_payment', 'pending_admin'] };
       } else if (s === 'confirmed') {
         query.status = { $in: ['confirmed', 'accepted', 'assigned'] };
       } else if (s === 'in_progress') {
@@ -97,6 +104,7 @@ const getAllBookings = async (req, res) => {
       .populate('vendorId', 'name businessName phone')
       .populate('serviceId', 'title iconUrl')
       .populate('categoryId', 'title slug')
+      .populate('zoneId', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -138,7 +146,9 @@ const getBookingById = async (req, res) => {
       query = { bookingNumber: id };
     }
 
-    const booking = await Booking.findOne(query)
+    const cityFilter = getAdminBookingCityFilter(req);
+    const scopedQuery = Object.keys(cityFilter).length ? { $and: [query, cityFilter] } : query;
+    const booking = await Booking.findOne(scopedQuery)
       .populate('userId', 'name phone email addresses')
       .populate('vendorId', 'name businessName phone email address profilePhoto')
       .populate('serviceId', 'title description iconUrl images')
@@ -181,7 +191,7 @@ const cancelBooking = async (req, res) => {
     const { id } = req.params;
     const { cancellationReason } = req.body;
 
-    const booking = await Booking.findById(id);
+    const booking = await Booking.findOne({ _id: id, ...getAdminBookingCityFilter(req) });
 
     if (!booking) {
       return res.status(404).json({
@@ -210,6 +220,13 @@ const cancelBooking = async (req, res) => {
     booking.cancelledBy = 'admin';
     booking.cancellationReason = cancellationReason || 'Cancelled by admin';
 
+    if (booking.bookingType === 'scheduled' && booking.slotAssignment) {
+      const wasCommitted = booking.slotAssignment.state === 'COMMITTED';
+      booking.slotAssignment.state = 'RELEASED';
+      if (!wasCommitted) {
+        booking.vendorId = null;
+      }
+    }
     await booking.save();
 
     res.status(200).json({
@@ -234,7 +251,7 @@ const getBookingAnalytics = async (req, res) => {
     const { startDate, endDate } = req.query;
 
     // Build date filter
-    const dateFilter = {};
+    const dateFilter = { ...getAdminBookingCityFilter(req) };
     if (startDate || endDate) {
       dateFilter.createdAt = {};
       if (startDate) dateFilter.createdAt.$gte = new Date(startDate);
@@ -352,10 +369,144 @@ const getBookingAnalytics = async (req, res) => {
   }
 };
 
+/**
+ * Zone -> service -> availability candidate list for a specific booking,
+ * using the SAME pipeline booking creation and dispatch use
+ * (vendorMatchService.findQualifiedVendors). Lets an admin see exactly who
+ * is eligible before manually assigning a vendor to a PENDING_ADMIN booking.
+ */
+const getEligibleVendorsForBooking = async (req, res) => {
+  try {
+    const booking = await Booking.findOne({ _id: req.params.id, ...getAdminBookingCityFilter(req) }).lean();
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    if (!booking.zoneId) {
+      return res.status(400).json({ success: false, message: 'Booking has no resolved zone to match vendors against' });
+    }
+
+    const zone = await Zone.findById(booking.zoneId).lean();
+    if (!zone) {
+      return res.status(404).json({ success: false, message: 'Zone referenced by this booking no longer exists' });
+    }
+
+    const { vendors, reason, debug } = await findQualifiedVendors({
+      zone,
+      serviceTitle: booking.serviceName || booking.serviceCategory
+    });
+
+    res.status(200).json({
+      success: true,
+      zone: { id: zone._id, name: zone.name },
+      reason,
+      debug,
+      vendors: vendors.map(v => ({
+        id: v._id,
+        name: v.name,
+        businessName: v.businessName,
+        phone: v.phone,
+        isOnline: v.isOnline,
+        availability: v.availability,
+        rating: v.rating
+      }))
+    });
+  } catch (error) {
+    console.error('Get eligible vendors error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch eligible vendors' });
+  }
+};
+
+/**
+ * Manually assign a vendor to a booking (typically one parked as
+ * PENDING_ADMIN because automatic zone/service/availability matching found no
+ * candidates). Re-validates zone/service/approval/active/conflict
+ * server-side - never trusts that the admin's UI list is still accurate.
+ */
+const assignVendorToBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { vendorId } = req.body;
+
+    if (!vendorId) {
+      return res.status(400).json({ success: false, message: 'vendorId is required' });
+    }
+
+    const booking = await Booking.findOne({ _id: id, ...getAdminBookingCityFilter(req) });
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    if ([BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED].includes(booking.status)) {
+      return res.status(400).json({ success: false, message: `Cannot assign a vendor to a ${booking.status} booking` });
+    }
+    if (!booking.zoneId) {
+      return res.status(400).json({ success: false, message: 'Booking has no resolved zone' });
+    }
+
+    const vendor = await Vendor.findOne({ _id: vendorId, ...getAdminVendorCityFilter(req) });
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: 'Vendor not found' });
+    }
+
+    // 1. Zone assignment
+    const vendorZoneIds = (vendor.zoneIds || []).map(z => z.toString());
+    if (!vendorZoneIds.includes(booking.zoneId.toString())) {
+      return res.status(400).json({ success: false, code: 'VENDOR_NOT_IN_ZONE', message: 'Vendor is not assigned to this booking\'s zone' });
+    }
+
+    // 2. Universal Model: All approved vendors in the zone provide all services
+
+    // 3. Approval + active
+    if (vendor.approvalStatus !== VENDOR_STATUS.APPROVED) {
+      return res.status(400).json({ success: false, code: 'VENDOR_NOT_APPROVED', message: 'Vendor is not approved' });
+    }
+    if (!vendor.isActive) {
+      return res.status(400).json({ success: false, code: 'VENDOR_INACTIVE', message: 'Vendor is not active' });
+    }
+
+    // 4. Booking conflict - same vendor, same scheduled date, already committed elsewhere
+    const conflict = await Booking.findOne({
+      _id: { $ne: booking._id },
+      vendorId: vendor._id,
+      scheduledDate: booking.scheduledDate,
+      status: { $in: ['confirmed', 'accepted', 'assigned', 'journey_started', 'visited', 'in_progress'] }
+    });
+    if (conflict) {
+      return res.status(400).json({ success: false, code: 'VENDOR_BOOKING_CONFLICT', message: `Vendor already has booking ${conflict.bookingNumber} on this date` });
+    }
+
+    booking.vendorId = vendor._id;
+    booking.status = BOOKING_STATUS.ASSIGNED;
+    booking.matchFailureReason = null;
+    booking.assignedAt = new Date();
+    await booking.save();
+
+    try {
+      const { createNotification } = require('../notificationControllers/notificationController');
+      await createNotification({
+        vendorId: vendor._id,
+        type: 'booking_request',
+        title: 'New Booking Assigned',
+        message: `An admin assigned booking ${booking.bookingNumber} (${booking.serviceName}) to you`,
+        relatedId: booking._id,
+        relatedType: 'booking'
+      });
+    } catch (notifyErr) {
+      console.error('Assign vendor notification error:', notifyErr);
+    }
+
+    res.status(200).json({ success: true, message: 'Vendor assigned successfully', data: booking });
+  } catch (error) {
+    console.error('Assign vendor to booking error:', error);
+    res.status(500).json({ success: false, message: 'Failed to assign vendor' });
+  }
+};
+
 module.exports = {
   getAllBookings,
   getBookingById,
   cancelBooking,
-  getBookingAnalytics
+  getBookingAnalytics,
+  getEligibleVendorsForBooking,
+  assignVendorToBooking
 };
 

@@ -1,33 +1,9 @@
-import React, { useLayoutEffect, useState, useEffect } from 'react'; // Added hooks
+import React, { useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiAlertCircle, FiClock, FiCheckCircle, FiInfo } from 'react-icons/fi';
-import { themeColors } from '../../../../theme';
-import { configService } from '../../../../services/configService'; // Import service
 
 const CancellationPolicy = () => {
   const navigate = useNavigate();
-  const [fees, setFees] = useState({
-    penalty: 49,
-    visitingCharges: 49
-  });
-
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const res = await configService.getSettings();
-        if (res.success && res.settings) {
-          setFees({
-            penalty: res.settings.cancellationPenalty ?? 0,
-            visitingCharges: res.settings.visitedCharges ?? 0
-          });
-        }
-      } catch (error) {
-        console.error('Failed to fetch settings:', error);
-      }
-    };
-    fetchSettings();
-  }, []);
-
   useLayoutEffect(() => {
     window.scrollTo(0, 0);
   }, []);
@@ -59,14 +35,14 @@ const CancellationPolicy = () => {
               <FiCheckCircle className="w-6 h-6 text-green-600" />
             </div>
             <h3 className="font-bold text-gray-900 mb-1">Free Cancellation</h3>
-            <p className="text-xs text-gray-500 font-medium">Until professional is assigned</p>
+            <p className="text-xs text-gray-500 font-medium">Within 3 minutes of a professional accepting</p>
           </div>
           <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
             <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center mb-3">
               <FiClock className="w-6 h-6 text-orange-600" />
             </div>
-            <h3 className="font-bold text-gray-900 mb-1">Late Fee</h3>
-            <p className="text-xs text-gray-500 font-medium">If cancelled after assignment</p>
+            <h3 className="font-bold text-gray-900 mb-1">Cancellation Closed</h3>
+            <p className="text-xs text-gray-500 font-medium">After 3 minutes or once the journey starts</p>
           </div>
         </div>
 
@@ -82,10 +58,10 @@ const CancellationPolicy = () => {
                 <FiCheckCircle className="w-4 h-4 text-white" />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-gray-900">Before Journey Start</h3>
-                <p className="text-xs text-gray-500 mt-1 mb-2">Any time before professional starts travel</p>
+                <h3 className="text-sm font-bold text-gray-900">Before a Professional Accepts</h3>
+                <p className="text-xs text-gray-500 mt-1 mb-2">While we are still finding a professional, and for 3 minutes after one accepts</p>
                 <div className="inline-block px-3 py-1 bg-green-50 text-green-700 text-xs font-bold rounded-lg border border-green-100">
-                  Full Refund • No Fee
+                  Full Refund to Wallet • No Fee
                 </div>
               </div>
             </div>
@@ -96,10 +72,10 @@ const CancellationPolicy = () => {
                 <FiClock className="w-4 h-4 text-white" />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-gray-900">Journey Started</h3>
-                <p className="text-xs text-gray-500 mt-1 mb-2">When professional is on the way</p>
+                <h3 className="text-sm font-bold text-gray-900">After 3 Minutes</h3>
+                <p className="text-xs text-gray-500 mt-1 mb-2">The professional has reserved their time for you</p>
                 <div className="inline-block px-3 py-1 bg-orange-50 text-orange-700 text-xs font-bold rounded-lg border border-orange-100">
-                  ₹{fees.penalty} Cancellation Penalty Applies
+                  Cancel button disabled • Contact Support
                 </div>
               </div>
             </div>
@@ -110,10 +86,10 @@ const CancellationPolicy = () => {
                 <FiAlertCircle className="w-4 h-4 text-white" />
               </span>
               <div>
-                <h3 className="text-sm font-bold text-gray-900">Professional Arrived</h3>
-                <p className="text-xs text-gray-500 mt-1 mb-2">When professional reaches your location</p>
+                <h3 className="text-sm font-bold text-gray-900">Journey Started</h3>
+                <p className="text-xs text-gray-500 mt-1 mb-2">When the professional is on the way or has arrived</p>
                 <div className="inline-block px-3 py-1 bg-red-50 text-red-700 text-xs font-bold rounded-lg border border-red-100">
-                  ₹{fees.visitingCharges} Visiting Charges Apply
+                  Cannot be cancelled • Contact Support
                 </div>
               </div>
             </div>
@@ -128,13 +104,13 @@ const CancellationPolicy = () => {
               <FiInfo className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Why do we charge a fee?</h2>
+              <h2 className="text-lg font-bold text-gray-900">Why is there a 3-minute limit?</h2>
               <p className="text-xs text-gray-500">To support our professionals time & effort</p>
             </div>
           </div>
 
           <div className="bg-gray-50 p-4 rounded-xl text-sm text-gray-600 leading-relaxed border border-gray-100">
-            Our service partners reserve their time exclusively for your booking and may travel significant distances. The cancellation fee compensates them for their lost time and travel expenses if a confirmed booking is cancelled last minute.
+            Our service partners reserve their time exclusively for your booking and may travel significant distances. Once a professional accepts, you have 3 minutes to cancel for a full refund to your wallet. After that, or once the journey starts, please contact support and we will help you.
           </div>
         </div>
 
@@ -142,7 +118,7 @@ const CancellationPolicy = () => {
         <div className="bg-gradient-to-r from-teal-50 to-emerald-50 rounded-3xl p-6 border border-teal-100">
           <h3 className="font-bold text-teal-900 mb-2">Need to change plans?</h3>
           <p className="text-sm text-teal-700 mb-4 opacity-90">
-            Instead of cancelling, you can reschedule your booking for free up to 2 hours before the service time.
+            Instead of cancelling, you can reschedule your booking from the booking details page.
           </p>
           <button
             onClick={() => navigate(-1)}

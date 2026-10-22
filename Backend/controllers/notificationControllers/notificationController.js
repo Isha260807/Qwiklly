@@ -164,12 +164,15 @@ const createNotification = async ({
 const getUserNotifications = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { isRead, page = 1, limit = 20 } = req.query;
+    const { isRead, type, page = 1, limit = 20 } = req.query;
 
     // Build query
     const query = { userId };
     if (isRead !== undefined) {
       query.isRead = isRead === 'true';
+    }
+    if (type) {
+      query.type = type;
     }
 
     // Pagination
@@ -311,12 +314,15 @@ const getWorkerNotifications = async (req, res) => {
 const getAdminNotifications = async (req, res) => {
   try {
     const adminId = req.user.id;
-    const { isRead, page = 1, limit = 20 } = req.query;
+    const { isRead, type, page = 1, limit = 20 } = req.query;
 
     // Build query
     const query = { adminId };
     if (isRead !== undefined) {
       query.isRead = isRead === 'true';
+    }
+    if (type) {
+      query.type = type;
     }
 
     // Pagination

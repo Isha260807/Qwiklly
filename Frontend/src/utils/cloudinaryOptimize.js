@@ -41,7 +41,21 @@ export const optimizeCloudinaryUrl = (url, options = {}) => {
   // Crop and gravity (only if dimensions specified)
   if (width || height) {
     transforms.push(`c_${crop}`);
-    transforms.push(`g_${gravity}`);
+
+    // Cloudinary does not allow auto gravity with c_limit, c_fit, or c_scale.
+    // Keep gravity for crop modes where Cloudinary supports it.
+    const autoGravityCropModes = new Set([
+      'fill',
+      'thumb',
+      'lfill',
+      'fill_pad',
+      'auto',
+      'auto_pad',
+    ]);
+
+    if (gravity && (gravity !== 'auto' || autoGravityCropModes.has(crop))) {
+      transforms.push(`g_${gravity}`);
+    }
   }
 
   // DPR for responsive images

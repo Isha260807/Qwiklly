@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiSave, FiUser, FiBriefcase, FiPhone, FiMail, FiMapPin, FiChevronDown, FiCamera, FiUpload, FiSearch, FiX, FiCheck } from 'react-icons/fi';
+import { FiUser, FiBriefcase, FiPhone, FiMail, FiMapPin, FiCamera, FiUpload, FiCreditCard, FiX, FiShield } from 'react-icons/fi';
 import { vendorTheme as themeColors } from '../../../../theme';
 import Header from '../../components/layout/Header';
-import BottomNav from '../../components/layout/BottomNav';
-import { publicCatalogService } from '../../../../services/catalogService';
+
 import { vendorAuthService } from '../../../../services/authService';
 import AddressSelectionModal from '../../../user/pages/Checkout/components/AddressSelectionModal';
 import { toast } from 'react-hot-toast';
@@ -13,17 +12,27 @@ import flutterBridge from '../../../../utils/flutterBridge';
 
 // Zod schema
 const vendorProfileSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  businessName: z.string().optional(),
-  phone: z.string().regex(/^\+?[0-9]{10,13}$/, "Invalid phone number"),
-  email: z.string().email("Invalid email address").optional().or(z.literal('')),
+  name: z.string().trim().min(2, "Name must be at least 2 characters"),
+  businessName: z.string().trim().optional(),
+  // Phone is already verified and is not editable by this update endpoint.
+  // Accept existing formatted values so profile edits are not blocked.
+  phone: z.string().optional(),
+  email: z.string().trim().email("Invalid email address").optional().or(z.literal('')),
+  // Address can be missing for older vendors; the backend preserves the
+  // existing address and supports partial profile updates.
   address: z.custom((val) => {
+    if (
+      val === undefined ||
+      val === null ||
+      val === '' ||
+      (typeof val === 'object' && !val.fullAddress && !val.addressLine1)
+    ) {
+      return true;
+    }
     return (typeof val === 'string' && val.trim().length > 0) ||
       (typeof val === 'object' && val !== null && (val.fullAddress || val.addressLine1));
-  }, "Address is required"),
-  serviceCategories: z.any().optional(), // Relaxed validation for debugging
+  }, "Address is invalid").optional(),
 });
-
 const EditProfile = () => {
   const navigate = useNavigate();
 
@@ -41,10 +50,16 @@ const EditProfile = () => {
     phone: '',
     email: '',
     address: '',
-    serviceCategories: [], // Array for multiple selection
     profilePhoto: '', // URL
     aadharDocument: '', // URL
     serviceRange: 10,
+    bankDetails: {
+      upiId: '',
+      accountHolderName: '',
+      accountNumber: '',
+      ifscCode: '',
+      bankName: ''
+    }
   });
 
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -53,13 +68,13 @@ const EditProfile = () => {
   const [uploading, setUploading] = useState(false);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
 
-  // Load available services directly from Admin catalog
-  const [availableServices, setAvailableServices] = useState([]);
-  const [isServicesLoading, setIsServicesLoading] = useState(true);
-  const [serviceSearch, setServiceSearch] = useState('');
-  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [errors, setErrors] = useState({});
   const [isFlutter, setIsFlutter] = useState(flutterBridge.isFlutter);
+  const [isPhoneChangeOpen, setIsPhoneChangeOpen] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
+  const [phoneOtp, setPhoneOtp] = useState('');
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneChangeLoading, setPhoneChangeLoading] = useState(false);
 
   // Sync flutter bridge state
   useEffect(() => {
@@ -93,50 +108,7 @@ const EditProfile = () => {
     }
   };
 
-  useEffect(() => {
-    const loadServices = async () => {
-      setIsServicesLoading(true);
-      try {
-        const serviceTitles = new Set();
 
-        // 1. Fetch live services created by Admin in database
-        try {
-          const svcRes = await publicCatalogService.getServices();
-          if (svcRes?.success && Array.isArray(svcRes.services)) {
-            svcRes.services.forEach(s => {
-              if (s.title && s.title.trim()) {
-                serviceTitles.add(s.title.trim());
-              }
-            });
-          }
-        } catch (sErr) {
-          console.error('Error fetching admin services:', sErr);
-        }
-
-        // 2. Fetch live brands/service offerings created by Admin in database
-        try {
-          const brandRes = await publicCatalogService.getBrands();
-          if (brandRes?.success && Array.isArray(brandRes.brands)) {
-            brandRes.brands.forEach(b => {
-              if (b.title && b.title.trim()) {
-                serviceTitles.add(b.title.trim());
-              }
-            });
-          }
-        } catch (bErr) {
-          console.error('Error fetching admin brands:', bErr);
-        }
-
-        setAvailableServices(Array.from(serviceTitles));
-      } catch (error) {
-        console.error('Error loading admin services:', error);
-      } finally {
-        setIsServicesLoading(false);
-      }
-    };
-
-    loadServices();
-  }, []);
 
   useLayoutEffect(() => {
     const html = document.documentElement;
@@ -177,10 +149,16 @@ const EditProfile = () => {
             phone: v.phone || '',
             email: v.email || '',
             address: addressData,
-            serviceCategories: Array.isArray(v.service) ? v.service : (v.service ? [v.service] : []),
             profilePhoto: v.profilePhoto || '',
             aadharDocument: v.aadharDocument || (v.aadhar && v.aadhar.document) || '',
             serviceRange: v.settings?.serviceRange || 10,
+            bankDetails: {
+              upiId: v.bankDetails?.upiId || '',
+              accountHolderName: v.bankDetails?.accountHolderName || '',
+              accountNumber: v.bankDetails?.accountNumber || '',
+              ifscCode: v.bankDetails?.ifscCode || '',
+              bankName: v.bankDetails?.bankName || ''
+            }
           });
 
           // Update local storage
@@ -207,9 +185,16 @@ const EditProfile = () => {
               phone: storedData.phone || '',
               email: storedData.email || '',
               address: addressData,
-              serviceCategory: storedData.service || storedData.serviceCategory || '',
               profilePhoto: storedData.profilePhoto || '',
               aadharDocument: storedData.aadharDocument || (storedData.aadhar && storedData.aadhar.document) || '',
+              serviceRange: storedData.serviceRange || 10,
+              bankDetails: {
+                upiId: storedData.bankDetails?.upiId || '',
+                accountHolderName: storedData.bankDetails?.accountHolderName || '',
+                accountNumber: storedData.bankDetails?.accountNumber || '',
+                ifscCode: storedData.bankDetails?.ifscCode || '',
+                bankName: storedData.bankDetails?.bankName || ''
+              }
             });
           }
         }
@@ -317,42 +302,125 @@ const EditProfile = () => {
     }
   };
 
-  const handleCategoryChange = (val) => {
-    setFormData(prev => {
-      const current = prev.serviceCategories || [];
-      const updated = current.includes(val)
-        ? current.filter(c => c !== val)
-        : [...current, val];
-
-      // When categories change, we might want to filter out skills that no longer apply?
-      // For now, let's keep all skills or clear them if categories become empty.
-      // Better: Keep skills, user can remove them manually.
-      return {
-        ...prev,
-        serviceCategories: updated,
-        // skills: [] // Optional: clear skills on category change? Maybe annoying. Let's keep them.
-      };
-    });
+  const handleBankChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      bankDetails: {
+        ...(prev.bankDetails || {}),
+        [field]: value
+      }
+    }));
   };
 
+
+  const openPhoneChangeModal = () => {
+    setNewPhone(formData.phone || '');
+    setPhoneOtp('');
+    setPhoneOtpSent(false);
+    setIsPhoneChangeOpen(true);
+  };
+
+  const closePhoneChangeModal = () => {
+    if (!phoneChangeLoading) {
+      setIsPhoneChangeOpen(false);
+      setPhoneOtp('');
+      setPhoneOtpSent(false);
+    }
+  };
+
+  const handleSendPhoneChangeOtp = async () => {
+    const cleanPhone = newPhone.replace(/\D/g, '');
+
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      toast.error('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    if (cleanPhone === String(formData.phone || '').replace(/\D/g, '')) {
+      toast.error('Please enter a new mobile number');
+      return;
+    }
+
+    try {
+      setPhoneChangeLoading(true);
+      const response = await vendorAuthService.sendPhoneChangeOTP(cleanPhone);
+
+      if (!response.success) {
+        throw new Error(response.message || 'Unable to send OTP');
+      }
+
+      setNewPhone(cleanPhone);
+      setPhoneOtpSent(true);
+      toast.success('OTP sent to your new mobile number');
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || 'Unable to send OTP');
+    } finally {
+      setPhoneChangeLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneChangeOtp = async () => {
+    const cleanPhone = newPhone.replace(/\D/g, '');
+
+    if (!/^\d{6}$/.test(phoneOtp)) {
+      toast.error('Please enter the 6-digit OTP');
+      return;
+    }
+
+    try {
+      setPhoneChangeLoading(true);
+      const response = await vendorAuthService.verifyPhoneChangeOTP(cleanPhone, phoneOtp);
+
+      if (!response.success) {
+        throw new Error(response.message || 'Invalid OTP');
+      }
+
+      const updatedPhone = response.vendor?.phone || cleanPhone;
+      setFormData((prev) => ({ ...prev, phone: updatedPhone }));
+
+      ['vendorData', 'vendorProfile'].forEach((storageKey) => {
+        try {
+          const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+          localStorage.setItem(storageKey, JSON.stringify({ ...stored, phone: updatedPhone }));
+        } catch (storageError) {
+          console.warn('Unable to update stored vendor phone:', storageError);
+        }
+      });
+
+      setIsPhoneChangeOpen(false);
+      setPhoneOtp('');
+      setPhoneOtpSent(false);
+      toast.success('Mobile number updated successfully');
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || 'Unable to verify OTP');
+    } finally {
+      setPhoneChangeLoading(false);
+    }
+  };
   const handleSubmit = async () => {
     // Zod Validation
     const validationResult = vendorProfileSchema.safeParse({
-      name: formData.name,
-      businessName: formData.businessName,
-      phone: formData.phone,
-      email: formData.email,
+      name: String(formData.name || '').trim(),
+      businessName: String(formData.businessName || '').trim(),
+      phone: String(formData.phone || '').trim(),
+      email: String(formData.email || '').trim(),
       address: formData.address,
-      serviceCategories: formData.serviceCategories,
     });
 
     if (!validationResult.success) {
       console.log('Validation failed:', validationResult.error);
-      const errorMessage = validationResult.error?.errors?.[0]?.message || 'Validation failed';
-      toast.error(errorMessage);
+      const issues = validationResult.error?.issues || validationResult.error?.errors || [];
+      const fieldErrors = issues.reduce((result, issue) => {
+        const field = issue.path?.[0];
+        if (field && !result[field]) result[field] = issue.message;
+        return result;
+      }, {});
+      setErrors(fieldErrors);
+      toast.error(issues[0]?.message || 'Please check the entered details');
       return;
     }
 
+    setErrors({});
     try {
       setUploading(true);
       let photoUrl = formData.profilePhoto;
@@ -383,21 +451,21 @@ const EditProfile = () => {
       }
 
       // Prepare payload to match backend structure
-      // Prepare payload to match backend structure
       const payload = {
-        name: formData.name,
-        businessName: formData.businessName,
+        name: validationResult.data.name,
+        businessName: validationResult.data.businessName,
         address: formData.address,
-        serviceCategory: formData.serviceCategories,
         profilePhoto: photoUrl,
-        aadharDocument: aadharUrl,
-        serviceRange: formData.serviceRange
+        // Only send Aadhar when a new file was selected; existing documents must not be revalidated on every profile save.
+        aadharDocument: aadharFile ? aadharUrl : undefined,
+        serviceRange: formData.serviceRange,
+        bankDetails: formData.bankDetails
       };
 
       try {
         const response = await vendorAuthService.updateProfile(payload);
         if (response.success) {
-          const updatedProfile = { ...response.vendor, skills: formData.skills }; // Keep local skills 
+          const updatedProfile = { ...response.vendor, skills: formData.skills, bankDetails: formData.bankDetails };
 
           // Update Local Storage
           localStorage.setItem('vendorProfile', JSON.stringify(updatedProfile));
@@ -407,16 +475,23 @@ const EditProfile = () => {
           window.dispatchEvent(new Event('vendorProfileUpdated'));
           window.dispatchEvent(new Event('vendorDataUpdated'));
 
+          toast.success('Profile & Bank details updated successfully!');
           navigate('/vendor/profile');
         } else {
           throw new Error(response.message || 'Failed to update profile');
         }
       } catch (apiError) {
         console.error('API update failed:', apiError);
-        // Fallback to local storage if API is mock or fails? No, display error
-        alert(apiError.message || 'Failed to save profile on server.');
+        const serverErrors = apiError.response?.data?.errors;
+        const errorDetails = Array.isArray(serverErrors)
+          ? serverErrors.map((item) => item.message || item.msg || (item.field || 'Profile') + ' is invalid').join(', ')
+          : '';
+        const errorMessage = [
+          apiError.response?.data?.message,
+          errorDetails
+        ].filter(Boolean).join(': ') || apiError.message || 'Failed to save profile on server.';
+        toast.error(errorMessage);
       }
-
     } catch (error) {
       console.error('Error saving profile:', error);
       alert('Failed to save profile. Please try again.');
@@ -533,15 +608,23 @@ const EditProfile = () => {
               </div>
               <span>Phone Number <span className="text-red-500">*</span></span>
             </label>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => handleInputChange('phone', e.target.value)}
-              placeholder="Enter phone number"
-              className={`w-full px-4 py-3 bg-white rounded-xl border focus:outline-none focus:ring-2 ${errors.phone ? 'border-red-500' : 'border-gray-200'
-                }`}
-              style={{ focusRingColor: themeColors.button }}
-            />
+            <div className="flex gap-2">
+              <input
+                type="tel"
+                value={formData.phone}
+                readOnly
+                placeholder="Enter phone number"
+                className="min-w-0 flex-1 px-4 py-3 bg-gray-100 rounded-xl border border-gray-200 text-gray-600 cursor-not-allowed"
+              />
+              <button
+                type="button"
+                onClick={openPhoneChangeModal}
+                className="shrink-0 px-4 py-3 rounded-xl font-semibold text-white whitespace-nowrap"
+                style={{ background: themeColors.button }}
+              >
+                Change
+              </button>
+            </div>
             {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
           </div>
 
@@ -581,7 +664,7 @@ const EditProfile = () => {
               >
                 <FiMapPin className="w-4 h-4" style={{ color: themeColors.icon }} />
               </div>
-              <span>Address <span className="text-red-500">*</span></span>
+              <span>Address</span>
             </label>
 
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 mb-2">
@@ -612,169 +695,7 @@ const EditProfile = () => {
             {errors.address && <p className="text-red-500 text-sm mt-1">{errors.address}</p>}
           </div>
 
-          {/* Offered Services (Multi-Select) */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <div
-                  className="p-2 rounded-lg"
-                  style={{
-                    background: `linear-gradient(135deg, ${themeColors.icon}25 0%, ${themeColors.icon}15 100%)`,
-                  }}
-                >
-                  <FiBriefcase className="w-4 h-4" style={{ color: themeColors.icon }} />
-                </div>
-                <span>Services Offered <span className="text-red-500">*</span></span>
-              </label>
 
-              {formData.serviceCategories.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, serviceCategories: [] }))}
-                  className="text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
-                >
-                  Clear All
-                </button>
-              )}
-            </div>
-
-            <p className="text-xs text-gray-500 mb-3">
-              Select the exact services you provide so nearby customers' bookings reach you.
-            </p>
-
-            {/* Selected Services Tags */}
-            {formData.serviceCategories.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3 p-3 bg-white rounded-xl border border-gray-100 shadow-xs">
-                {formData.serviceCategories.map((svcTitle, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all shadow-xs"
-                    style={{
-                      backgroundColor: hexToRgba(themeColors.button, 0.1),
-                      color: themeColors.button,
-                      border: `1px solid ${hexToRgba(themeColors.button, 0.25)}`,
-                    }}
-                  >
-                    <span>{svcTitle}</span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCategoryChange(svcTitle);
-                      }}
-                      className="p-0.5 rounded-full hover:bg-black/10 transition-colors"
-                    >
-                      <FiX className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Dropdown Selector */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsCategoryOpen(!isCategoryOpen)}
-                className="w-full px-4 py-3 bg-white rounded-xl border border-gray-200 flex items-center justify-between focus:outline-none focus:ring-2 transition-all"
-                style={{ focusRingColor: hexToRgba(themeColors.button, 0.2) }}
-              >
-                <span className="text-sm font-semibold text-gray-700">
-                  {formData.serviceCategories.length > 0
-                    ? `+ Add / Manage Services (${formData.serviceCategories.length} selected)`
-                    : 'Select Services you offer'}
-                </span>
-                <FiChevronDown className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${isCategoryOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {isCategoryOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-20 bg-black/10 backdrop-blur-2xs"
-                    onClick={() => setIsCategoryOpen(false)}
-                  />
-                  <div className="absolute z-30 w-full mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 max-h-72 overflow-hidden flex flex-col">
-                    {/* Search inside dropdown */}
-                    <div className="p-3 border-b border-gray-100 bg-gray-50/70 sticky top-0 z-10 flex items-center gap-2">
-                      <FiSearch className="w-4 h-4 text-gray-400 shrink-0" />
-                      <input
-                        type="text"
-                        value={serviceSearch}
-                        onChange={(e) => setServiceSearch(e.target.value)}
-                        placeholder="Search services (e.g. AC, Electrician)..."
-                        className="w-full text-xs font-medium bg-transparent focus:outline-none placeholder:text-gray-400"
-                        autoFocus
-                      />
-                      {serviceSearch && (
-                        <button
-                          type="button"
-                          onClick={() => setServiceSearch('')}
-                          className="text-gray-400 hover:text-gray-600"
-                        >
-                          <FiX className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Scrollable services list */}
-                    <div className="overflow-y-auto max-h-56 divide-y divide-gray-50">
-                      {isServicesLoading ? (
-                        <div className="px-4 py-6 text-center text-gray-400 text-xs font-medium">
-                          Loading services from Admin...
-                        </div>
-                      ) : availableServices.length === 0 ? (
-                        <div className="px-4 py-6 text-center text-gray-400 text-xs font-medium">
-                          No services added by Admin yet.
-                        </div>
-                      ) : (() => {
-                        const filtered = availableServices.filter(s =>
-                          s.toLowerCase().includes(serviceSearch.toLowerCase().trim())
-                        );
-
-                        if (filtered.length === 0) {
-                          return (
-                            <div className="px-4 py-6 text-center text-gray-400 text-xs font-medium">
-                              No services match "{serviceSearch}"
-                            </div>
-                          );
-                        }
-
-                        return filtered.map((svcTitle, index) => {
-                          const isSelected = formData.serviceCategories.includes(svcTitle);
-                          return (
-                            <button
-                              key={index}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCategoryChange(svcTitle);
-                              }}
-                              className={`w-full text-left px-4 py-3 hover:bg-gray-50/80 font-semibold text-xs flex items-center justify-between transition-colors ${
-                                isSelected ? 'bg-pink-50/40 text-gray-900' : 'text-gray-700'
-                              }`}
-                            >
-                              <span className="truncate pr-2">{svcTitle}</span>
-                              <div
-                                className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all ${
-                                  isSelected
-                                    ? 'text-white'
-                                    : 'border-gray-300 bg-white'
-                                }`}
-                                style={isSelected ? { backgroundColor: themeColors.button, borderColor: themeColors.button } : {}}
-                              >
-                                {isSelected && <FiCheck className="w-3.5 h-3.5" />}
-                              </div>
-                            </button>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            {errors.serviceCategories && <p className="text-red-500 text-sm mt-1">{errors.serviceCategories}</p>}
-          </div>
 
           {/* Service Range */}
           <div>
@@ -858,6 +779,25 @@ const EditProfile = () => {
             {errors.aadharDocument && <p className="text-red-500 text-sm mt-1">{errors.aadharDocument}</p>}
           </div>
 
+          {/* Dedicated Link to Payout & Bank Details */}
+          <div
+            onClick={() => navigate('/vendor/profile/payout')}
+            className="p-4 rounded-2xl border border-emerald-200/80 bg-gradient-to-r from-emerald-50 to-teal-50 shadow-xs cursor-pointer hover:shadow-sm transition-all active:scale-[0.99] flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                <FiCreditCard className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-gray-900 leading-tight">Payout & Bank Details (QR / UPI)</h4>
+                <p className="text-[10px] text-gray-500 mt-0.5">Manage UPI ID, Bank Account & QR Scanner</p>
+              </div>
+            </div>
+            <span className="text-xs font-bold text-emerald-700 bg-white px-2.5 py-1 rounded-lg border border-emerald-200">
+              Manage →
+            </span>
+          </div>
+
         </div>
 
         {/* Action Buttons */}
@@ -899,8 +839,96 @@ const EditProfile = () => {
         }}
         onSave={handleAddressSave}
       />
+      {isPhoneChangeOpen && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-11 h-11 rounded-2xl flex items-center justify-center"
+                  style={{ background: themeColors.primaryLight, color: themeColors.icon }}
+                >
+                  <FiShield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Change Mobile Number</h2>
+                  <p className="text-xs text-gray-500">OTP verification required</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closePhoneChangeModal}
+                disabled={phoneChangeLoading}
+                className="p-2 rounded-full text-gray-500 hover:bg-gray-100"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
 
-      <BottomNav />
+            {!phoneOtpSent ? (
+              <>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  New mobile number
+                </label>
+                <input
+                  type="tel"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="Enter 10-digit mobile number"
+                  maxLength={10}
+                  autoFocus
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2"
+                />
+                <button
+                  type="button"
+                  onClick={handleSendPhoneChangeOtp}
+                  disabled={phoneChangeLoading}
+                  className="w-full mt-4 py-3 rounded-xl font-bold text-white disabled:opacity-60"
+                  style={{ background: themeColors.button }}
+                >
+                  {phoneChangeLoading ? 'Sending OTP...' : 'Send OTP'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 mb-3">
+                  Enter the 6-digit OTP sent to <strong>{newPhone}</strong>.
+                </p>
+                <input
+                  type="tel"
+                  value={phoneOtp}
+                  onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Enter 6-digit OTP"
+                  maxLength={6}
+                  autoFocus
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-center tracking-[0.35em] text-lg focus:outline-none focus:ring-2"
+                />
+                <button
+                  type="button"
+                  onClick={handleVerifyPhoneChangeOtp}
+                  disabled={phoneChangeLoading}
+                  className="w-full mt-4 py-3 rounded-xl font-bold text-white disabled:opacity-60"
+                  style={{ background: themeColors.button }}
+                >
+                  {phoneChangeLoading ? 'Verifying...' : 'Verify & Update'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhoneOtpSent(false);
+                    setPhoneOtp('');
+                  }}
+                  disabled={phoneChangeLoading}
+                  className="w-full mt-2 py-2 text-sm font-semibold"
+                  style={{ color: themeColors.button }}
+                >
+                  Change number / Resend OTP
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 const Booking = require('../../models/Booking');
 const VendorBill = require('../../models/VendorBill');
+const VendorSalaryEarning = require('../../models/VendorSalaryEarning');
 const Service = require('../../models/UserService');
 const Settings = require('../../models/Settings');
 const { BOOKING_STATUS, PAYMENT_STATUS } = require('../../utils/constants');
@@ -35,7 +36,14 @@ const getDashboardStats = async (req, res) => {
                 {
                   $match: {
                     $or: [
-                      { vendorId: vId, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } },
+                      {
+                        vendorId: vId,
+                        status: { $nin: [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED] },
+                        $or: [
+                          { bookingType: 'scheduled' },
+                          { bookingType: { $ne: 'scheduled' }, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } }
+                        ]
+                      },
                       {
                         vendorId: null,
                         status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
@@ -55,6 +63,7 @@ const getDashboardStats = async (req, res) => {
                           {
                             $in: ['$status', [
                               BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.ASSIGNED, BOOKING_STATUS.CONFIRMED,
+                              BOOKING_STATUS.AWAITING_PAYMENT,
                               BOOKING_STATUS.JOURNEY_STARTED, BOOKING_STATUS.VISITED, BOOKING_STATUS.IN_PROGRESS,
                               BOOKING_STATUS.WORK_DONE, 'started', 'reached', 'on_the_way'
                             ]]
@@ -87,7 +96,14 @@ const getDashboardStats = async (req, res) => {
                 {
                   $match: {
                     $or: [
-                      { vendorId: vId, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } },
+                      {
+                        vendorId: vId,
+                        status: { $nin: [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED] },
+                        $or: [
+                          { bookingType: 'scheduled' },
+                          { bookingType: { $ne: 'scheduled' }, status: { $ne: BOOKING_STATUS.AWAITING_PAYMENT } }
+                        ]
+                      },
                       {
                         vendorId: null,
                         status: { $in: [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING] },
@@ -103,6 +119,8 @@ const getDashboardStats = async (req, res) => {
                     _id: 1,
                     bookingNumber: 1,
                     status: 1,
+                    bookingType: 1,
+                    vendorId: 1,
                     serviceName: 1,
                     scheduledDate: 1,
                     scheduledTime: 1,
@@ -129,9 +147,9 @@ const getDashboardStats = async (req, res) => {
         Promise.resolve(0),
 
         // 3. Earnings
-        VendorBill.aggregate([
-          { $match: { vendorId: vId, status: 'paid' } },
-          { $group: { _id: null, total: { $sum: '$vendorTotalEarning' } } }
+        VendorSalaryEarning.aggregate([
+          { $match: { vendorId: vId, status: { $ne: 'reversed' } } },
+          { $group: { _id: null, total: { $sum: '$amount' } } }
         ]).catch(() => [])
       ]);
     } catch (blastErr) {
@@ -164,8 +182,7 @@ const getDashboardStats = async (req, res) => {
       success: true,
       data: {
         config: {
-          maxSearchTime: globalSettings?.maxSearchTime || 5, // mins
-          waveDuration: globalSettings?.waveDuration || 60  // secs
+          maxSearchTime: globalSettings?.maxSearchTime || 5 // mins
         },
         stats: {
           totalBookings: counts.total || 0,
@@ -201,12 +218,12 @@ const getRevenueAnalytics = async (req, res) => {
       groupFormat = '%Y-%m'; // Year-Month
     }
 
-    // Revenue analytics from VendorBill
-    const revenueData = await VendorBill.aggregate([
+    // Salary analytics from the vendor salary ledger
+    const revenueData = await VendorSalaryEarning.aggregate([
       {
         $match: {
           vendorId: vendorId,
-          status: 'paid'
+          status: { $ne: 'reversed' }
         }
       },
       {
@@ -214,12 +231,14 @@ const getRevenueAnalytics = async (req, res) => {
           _id: {
             $dateToString: {
               format: groupFormat,
-              date: '$paidAt'
+              date: '$earningDate'
             }
           },
-          revenue: { $sum: '$grandTotal' },
-          earnings: { $sum: '$vendorTotalEarning' },
-          bookings: { $sum: 1 }
+          revenue: { $sum: '$amount' },
+          earnings: { $sum: '$amount' },
+          bookings: {
+            $sum: { $cond: [{ $eq: ['$type', 'booking_earning'] }, 1, 0] }
+          }
         }
       },
       { $sort: { _id: 1 } }

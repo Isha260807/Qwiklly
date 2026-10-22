@@ -16,7 +16,21 @@ const toAssetUrl = (url) => {
   return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
 };
 
-const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCount, currentCity }) => {
+const markAreaAvailability = (items, zoneStatus) => (items || []).map(service => {
+  let isAvailableInArea = true;
+  if (zoneStatus) {
+    if (!zoneStatus.inZone) {
+      isAvailableInArea = false;
+    } else if (Array.isArray(service.zoneIds) && service.zoneIds.length > 0) {
+      isAvailableInArea = Boolean(zoneStatus.zoneId) && service.zoneIds.some(zoneId => (
+        String(zoneId) === String(zoneStatus.zoneId)
+      ));
+    }
+  }
+  return { ...service, isAvailableInArea };
+});
+
+const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCount, currentCity, zoneStatus }) => {
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const [isClosing, setIsClosing] = useState(false);
@@ -57,7 +71,7 @@ const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCou
       // Always fetch brands for this category to populate the background/back-navigation
       fetchBrands();
     }
-  }, [isOpen, category?.id, cityId]);
+  }, [isOpen, category?.id, cityId, zoneStatus?.zoneId, zoneStatus?.inZone]);
 
   const fetchBrands = async () => {
     try {
@@ -85,7 +99,7 @@ const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCou
         categoryId: category?.id
       });
       if (response.success) {
-        setServices(response.services || []);
+        setServices(markAreaAvailability(response.services || [], zoneStatus));
       }
     } catch (error) {
       console.error("Failed to load services:", error);
@@ -107,8 +121,23 @@ const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCou
   };
 
   const handleServiceClick = async (service) => {
+    if (service.isAvailableInArea === false) {
+      toast.error('This service is not available in your selected area.');
+      return;
+    }
+
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    if (!token) {
+      toast.error('Please login to book this service');
+      onClose();
+      navigate('/user/login');
+      return;
+    }
+
     // Add to cart logic
     try {
+      const latitude = parseFloat(localStorage.getItem('userLat'));
+      const longitude = parseFloat(localStorage.getItem('userLng'));
       const cartItemData = {
         serviceId: service.id || service._id,
         categoryId: category?.id,
@@ -126,9 +155,10 @@ const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCou
         originalPrice: service.discountPrice ? service.basePrice : null,
         unitPrice: service.discountPrice || service.basePrice,
         serviceCount: 1,
-        rating: "4.8",
-        reviews: "1k+",
+        rating: service.rating ?? null,
+        reviews: service.ratingCount ?? null,
         vendorId: service.vendorId || selectedBrand?.vendorId || null,
+        ...(Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : {}),
         card: {
           title: service.title,
           subtitle: service.description || '',
@@ -151,7 +181,7 @@ const CategoryModal = React.memo(({ isOpen, onClose, category, location, cartCou
         toast.error(response.message || 'Failed to add to cart');
       }
     } catch (error) {
-      toast.error('Failed to add to cart');
+      toast.error(error.response?.data?.message || error.message || 'Failed to add to cart');
     }
   };
 

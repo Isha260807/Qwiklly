@@ -3,6 +3,7 @@ import { FiX, FiMapPin, FiClock, FiBell, FiAlertCircle, FiMinimize2 } from 'reac
 import { motion, AnimatePresence } from 'framer-motion';
 import { vendorTheme as themeColors } from '../../../../theme';
 import { playAlertRing, stopAlertRing } from '../../../../utils/notificationSound';
+import formatDistance from '../../../../utils/formatDistance';
 
 const BookingAlertCard = ({ booking, onAccept, onReject, maxSearchTimeMins = 1 }) => {
   // Calculate initial time synchronously instead of relying solely on useEffect
@@ -166,7 +167,7 @@ const BookingAlertCard = ({ booking, onAccept, onReject, maxSearchTimeMins = 1 }
             <span className="text-[9px] font-black text-emerald-800/60 uppercase tracking-[0.1em] mb-0.5 block">Distance</span>
             <div className="text-lg font-black text-emerald-700 tracking-tight flex items-center gap-1 justify-center">
               <FiMapPin className="w-3.5 h-3.5" />
-              {booking.location?.distance || (booking.distance ? (String(booking.distance).includes('km') ? booking.distance : `${booking.distance} km`) : 'Near You')}
+              {formatDistance(booking.distance ?? booking.location?.distance)}
             </div>
           </div>
         </div>
@@ -243,10 +244,11 @@ const BookingAlertCard = ({ booking, onAccept, onReject, maxSearchTimeMins = 1 }
 
 const BookingAlertModal = ({ isOpen, booking, bookings, onAccept, onReject, onMinimize, maxSearchTimeMins = 1 }) => {
   const alertsArray = bookings || (booking ? [booking] : []);
+  const currentBooking = alertsArray.length > 0 ? alertsArray[0] : null;
 
   return (
     <AnimatePresence>
-      {isOpen && alertsArray.length > 0 && (
+      {isOpen && currentBooking && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -263,25 +265,21 @@ const BookingAlertModal = ({ isOpen, booking, bookings, onAccept, onReject, onMi
             </button>
           )}
 
-          <div className="w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide flex gap-4 px-8 items-center h-full">
-            <div className="flex gap-4 m-auto">
-              {alertsArray.map(b => (
-                <BookingAlertCard
-                  key={b.id || b._id}
-                  booking={b}
-                  onAccept={onAccept}
-                  onReject={onReject}
-                  maxSearchTimeMins={maxSearchTimeMins}
-                />
-              ))}
-            </div>
-          </div>
+          <div className="flex flex-col items-center justify-center px-4 w-full">
+            {alertsArray.length > 1 && (
+              <div className="mb-3 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-white text-xs font-bold uppercase tracking-wider shadow-sm animate-pulse">
+                Order 1 of {alertsArray.length} in queue
+              </div>
+            )}
 
-          {alertsArray.length > 1 && (
-            <div className="absolute bottom-10 left-0 right-0 flex justify-center text-white text-sm font-medium animate-pulse drop-shadow-lg">
-              Swipe to see all {alertsArray.length} alerts →
-            </div>
-          )}
+            <BookingAlertCard
+              key={currentBooking.id || currentBooking._id}
+              booking={currentBooking}
+              onAccept={onAccept}
+              onReject={onReject}
+              maxSearchTimeMins={maxSearchTimeMins}
+            />
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

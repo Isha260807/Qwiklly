@@ -4,6 +4,7 @@ import { FiAlertTriangle, FiPhoneCall, FiMapPin, FiX, FiCheckCircle, FiHeadphone
 import { toast } from 'react-hot-toast';
 import api from '../../../../services/api';
 import vendorService from '../../../../services/vendorService';
+import { configService } from '../../../../services/configService';
 
 const SOSModal = ({ isOpen, onClose }) => {
   const [step, setStep] = useState('confirm'); // 'confirm' | 'active'
@@ -11,13 +12,14 @@ const SOSModal = ({ isOpen, onClose }) => {
   const [locationData, setLocationData] = useState(null);
   const [supportPhone, setSupportPhone] = useState('');
 
-  // Fetch Admin Support Phone from global settings
+  // Fetch Admin Support Phone from global settings when opened
   useEffect(() => {
+    if (!isOpen) return;
     const fetchSupportPhone = async () => {
       try {
-        const response = await api.get('/public/config');
-        if (response.data?.success && response.data?.settings) {
-          const phone = response.data.settings.supportPhone || response.data.settings.companyPhone || '';
+        const response = await configService.getSettings();
+        if (response?.settings) {
+          const phone = response.settings.supportPhone || response.settings.companyPhone || '';
           setSupportPhone(phone);
         }
       } catch (err) {
@@ -26,7 +28,7 @@ const SOSModal = ({ isOpen, onClose }) => {
     };
 
     fetchSupportPhone();
-  }, []);
+  }, [isOpen]);
 
   // Reset state on open/close
   useEffect(() => {

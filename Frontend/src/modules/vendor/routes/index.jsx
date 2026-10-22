@@ -1,4 +1,5 @@
-﻿import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
+import { isChunkLoadError, reloadOnceForNewVersion, hardReload } from '../../../utils/chunkReload';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/common/PageTransition';
 import BottomNav from '../components/layout/BottomNav';
@@ -7,12 +8,19 @@ import ProtectedRoute from '../../../components/auth/ProtectedRoute';
 import PublicRoute from '../../../components/auth/PublicRoute';
 import CashLimitModal from '../components/common/CashLimitModal'; // Import
 import GlobalBookingAlert from '../components/common/GlobalBookingAlert';
+import VendorUnderReviewModal from '../components/common/VendorUnderReviewModal';
+import { useVendorZonePresenceTracker } from '../hooks/useVendorZonePresence';
+import { initTranslator, stopTranslator } from '../../../i18n/translator';
 // import useAppNotifications from '../../../hooks/useAppNotifications.jsx'; // Handled globally
 
 // Lazy load wrapper with error handling (same as user app)
 const lazyLoad = (importFunc) => {
-  return lazy(() => {
+  const load = () => {
     return Promise.resolve(importFunc()).catch((error) => {
+      // Stale chunk after a new deploy: reload once to pick up the new build.
+      if (isChunkLoadError(error) && reloadOnceForNewVersion()) {
+        return new Promise(() => {}); // keep Suspense fallback while the page reloads
+      }
       console.error('Failed to load vendor page:', error);
       // Return a fallback component wrapped in a Promise
       return Promise.resolve({
@@ -22,7 +30,7 @@ const lazyLoad = (importFunc) => {
               <h2 className="text-xl font-bold text-gray-800 mb-2">Failed to load page</h2>
               <p className="text-gray-600 mb-4">Please refresh the page or try again later.</p>
               <button
-                onClick={() => window.location.reload()}
+                onClick={hardReload}
                 className="px-6 py-3 rounded-xl text-white font-semibold transition-all duration-300 hover:opacity-90"
                 style={{ backgroundColor: '#347989' }}
               >
@@ -33,7 +41,10 @@ const lazyLoad = (importFunc) => {
         ),
       });
     });
-  });
+  };
+  const LazyComponent = lazy(load);
+  LazyComponent.preload = load;
+  return LazyComponent;
 };
 
 // Lazy load vendor pages for code splitting
@@ -45,18 +56,16 @@ const BookingAlerts = lazyLoad(() => import('../pages/BookingAlerts'));
 const BookingDetails = lazyLoad(() => import('../pages/BookingDetails'));
 const BookingTimeline = lazyLoad(() => import('../pages/BookingTimeline'));
 const ActiveJobs = lazyLoad(() => import('../pages/ActiveJobs'));
-const Earnings = lazyLoad(() => import('../pages/Earnings'));
 const Wallet = lazyLoad(() => import('../pages/Wallet'));
-const WithdrawalRequest = lazyLoad(() => import('../pages/WithdrawalRequest'));
+const Earnings = Wallet;
 const Profile = lazyLoad(() => import('../pages/Profile'));
 const ProfileDetails = lazyLoad(() => import('../pages/Profile/ProfileDetails'));
 const EditProfile = lazyLoad(() => import('../pages/Profile/EditProfile'));
+const PayoutDetails = lazyLoad(() => import('../pages/Profile/PayoutDetails'));
 const BookingMap = lazyLoad(() => import('../pages/BookingMap'));
 const Settings = lazyLoad(() => import('../pages/Settings'));
 const AddressManagement = lazyLoad(() => import('../pages/AddressManagement'));
 const Notifications = lazyLoad(() => import('../pages/Notifications'));
-const SettlementRequest = lazyLoad(() => import('../pages/Wallet/SettlementRequest'));
-const SettlementHistory = lazyLoad(() => import('../pages/Wallet/SettlementHistory'));
 const MyRatings = lazyLoad(() => import('../pages/MyRatings'));
 const AboutQwiklly = lazyLoad(() => import('../pages/AboutHomster'));
 const BillingPage = lazyLoad(() => import('../pages/BillingPage'));
@@ -72,6 +81,14 @@ const LoadingFallback = () => (
 const VendorRoutes = () => {
   const location = useLocation();
 
+  // Translation is deliberately mounted only for the Vendor application.
+  // Cleanup restores the DOM and disables the observer before User/Admin
+  // routes can render, keeping their language permanently independent.
+  useEffect(() => {
+    initTranslator();
+    return stopTranslator;
+  }, []);
+
   // Check if current route should hide bottom nav (auth routes or map)
   // Check if current route should hide bottom nav (auth routes or map or booking alert)
   const shouldHideBottomNav = location.pathname === '/vendor/login' ||
@@ -80,6 +97,27 @@ const VendorRoutes = () => {
     location.pathname.includes('/booking-alert/');
 
   const shouldShowBottomNav = !shouldHideBottomNav;
+
+  // Live GPS + zone presence tracking for authenticated vendor screens
+  const isAuthRoute = location.pathname === '/vendor/login' || location.pathname === '/vendor/signup';
+
+  // Preload the two primary bottom-navigation pages so tab changes do not
+  // show the full Suspense loader while their chunks are fetched.
+  useEffect(() => {
+    if (!isAuthRoute) {
+      Dashboard.preload?.();
+      ActiveJobs.preload?.();
+      Wallet.preload?.();
+    }
+  }, [isAuthRoute]);
+  useVendorZonePresenceTracker(!isAuthRoute);
+
+  // Only show booking alerts for fully approved vendors
+  const vendorApprovalStatus = (() => {
+    try { return (JSON.parse(localStorage.getItem('vendorData') || '{}').approvalStatus || '').toLowerCase(); }
+    catch { return ''; }
+  })();
+  const isVendorApproved = vendorApprovalStatus === 'approved';
 
   return (
     <ErrorBoundary>
@@ -104,12 +142,11 @@ const VendorRoutes = () => {
               <Route path="/jobs" element={<ProtectedRoute userType="vendor"><ActiveJobs /></ProtectedRoute>} />
               <Route path="/earnings" element={<ProtectedRoute userType="vendor"><Earnings /></ProtectedRoute>} />
               <Route path="/wallet" element={<ProtectedRoute userType="vendor"><Wallet /></ProtectedRoute>} />
-              <Route path="/wallet/withdraw" element={<ProtectedRoute userType="vendor"><WithdrawalRequest /></ProtectedRoute>} />
-              <Route path="/wallet/settle" element={<ProtectedRoute userType="vendor"><SettlementRequest /></ProtectedRoute>} />
-              <Route path="/wallet/settlements" element={<ProtectedRoute userType="vendor"><SettlementHistory /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute userType="vendor"><Profile /></ProtectedRoute>} />
               <Route path="/profile/details" element={<ProtectedRoute userType="vendor"><ProfileDetails /></ProtectedRoute>} />
               <Route path="/profile/edit" element={<ProtectedRoute userType="vendor"><EditProfile /></ProtectedRoute>} />
+              <Route path="/profile/payout" element={<ProtectedRoute userType="vendor"><PayoutDetails /></ProtectedRoute>} />
+              <Route path="/payout-details" element={<ProtectedRoute userType="vendor"><PayoutDetails /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute userType="vendor"><Settings /></ProtectedRoute>} />
               <Route path="/address-management" element={<ProtectedRoute userType="vendor"><AddressManagement /></ProtectedRoute>} />
               <Route path="/notifications" element={<ProtectedRoute userType="vendor"><Notifications /></ProtectedRoute>} />
@@ -117,6 +154,7 @@ const VendorRoutes = () => {
               <Route path="/my-services" element={<ProtectedRoute userType="vendor"><MyServices /></ProtectedRoute>} />
               <Route path="/my-ratings" element={<ProtectedRoute userType="vendor"><MyRatings /></ProtectedRoute>} />
               <Route path="/about-Qwiklly" element={<ProtectedRoute userType="vendor"><AboutQwiklly /></ProtectedRoute>} />
+              <Route path="/about-qwiklly" element={<ProtectedRoute userType="vendor"><AboutQwiklly /></ProtectedRoute>} />
             </Routes>
           </PageTransition>
         </Suspense>
@@ -125,11 +163,11 @@ const VendorRoutes = () => {
       {/* BottomNav is OUTSIDE Suspense so it persists during page loads */}
       {shouldShowBottomNav && <BottomNav />}
 
-      {/* Global Alert for Cash Limit */}
-      {!shouldHideBottomNav && <CashLimitModal />}
+      {/* Global New Booking Alert Modal — only for approved vendors */}
+      {!shouldHideBottomNav && isVendorApproved && <GlobalBookingAlert />}
 
-      {/* Global New Booking Alert Modal */}
-      {!shouldHideBottomNav && <GlobalBookingAlert />}
+      {/* Vendor Profile Under Review Modal */}
+      {!shouldHideBottomNav && <VendorUnderReviewModal />}
     </ErrorBoundary>
   );
 };

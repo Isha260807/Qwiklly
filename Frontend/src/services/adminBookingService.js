@@ -39,5 +39,25 @@ export const adminBookingService = {
     } catch (error) {
       throw error.response?.data || { message: 'Failed to cancel booking' };
     }
+  },
+
+  // Zone/service/radius-qualified vendor candidates for manual assignment
+  getEligibleVendors: async (id) => {
+    try {
+      const response = await api.get(`/admin/bookings/${id}/eligible-vendors`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch eligible vendors' };
+    }
+  },
+
+  // Manually assign a vendor to a booking (e.g. one parked as pending_admin)
+  assignVendor: async (id, vendorId) => {
+    try {
+      const response = await api.post(`/admin/bookings/${id}/assign-vendor`, { vendorId });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to assign vendor' };
+    }
   }
 };

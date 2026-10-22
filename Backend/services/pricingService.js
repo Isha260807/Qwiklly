@@ -25,6 +25,19 @@ const getGlobalSettings = async () => {
   return cachedSettings;
 };
 
+const normalizeServiceId = (serviceId) => {
+  if (!serviceId) return null;
+  if (typeof serviceId === 'object') {
+    return serviceId._id || serviceId.id || null;
+  }
+  return serviceId;
+};
+
+const clearGlobalSettingsCache = () => {
+  cachedSettings = null;
+  cachedSettingsExpiry = 0;
+};
+
 /**
  * Validates whether a coupon can be applied to a specific user and order context
  * Returns { valid: boolean, error?: string, code?: string, discountAmount?: number }
@@ -56,9 +69,11 @@ const validateCouponApplicability = async ({
     return { valid: false, code: 'COUPON_EXPIRED', error: 'This coupon has expired' };
   }
 
-  // 1. Check Global Usage Limit
+  // 1. Check Global Usage Limit (consumed + pending reservations)
   if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usageLimit > 0) {
-    if (coupon.usedCount >= coupon.usageLimit) {
+    const consumedCount = Number(coupon.usedCount) || 0;
+    const reservedCount = Number(coupon.reservedCount) || 0;
+    if (consumedCount + reservedCount >= coupon.usageLimit) {
       return { valid: false, code: 'COUPON_USAGE_LIMIT_REACHED', error: 'Coupon usage limit has been exhausted' };
     }
   }
@@ -252,7 +267,7 @@ const calculateBookingPrice = async ({
   let category = null;
 
   if (serviceId) {
-    const resolvedId = typeof serviceId === 'object' && serviceId._id ? serviceId._id : serviceId;
+    const resolvedId = normalizeServiceId(serviceId);
     service = await Service.findById(resolvedId).lean();
     if (service) {
       const catId = service.categoryId || service.categoryIds?.[0];
@@ -263,27 +278,50 @@ const calculateBookingPrice = async ({
   }
 
   // 3. Compute Item Total / Base Price
-  // Hourly items are recomputed server-side from the referenced service's hourlyRate —
-  // the client-sent price/card.price is never trusted for them.
+  // DURATION and HOURLY items are recomputed server-side from the referenced service —
+  // client-sent price is NEVER trusted.
   let basePrice = 0;
   let hourlyValidationError = null;
   if (Array.isArray(bookedItems) && bookedItems.length > 0) {
-    const itemServiceIds = [...new Set(bookedItems.map(i => i.serviceId).filter(Boolean).map(String))];
-    let hourlyServiceMap = new Map();
+    const itemServiceIds = [...new Set(
+      bookedItems
+        .map(item => normalizeServiceId(item.serviceId))
+        .filter(Boolean)
+        .map(String)
+    )];
+    let serviceMap = new Map();
     if (itemServiceIds.length > 0) {
-      const hourlyServices = await Service.find({ _id: { $in: itemServiceIds }, pricingType: 'HOURLY' })
-        .select('hourlyRate minHours maxHours')
+      const referencedServices = await Service.find({ _id: { $in: itemServiceIds } })
+        .select('pricingType pricePerUnit billingUnitMinutes durationStepMinutes pricePer30Minutes minDurationMinutes maxDurationMinutes durationPricing hourlyRate minHours maxHours basePrice')
         .lean();
-      hourlyServiceMap = new Map(hourlyServices.map(s => [String(s._id), s]));
+      serviceMap = new Map(referencedServices.map(s => [String(s._id), s]));
     }
 
     for (const item of bookedItems) {
-      const hourlySvc = item.serviceId ? hourlyServiceMap.get(String(item.serviceId)) : null;
+      const itemServiceId = normalizeServiceId(item.serviceId);
+      const refSvc = itemServiceId ? serviceMap.get(String(itemServiceId)) : null;
+      const effectiveType = refSvc?.pricingType || item.pricingType || item.card?.pricingType || (item.hours ? 'HOURLY' : 'FIXED');
 
-      if (hourlySvc) {
+      if (effectiveType === 'DURATION' && refSvc) {
+        const billingUnit = Number(refSvc.billingUnitMinutes ?? refSvc.durationPricing?.billingUnitMinutes ?? 30);
+        const pricePerUnit = Number(refSvc.pricePerUnit ?? refSvc.durationPricing?.pricePerUnit ?? refSvc.pricePer30Minutes ?? refSvc.basePrice ?? 0);
+        const minMins = Number(refSvc.minDurationMinutes ?? refSvc.durationPricing?.minDurationMinutes ?? billingUnit);
+        const maxMins = Number(refSvc.maxDurationMinutes ?? refSvc.durationPricing?.maxDurationMinutes ?? 480);
+        
+        const durationMins = Number(item.durationMinutes ?? item.card?.durationMinutes ?? (item.hours ? item.hours * 60 : minMins));
+
+        if (!durationMins || durationMins < minMins || durationMins > maxMins || durationMins % billingUnit !== 0) {
+          hourlyValidationError = {
+            code: 'INVALID_DURATION',
+            error: `Duration must be between ${minMins} and ${maxMins} minutes in ${billingUnit}-minute intervals.`
+          };
+          break;
+        }
+        basePrice += (durationMins / billingUnit) * pricePerUnit;
+      } else if (effectiveType === 'HOURLY' && refSvc) {
         const hours = Number(item.hours ?? item.card?.hours);
-        const minHours = hourlySvc.minHours || 1;
-        const maxHours = hourlySvc.maxHours || 8;
+        const minHours = refSvc.minHours || 1;
+        const maxHours = refSvc.maxHours || 8;
         if (!hours || hours < minHours || hours > maxHours) {
           hourlyValidationError = {
             code: 'INVALID_HOURS',
@@ -291,9 +329,11 @@ const calculateBookingPrice = async ({
           };
           break;
         }
-        basePrice += (hourlySvc.hourlyRate || 0) * hours;
+        basePrice += (refSvc.hourlyRate || 0) * hours;
       } else {
-        const price = item.card?.price ?? item.price ?? 0;
+        // Fixed prices must also come from the referenced service whenever possible.
+        // Cart values are only a fallback for legacy items without a serviceId.
+        const price = refSvc ? Number(refSvc.basePrice || 0) : (item.card?.price ?? item.price ?? 0);
         const count = item.quantity ?? item.serviceCount ?? 1;
         basePrice += Number(price) * Number(count);
       }
@@ -373,7 +413,7 @@ const calculateBookingPrice = async ({
   // 6. Taxable Subtotal & GST Calculation
   const totalDiscount = Math.min(basePrice, planDiscount + couponDiscount);
   const taxableAmount = Math.max(0, basePrice - totalDiscount);
-  const tax = isFreeUnderPlan ? 0 : Math.round((taxableAmount * gstPercentage) / 100);
+  const tax = isFreeUnderPlan ? 0 : Math.round((basePrice * gstPercentage) / 100);
 
   // 7. Visiting Charges / Convenience Fee
   let visitingCharges = 0;
@@ -421,5 +461,6 @@ const calculateBookingPrice = async ({
 
 module.exports = {
   validateCouponApplicability,
-  calculateBookingPrice
+  calculateBookingPrice,
+  clearGlobalSettingsCache
 };

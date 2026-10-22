@@ -50,18 +50,37 @@ const authenticate = async (req, res, next) => {
         break;
       case USER_ROLES.VENDOR:
         user = await Vendor.findById(decoded.userId).select('-password').lean();
-        if (user && user.approvalStatus !== 'approved') {
+        if (!user) {
+          return res.status(401).json({
+            success: false,
+            message: 'Vendor not found. Please login again.'
+          });
+        }
+        if (user.approvalStatus === 'rejected') {
           return res.status(403).json({
             success: false,
-            message: 'Your vendor account is pending approval or has been rejected.'
+            message: 'Your vendor account has been rejected. Please contact support.'
+          });
+        }
+        if (user.approvalStatus === 'suspended') {
+          return res.status(403).json({
+            success: false,
+            message: 'Your vendor account has been suspended. Please contact support.'
+          });
+        }
+        if (!user.isActive) {
+          return res.status(403).json({
+            success: false,
+            message: 'Your vendor account has been deactivated. Please contact support.'
           });
         }
 
-        // SINGLE DEVICE LOGOUT Logic: Check if token's session ID matches DB
-        if (user && user.loginSessionId && decoded.loginSessionId && user.loginSessionId !== decoded.loginSessionId) {
+        // Every vendor token must match the one active session stored in the database.
+        if (!decoded.loginSessionId || !user.loginSessionId || user.loginSessionId !== decoded.loginSessionId) {
           return res.status(401).json({
             success: false,
-            message: 'Account logged in on another device. Please login again.'
+            code: 'VENDOR_SESSION_REPLACED',
+            message: 'Your account was logged in on another device. Please login again.'
           });
         }
         break;
@@ -69,8 +88,23 @@ const authenticate = async (req, res, next) => {
       case USER_ROLES.ADMIN:
       case 'super_admin':
       case 'admin':
+      case 'sub_admin':
       case 'ADMIN':
         user = await Admin.findById(decoded.userId).select('-password').lean();
+        if (user && user.isDeleted) {
+          return res.status(403).json({
+            success: false,
+            code: 'ADMIN_DELETED',
+            message: 'Your profile was deleted by admin.'
+          });
+        }
+        if (user && !user.isActive) {
+          return res.status(403).json({
+            success: false,
+            code: 'ADMIN_BLOCKED',
+            message: 'Blocked by admin.'
+          });
+        }
         break;
       default:
         console.error('Role mismatch in middleware:', decoded.role);
@@ -93,6 +127,7 @@ const authenticate = async (req, res, next) => {
     req.user = { ...user, id: user._id.toString() };
     req.userId = decoded.userId;
     req.userRole = decoded.role;
+    req.authSessionId = decoded.loginSessionId || null;
 
     next();
   } catch (error) {

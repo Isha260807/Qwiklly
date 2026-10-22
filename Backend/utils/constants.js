@@ -10,6 +10,56 @@ const USER_ROLES = {
   ADMIN: 'ADMIN'
 };
 
+// Admin roles are stored on the Admin document. `admin` is retained as a
+// backwards-compatible alias for older records created before sub-admins were
+// introduced.
+const ADMIN_ROLES = {
+  SUPER_ADMIN: 'super_admin',
+  SUB_ADMIN: 'sub_admin',
+  LEGACY_ADMIN: 'admin'
+};
+
+// Permissions are deliberately module-level. The backend uses these values
+// for authorization; the sidebar only mirrors the same access for UX.
+const ADMIN_PERMISSIONS = {
+  DASHBOARD: 'dashboard',
+  USERS: 'users',
+  VENDORS: 'vendors',
+  BOOKINGS: 'bookings',
+  CATALOG: 'catalog',
+  COUPONS: 'coupons',
+  SETTINGS: 'settings',
+  ADMIN_MANAGEMENT: 'admin_management',
+  CITIES: 'cities',
+  ZONES: 'zones',
+  PAYMENTS: 'payments',
+  REPORTS: 'reports',
+  REVIEWS: 'reviews',
+  PLANS: 'plans',
+  NOTIFICATIONS: 'notifications',
+  TRANSACTIONS: 'transactions',
+  SETTLEMENTS: 'settlements',
+  SUPPORT: 'support',
+  SETTINGS_PROFILE: 'settings_profile',
+  SETTINGS_SUPPORT: 'settings_support',
+  SETTINGS_FINANCIAL: 'settings_financial',
+  SETTINGS_BILLING: 'settings_billing',
+  SETTINGS_REFERRAL: 'settings_referral',
+  SETTINGS_SLOTS: 'settings_slots',
+  SETTINGS_LEGAL: 'settings_legal',
+  SETTINGS_ZONES: 'settings_zones',
+  SETTINGS_ADMINS: 'settings_admins'
+};
+
+const DEFAULT_SUB_ADMIN_PERMISSIONS = [
+  ADMIN_PERMISSIONS.DASHBOARD,
+  ADMIN_PERMISSIONS.USERS,
+  ADMIN_PERMISSIONS.VENDORS,
+  ADMIN_PERMISSIONS.BOOKINGS,
+  ADMIN_PERMISSIONS.CATALOG,
+  ADMIN_PERMISSIONS.COUPONS
+];
+
 // Token Types
 const TOKEN_TYPES = {
   EMAIL_VERIFICATION: 'EMAIL_VERIFICATION',
@@ -50,7 +100,23 @@ const BOOKING_STATUS = {
   WORK_DONE: 'work_done',
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
-  REJECTED: 'rejected'
+  REJECTED: 'rejected',
+  NO_VENDORS: 'no_vendors', // Zone broadcast search exhausted with nobody accepting
+  PENDING_ADMIN: 'pending_admin' // Zone/radius matching could not find a dispatchable vendor
+};
+
+// Reasons a booking could not be auto-matched to a vendor (diagnostics + admin UI)
+const MATCH_FAILURE_REASONS = {
+  OUT_OF_SERVICE_ZONE: 'OUT_OF_SERVICE_ZONE',
+  ZONE_INACTIVE: 'ZONE_INACTIVE',
+  SERVICE_NOT_AVAILABLE_IN_ZONE: 'SERVICE_NOT_AVAILABLE_IN_ZONE',
+  NO_ZONE_VENDOR: 'NO_ZONE_VENDOR',
+  NO_SERVICE_VENDOR: 'NO_SERVICE_VENDOR',
+  ALL_VENDORS_OFFLINE: 'ALL_VENDORS_OFFLINE',
+  ALL_VENDORS_BUSY: 'ALL_VENDORS_BUSY',
+  NO_AVAILABLE_VENDOR: 'NO_AVAILABLE_VENDOR',
+  NO_VENDOR_IN_ZONE: 'NO_VENDOR_IN_ZONE', // Assigned vendors exist, but none are physically inside the zone (live GPS)
+  INVALID_LOCATION: 'INVALID_LOCATION'
 };
 
 // Payment Status
@@ -80,11 +146,15 @@ const BILL_STATUS = {
 
 module.exports = {
   USER_ROLES,
+  ADMIN_ROLES,
+  ADMIN_PERMISSIONS,
+  DEFAULT_SUB_ADMIN_PERMISSIONS,
   TOKEN_TYPES,
   VENDOR_STATUS,
   WORKER_STATUS,
   BOOKING_STATUS,
   PAYMENT_STATUS,
   SERVICE_STATUS,
-  BILL_STATUS
+  BILL_STATUS,
+  MATCH_FAILURE_REASONS
 };
