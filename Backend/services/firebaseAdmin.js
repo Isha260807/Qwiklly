@@ -124,32 +124,26 @@ async function sendPushNotification(tokens, payload) {
       priority: payload.highPriority !== false ? 'high' : 'normal'
     };
 
-    // Standard notification block (Top-level)
-    message.notification = {
-      title: payload.title || 'App Notification',
-      body: payload.body || 'New Update',
-    };
-    
+    const notifTitle = payload.title || 'App Notification';
+    const notifBody = payload.body || 'New Update';
+
+    // NOTE: No top-level `notification` and no `webpush.notification` on purpose.
+    // For web, a notification block makes the Firebase SDK auto-display a notification
+    // AND onBackgroundMessage in firebase-messaging-sw.js shows another one => double push.
+    // Web is data-only (service worker displays it once); Android/iOS keep their native blocks.
+
     // Android specific (Sound, Priority, Channel, Icon)
     message.android.notification = {
-      title: message.notification.title,
-      body: message.notification.body,
+      title: notifTitle,
+      body: notifBody,
       icon: 'stock_ticker_update',
       color: '#f44336'
     };
 
     // iOS/APNs specific (Sound, Alert, Badge)
     message.apns.payload.aps.alert = {
-      title: message.notification.title,
-      body: message.notification.body,
-    };
-
-    // WebPush specific (Title, Body, Icon, Badge)
-    message.webpush.notification = {
-      title: message.notification.title,
-      body: message.notification.body,
-      icon: payload.icon || '/Homster-logo.png',
-      badge: '/Homster-logo.png',
+      title: notifTitle,
+      body: notifBody,
     };
 
     /*
