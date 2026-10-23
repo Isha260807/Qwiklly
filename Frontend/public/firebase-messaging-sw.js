@@ -67,6 +67,8 @@ messaging.onBackgroundMessage((payload) => {
 
   let icon = data.icon || notification.icon || '/cleaning-expert-logo.png';
   let badge = '/cleaning-expert-logo.png';
+  // Stable per-notification tag so a repeated delivery of the same push replaces instead of stacking
+  let tag = data.notificationId || data.bookingId || `notification-${Date.now()}`;
   let tag = data.notificationId || data.bookingId || 'notification-' + Date.now().toString();
   let requireInteraction = false;
   let vibrate = [200, 100, 200];

@@ -128,6 +128,22 @@ async function sendPushNotification(tokens, payload) {
       priority: payload.highPriority !== false ? 'high' : 'normal'
     };
 
+    // Standard notification block (Top-level)
+    message.notification = {
+      title: payload.title || 'App Notification',
+      body: payload.body || 'New Update',
+    };
+
+    // Android specific (Sound, Priority, Channel).
+    // Delivered by the system even when the app is killed, so the channel and sound
+    // must match what the Flutter app created (see FCM_* vars in env.example).
+    // A channelId the device does not know falls back to FCM's default channel.
+    const pushType = String(payload.data?.type || '');
+    const isBookingAlert = BOOKING_ALERT_TYPES.includes(pushType);
+    const channelId = isBookingAlert
+      ? (process.env.FCM_BOOKING_CHANNEL_ID || process.env.FCM_DEFAULT_CHANNEL_ID)
+      : process.env.FCM_DEFAULT_CHANNEL_ID;
+    const sound = isBookingAlert ? process.env.FCM_BOOKING_SOUND : undefined;
     // Web notifications are rendered by firebase-messaging-sw.js. Sending both
     // an FCM notification payload and calling showNotification() in the worker
     // creates two browser notifications. Mobile tokens still use the native
@@ -166,6 +182,11 @@ async function sendPushNotification(tokens, payload) {
         message.android.ttl = BOOKING_ALERT_TTL_MS;
       }
 
+      // iOS/APNs specific (Sound, Alert, Badge)
+      message.apns.payload.aps.alert = {
+        title: notifTitle,
+        body: notifBody,
+      };
       // iOS/APNs specific (Sound, Alert, Badge)
       message.apns.payload.aps.alert = {
         title: notificationTitle,
