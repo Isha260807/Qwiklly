@@ -26,6 +26,9 @@ Copy and paste this code into your Flutter project where your InAppWebView is in
 
 A. JavaScript Handlers
 dart
+// Required imports:
+// import 'package:firebase_messaging/firebase_messaging.dart';
+//
 // inside onWebViewCreated or as a separate helper
 void setupJavaScriptHandlers(InAppWebViewController controller) {
   
@@ -55,6 +58,24 @@ void setupJavaScriptHandlers(InAppWebViewController controller) {
     // Requires services.dart
     HapticFeedback.mediumImpact();
     return {'success': true};
+  });
+
+  // 3. Native FCM token handler
+  // React calls this handler in Flutter WebView. The returned token is then
+  // saved by React through /api/users/fcm-tokens/save with platform=mobile.
+  controller.addJavaScriptHandler(handlerName: 'getFcmToken', callback: (args) async {
+    final messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    final token = await messaging.getToken();
+    return {
+      'success': token != null && token.isNotEmpty,
+      'token': token,
+    };
   });
 }
 B. WebView Lifecycle (Critical)

@@ -4,6 +4,7 @@
  */
 
 import { messaging, firebaseConfig, getToken, onMessage } from '../firebase';
+import flutterBridge from '../utils/flutterBridge';
 
 const VAPID_KEY = String(import.meta.env.VITE_FIREBASE_VAPID_KEY || '').trim();
 const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
@@ -40,7 +41,7 @@ function getFirebaseServiceWorkerUrl() {
  * @returns {boolean}
  */
 function isFlutterWebView() {
-  return !!(window.flutter_inappwebview && window.flutter_inappwebview.callHandler);
+  return typeof window !== 'undefined' && !!window.flutter_inappwebview;
 }
 
 /**
@@ -49,6 +50,30 @@ function isFlutterWebView() {
  */
 function getPlatformType() {
   return isFlutterWebView() ? 'mobile' : 'web';
+}
+
+/**
+ * Get the native Firebase token from the Flutter host.
+ * Flutter WebView does not reliably support browser service workers or the
+ * browser Notification API, so mobile must use the native FCM token.
+ */
+async function getNativeFCMToken() {
+  try {
+    const result = await flutterBridge.callHandler('getFcmToken');
+    const token = typeof result === 'string'
+      ? result
+      : result?.token || result?.fcmToken || result?.data?.token;
+
+    if (!token || typeof token !== 'string') {
+      console.error('[FCM] Flutter did not return a native FCM token');
+      return null;
+    }
+
+    return token.trim() || null;
+  } catch (error) {
+    console.error('[FCM] Failed to get native FCM token from Flutter:', error);
+    return null;
+  }
 }
 
 /**
@@ -159,19 +184,26 @@ async function registerFCMTokenInternal(userType = 'user', forceUpdate = false, 
   try {
     console.log(`[FCM] Starting registration for ${userType}, forceUpdate: ${forceUpdate}`);
 
-    // Request permission
-    console.log('[FCM] Requesting notification permission...');
-    const hasPermission = await requestNotificationPermission();
-    if (!hasPermission) {
-      console.log('[FCM] ❌ Notification permission not granted, skipping FCM registration');
-      return null;
+    let token = null;
+
+    if (platform === 'mobile') {
+      console.log('[FCM] Getting native FCM token from Flutter...');
+      token = await getNativeFCMToken();
+    } else {
+      // Browser web notifications use the Firebase web SDK and service worker.
+      console.log('[FCM] Requesting notification permission...');
+      const hasPermission = await requestNotificationPermission();
+      if (!hasPermission) {
+        console.log('[FCM] ❌ Notification permission not granted, skipping FCM registration');
+        return null;
+      }
+
+      console.log('[FCM] Getting web FCM token from Firebase...');
+      token = await getFCMToken();
     }
 
-    // Get token
-    console.log('[FCM] Getting FCM token from Firebase...');
-    const token = await getFCMToken();
     if (!token) {
-      console.log('[FCM] ❌ Failed to get FCM token from Firebase');
+      console.log(`[FCM] ❌ Failed to get ${platform} FCM token`);
       return null;
     }
     console.log('[FCM] ✅ Got FCM token:', token.substring(0, 30) + '...');
@@ -404,35 +436,38 @@ async function initializePushNotifications() {
  */
 async function testPushNotification(userType = 'user') {
   try {
-    // 1. Check browser support
-    if (!('Notification' in window)) {
-      return {
-        success: false,
-        error: 'Push notifications are not supported in this browser.'
-      };
+    const platform = getPlatformType();
+
+    if (platform !== 'mobile') {
+      // Browser support checks are not applicable inside Flutter WebView.
+      if (!('Notification' in window)) {
+        return {
+          success: false,
+          error: 'Push notifications are not supported in this browser.'
+        };
+      }
+
+      if (!('serviceWorker' in navigator)) {
+        return {
+          success: false,
+          error: 'Service Workers are not supported in this browser.'
+        };
+      }
+
+      let permission = Notification.permission;
+      if (permission === 'default') {
+        permission = await Notification.requestPermission();
+      }
+
+      if (permission === 'denied') {
+        return {
+          success: false,
+          error: 'Notification permission is blocked. Please allow notifications in your browser settings (lock icon near URL).'
+        };
+      }
     }
 
-    if (!('serviceWorker' in navigator)) {
-      return {
-        success: false,
-        error: 'Service Workers are not supported in this browser.'
-      };
-    }
-
-    // 2. Request / check permission
-    let permission = Notification.permission;
-    if (permission === 'default') {
-      permission = await Notification.requestPermission();
-    }
-
-    if (permission === 'denied') {
-      return {
-        success: false,
-        error: 'Notification permission is blocked. Please allow notifications in your browser settings (lock icon near URL).'
-      };
-    }
-
-    // 3. Register service worker and get/register FCM token
+    // 3. Register the platform-specific FCM token
     let token = null;
     try {
       token = await registerFCMToken(userType, true);
@@ -440,7 +475,7 @@ async function testPushNotification(userType = 'user') {
       console.warn('[FCM] registerFCMToken warning:', e);
     }
 
-    if (!token) {
+    if (!token && platform !== 'mobile') {
       try {
         token = await getFCMToken();
       } catch (e) {
