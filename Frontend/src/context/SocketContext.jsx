@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
@@ -75,6 +75,7 @@ export const SocketProvider = ({ children }) => {
   const [authVersion, setAuthVersion] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
+  const recentSocketNotifications = useRef(new Map());
 
   // Determine user type based on path
   const getUserType = (path) => {
@@ -213,7 +214,7 @@ export const SocketProvider = ({ children }) => {
       // Register FCM token for push notifications (on page load/refresh)
       if (userType && token) {
         // console.log(`[SocketContext] Registering FCM token for ${userType}...`);
-        registerFCMToken(userType, true).then((fcmToken) => {
+        registerFCMToken(userType, false).then((fcmToken) => {
           if (fcmToken) {
             // console.log(`[SocketContext] ✅ FCM token registered for ${userType}`);
           } else {
@@ -284,6 +285,19 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for generic notifications
     newSocket.on('notification', (data) => {
+      const notificationId = data?._id || data?.notificationId || data?.data?.notificationId;
+      if (notificationId) {
+        const key = String(notificationId);
+        const now = Date.now();
+        const expiresAt = recentSocketNotifications.current.get(key) || 0;
+        if (expiresAt > now) return;
+
+        recentSocketNotifications.current.set(key, now + 10000);
+        for (const [seenKey, seenUntil] of recentSocketNotifications.current) {
+          if (seenUntil <= now) recentSocketNotifications.current.delete(seenKey);
+        }
+      }
+
       // If emergency_sos notification, ensure admin modal and sound trigger
       if (data.type === 'emergency_sos') {
         if (userType === 'admin') {

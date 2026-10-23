@@ -128,50 +128,58 @@ async function sendPushNotification(tokens, payload) {
       priority: payload.highPriority !== false ? 'high' : 'normal'
     };
 
-    // Standard notification block (Top-level)
-    message.notification = {
-      title: payload.title || 'App Notification',
-      body: payload.body || 'New Update',
-    };
-    
-    // Android specific (Sound, Priority, Channel).
-    // Delivered by the system even when the app is killed, so the channel and sound
-    // must match what the Flutter app created (see FCM_* vars in env.example).
-    // A channelId the device does not know falls back to FCM's default channel.
-    const pushType = String(payload.data?.type || '');
-    const isBookingAlert = BOOKING_ALERT_TYPES.includes(pushType);
-    const channelId = isBookingAlert
-      ? (process.env.FCM_BOOKING_CHANNEL_ID || process.env.FCM_DEFAULT_CHANNEL_ID)
-      : process.env.FCM_DEFAULT_CHANNEL_ID;
-    const sound = isBookingAlert ? process.env.FCM_BOOKING_SOUND : undefined;
+    // Web notifications are rendered by firebase-messaging-sw.js. Sending both
+    // an FCM notification payload and calling showNotification() in the worker
+    // creates two browser notifications. Mobile tokens still use the native
+    // notification payload below.
+    const dataOnly = payload.dataOnly === true;
+    const notificationTitle = payload.title || 'App Notification';
+    const notificationBody = payload.body || 'New Update';
 
-    message.android.notification = {
-      title: message.notification.title,
-      body: message.notification.body,
-      color: '#f44336',
-      priority: isBookingAlert ? 'max' : 'high',
-      visibility: 'public',
-      ...(channelId ? { channelId } : {}),
-      ...(sound ? { sound } : { defaultSound: true })
-    };
-    // A stale booking request is useless: don't deliver it minutes later.
-    if (isBookingAlert) {
-      message.android.ttl = BOOKING_ALERT_TTL_MS;
+    if (!dataOnly) {
+      // Standard notification block (top-level)
+      message.notification = {
+        title: notificationTitle,
+        body: notificationBody,
+      };
+
+      // Android specific (Sound, Priority, Channel).
+      // Delivered by the system even when the app is killed, so the channel and sound
+      // must match what the Flutter app created (see FCM_* vars in env.example).
+      const pushType = String(payload.data?.type || '');
+      const isBookingAlert = BOOKING_ALERT_TYPES.includes(pushType);
+      const channelId = isBookingAlert
+        ? (process.env.FCM_BOOKING_CHANNEL_ID || process.env.FCM_DEFAULT_CHANNEL_ID)
+        : process.env.FCM_DEFAULT_CHANNEL_ID;
+      const sound = isBookingAlert ? process.env.FCM_BOOKING_SOUND : undefined;
+
+      message.android.notification = {
+        title: notificationTitle,
+        body: notificationBody,
+        color: '#f44336',
+        priority: isBookingAlert ? 'max' : 'high',
+        visibility: 'public',
+        ...(channelId ? { channelId } : {}),
+        ...(sound ? { sound } : { defaultSound: true })
+      };
+      if (isBookingAlert) {
+        message.android.ttl = BOOKING_ALERT_TTL_MS;
+      }
+
+      // iOS/APNs specific (Sound, Alert, Badge)
+      message.apns.payload.aps.alert = {
+        title: notificationTitle,
+        body: notificationBody,
+      };
+
+      // WebPush notification payload is intentionally omitted for web data-only pushes.
+      message.webpush.notification = {
+        title: notificationTitle,
+        body: notificationBody,
+        icon: payload.icon || '/Homster-logo.png',
+        badge: '/Homster-logo.png',
+      };
     }
-
-    // iOS/APNs specific (Sound, Alert, Badge)
-    message.apns.payload.aps.alert = {
-      title: message.notification.title,
-      body: message.notification.body,
-    };
-
-    // WebPush specific (Title, Body, Icon, Badge)
-    message.webpush.notification = {
-      title: message.notification.title,
-      body: message.notification.body,
-      icon: payload.icon || '/Homster-logo.png',
-      badge: '/Homster-logo.png',
-    };
 
     /*
     if (payload.icon) {
@@ -187,7 +195,7 @@ async function sendPushNotification(tokens, payload) {
     if (payload.icon) message.data.icon = payload.icon;
 
     // Log intent
-    console.log(`[FCM] Sending standard notification to ${uniqueTokens.length} tokens:`, payload.title);
+    console.log('[FCM] Sending ' + (dataOnly ? 'data-only' : 'native') + ' notification to ' + uniqueTokens.length + ' tokens:', payload.title);
 
     const response = await admin.messaging().sendEachForMulticast(message);
 
@@ -251,10 +259,21 @@ async function removeInvalidTokens(tokens) {
 }
 
 /**
+ * Send one native notification per unique token. The service worker skips
+ * manual rendering when FCM already includes a notification payload.
+ */
+async function sendToPlatformTokens(webTokens = [], mobileTokens = [], payload = {}) {
+  const allTokens = Array.from(new Set(
+    [...(webTokens || []), ...(mobileTokens || [])]
+      .filter(token => typeof token === 'string' && token.trim().length > 0)
+  ));
+
+  if (allTokens.length === 0) return;
+  await sendPushNotification(allTokens, { ...payload, dataOnly: false });
+}
+
+/**
  * Send notification to a specific user
- * @param {string} userId - User's MongoDB _id
- * @param {Object} payload - Notification payload
- * @param {boolean} includeMobile - Include mobile tokens (default: true)
  */
 async function sendNotificationToUser(userId, payload, includeMobile = true) {
   try {
@@ -262,44 +281,31 @@ async function sendNotificationToUser(userId, payload, includeMobile = true) {
     const user = await User.findById(userId);
 
     if (!user) {
-      console.log(`[FCM] ❌ User not found for notification: ${userId}`);
+      console.log('[FCM] User not found for notification: ' + userId);
       return;
     }
 
-    let tokens = [];
-    if (user.fcmTokens && user.fcmTokens.length > 0) {
-      tokens = [...tokens, ...user.fcmTokens];
-    }
-    if (includeMobile && user.fcmTokenMobile && user.fcmTokenMobile.length > 0) {
-      tokens = [...tokens, ...user.fcmTokenMobile];
-    }
-
-    if (tokens.length === 0) {
-      console.log(`[FCM] ⚠️ No FCM tokens found for user: ${userId}`);
+    const webTokens = user.fcmTokens || [];
+    const mobileTokens = includeMobile ? (user.fcmTokenMobile || []) : [];
+    if (webTokens.length === 0 && mobileTokens.length === 0) {
+      console.log('[FCM] No FCM tokens found for user: ' + userId);
       return;
     }
 
-    console.log(`[FCM] 📤 Sending notification to user ${user.name} (${userId}) on ${tokens.length} devices`);
-
-    // Add priority and sound for user notifications too
     const finalPayload = {
       ...payload,
       highPriority: payload.priority === 'high' ||
-        ['booking_accepted', 'worker_started', 'journey_started', 'work_done', 'work_completed', 'booking_completed', 'vendor_reached', 'visit_verified', 'payment_success', 'payment_received', 'work_started', 'in_progress', 'worker_accepted'].includes(payload.data?.type),
-      dataOnly: false // Explicitly disable dataOnly to force system tray notification
+        ['booking_accepted', 'worker_started', 'journey_started', 'work_done', 'work_completed', 'booking_completed', 'vendor_reached', 'visit_verified', 'payment_success', 'payment_received', 'work_started', 'in_progress', 'worker_accepted'].includes(payload.data?.type)
     };
 
-    await sendPushNotification(tokens, finalPayload);
+    await sendToPlatformTokens(webTokens, mobileTokens, finalPayload);
   } catch (error) {
-    console.error(`[FCM] ❌ Error sending notification to user ${userId}:`, error);
+    console.error('[FCM] Error sending notification to user ' + userId + ':', error);
   }
 }
 
 /**
  * Send notification to a specific vendor
- * @param {string} vendorId - Vendor's MongoDB _id
- * @param {Object} payload - Notification payload
- * @param {boolean} includeMobile - Include mobile tokens (default: true)
  */
 async function sendNotificationToVendor(vendorId, payload, includeMobile = true) {
   try {
@@ -307,41 +313,30 @@ async function sendNotificationToVendor(vendorId, payload, includeMobile = true)
     const vendor = await Vendor.findById(vendorId);
 
     if (!vendor) {
-      console.log(`[FCM] ❌ Vendor not found for notification: ${vendorId}`);
+      console.log('[FCM] Vendor not found for notification: ' + vendorId);
       return;
     }
 
-    let tokens = [];
-    if (vendor.fcmTokens && vendor.fcmTokens.length > 0) {
-      tokens = [...tokens, ...vendor.fcmTokens];
-    }
-    if (includeMobile && vendor.fcmTokenMobile && vendor.fcmTokenMobile.length > 0) {
-      tokens = [...tokens, ...vendor.fcmTokenMobile];
-    }
-
-    if (tokens.length === 0) {
-      console.log(`[FCM] ⚠️ No FCM tokens found for vendor: ${vendorId}`);
+    const webTokens = vendor.fcmTokens || [];
+    const mobileTokens = includeMobile ? (vendor.fcmTokenMobile || []) : [];
+    if (webTokens.length === 0 && mobileTokens.length === 0) {
+      console.log('[FCM] No FCM tokens found for vendor: ' + vendorId);
       return;
     }
-
-    console.log(`[FCM] 📤 Sending notification to vendor ${vendor.businessName || vendor.name} (${vendorId}) on ${tokens.length} devices`);
 
     const finalPayload = {
       ...payload,
-      title: `🏢 [Partner] ${payload.title}` // Add identification
+      title: '[Partner] ' + payload.title
     };
 
-    await sendPushNotification(tokens, finalPayload);
+    await sendToPlatformTokens(webTokens, mobileTokens, finalPayload);
   } catch (error) {
-    console.error(`[FCM] ❌ Error sending notification to vendor ${vendorId}:`, error);
+    console.error('[FCM] Error sending notification to vendor ' + vendorId + ':', error);
   }
 }
 
 /**
  * Send notification to a specific admin
- * @param {string} adminId - Admin's MongoDB _id
- * @param {Object} payload - Notification payload
- * @param {boolean} includeMobile - Include mobile tokens (default: true)
  */
 async function sendNotificationToAdmin(adminId, payload, includeMobile = true) {
   try {
@@ -355,28 +350,56 @@ async function sendNotificationToAdmin(adminId, payload, includeMobile = true) {
     }
 
     if (!adminUser) {
-      console.log(`Admin not found: ${adminId}`);
+      console.log('Admin not found: ' + adminId);
       return;
     }
 
-    let tokens = [];
-    if (adminUser.fcmTokens && adminUser.fcmTokens.length > 0) {
-      tokens = [...tokens, ...adminUser.fcmTokens];
+    const webTokens = adminUser.fcmTokens || [];
+    const mobileTokens = includeMobile ? (adminUser.fcmTokenMobile || []) : [];
+    if (webTokens.length === 0 && mobileTokens.length === 0) {
+      console.log('[FCM] No FCM tokens found for admin: ' + adminId);
+      return;
     }
-    if (includeMobile && adminUser.fcmTokenMobile && adminUser.fcmTokenMobile.length > 0) {
-      tokens = [...tokens, ...adminUser.fcmTokenMobile];
-    }
-
-    console.log(`[FCM] 📤 Sending notification to admin (${adminId}) on ${tokens.length} devices`);
 
     const finalPayload = {
       ...payload,
-      title: `🛡️ [Admin] ${payload.title}` // Add identification
+      title: '[Admin] ' + payload.title
     };
 
-    await sendPushNotification(tokens, finalPayload);
+    await sendToPlatformTokens(webTokens, mobileTokens, finalPayload);
   } catch (error) {
-    console.error(`[FCM] ❌ Error sending notification to admin ${adminId}:`, error);
+    console.error('[FCM] Error sending notification to admin ' + adminId + ':', error);
+  }
+}
+
+/**
+ * Send notification to a specific worker
+ */
+async function sendNotificationToWorker(workerId, payload, includeMobile = true) {
+  try {
+    // Workers are represented by Vendor documents in the current data model.
+    const Vendor = require('../models/Vendor');
+    const worker = await Vendor.findById(workerId);
+    if (!worker) {
+      console.log('[FCM] Worker not found for notification: ' + workerId);
+      return;
+    }
+
+    const webTokens = worker.fcmTokens || [];
+    const mobileTokens = includeMobile ? (worker.fcmTokenMobile || []) : [];
+    if (webTokens.length === 0 && mobileTokens.length === 0) {
+      console.log('[FCM] No FCM tokens found for worker: ' + workerId);
+      return;
+    }
+
+    const finalPayload = {
+      ...payload,
+      highPriority: payload.priority === 'high' || payload.data?.type === 'payment_received'
+    };
+
+    await sendToPlatformTokens(webTokens, mobileTokens, finalPayload);
+  } catch (error) {
+    console.error('[FCM] Error sending notification to worker ' + workerId + ':', error);
   }
 }
 
@@ -384,5 +407,6 @@ module.exports = {
   sendPushNotification,
   sendNotificationToUser,
   sendNotificationToVendor,
+  sendNotificationToWorker,
   sendNotificationToAdmin
 };

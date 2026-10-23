@@ -424,7 +424,8 @@ class BookingScheduler {
               type: 'new_booking',
               dataOnly: false,
               link: `/vendor/bookings/${booking._id}`
-            }
+            },
+            skipSocket: true
           });
         })
       );

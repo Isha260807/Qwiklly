@@ -122,12 +122,12 @@ async function getFCMToken(retryCount = 0) {
  * @param {boolean} forceUpdate - Force token update
  * @returns {Promise<string|null>}
  */
-async function registerFCMToken(userType = 'user', forceUpdate = false) {
+async function registerFCMTokenInternal(userType = 'user', forceUpdate = false, platform = getPlatformType()) {
   try {
     console.log(`[FCM] Starting registration for ${userType}, forceUpdate: ${forceUpdate}`);
 
     // Check if already registered
-    const storageKey = `fcm_token_${userType}_web`;
+    const storageKey = 'fcm_token_' + userType + '_' + platform;
     const savedToken = localStorage.getItem(storageKey);
     if (savedToken && !forceUpdate) {
       // console.log('[FCM] Token already registered in localStorage');
@@ -197,7 +197,7 @@ async function registerFCMToken(userType = 'user', forceUpdate = false) {
       },
       body: JSON.stringify({
         token: token,
-        platform: 'web'
+        platform: platform
       })
     });
 
@@ -218,6 +218,29 @@ async function registerFCMToken(userType = 'user', forceUpdate = false) {
   }
 }
 
+const fcmRegistrationInFlight = new Map();
+
+/**
+ * Register one token at a time per account and platform. Login, socket
+ * connection and dashboard mount can all happen together.
+ */
+async function registerFCMToken(userType = 'user', forceUpdate = false) {
+  const platform = getPlatformType();
+  const registrationKey = userType + ':' + platform;
+  const existingRequest = fcmRegistrationInFlight.get(registrationKey);
+  if (existingRequest) return existingRequest;
+
+  const request = registerFCMTokenInternal(userType, forceUpdate, platform);
+  fcmRegistrationInFlight.set(registrationKey, request);
+
+  try {
+    return await request;
+  } finally {
+    if (fcmRegistrationInFlight.get(registrationKey) === request) {
+      fcmRegistrationInFlight.delete(registrationKey);
+    }
+  }
+}
 /**
  * Remove FCM token from backend (removes specific token for current device)
  * @param {string} userType - 'user', 'vendor', or 'worker'

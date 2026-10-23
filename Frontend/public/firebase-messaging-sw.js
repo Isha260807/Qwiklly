@@ -41,6 +41,13 @@ messaging.onBackgroundMessage((payload) => {
 
   const data = payload.data || {};
   const notification = payload.notification || {};
+
+  // FCM displays notification payloads automatically in the background.
+  // Do not call showNotification() again or the user receives duplicates.
+  if (payload.notification && (notification.title || notification.body)) {
+    console.log('[SW] Native FCM notification received; skipping manual render');
+    return;
+  }
   const notificationType = data.type || 'default';
 
   // Determine notification style based on type
@@ -60,7 +67,7 @@ messaging.onBackgroundMessage((payload) => {
 
   let icon = data.icon || notification.icon || '/cleaning-expert-logo.png';
   let badge = '/cleaning-expert-logo.png';
-  let tag = data.bookingId || `notification-${Date.now()}`;
+  let tag = data.notificationId || data.bookingId || 'notification-' + Date.now().toString();
   let requireInteraction = false;
   let vibrate = [200, 100, 200];
   let actions = [];
@@ -179,8 +186,8 @@ messaging.onBackgroundMessage((payload) => {
     actions: actions,
     // Sound will be played by the system for high priority
     silent: false,
-    // Renotify even if same tag exists
-    renotify: true,
+    // Do not alert again if the same notification id is delivered twice
+    renotify: false,
     // Timestamp
     timestamp: Date.now()
   };

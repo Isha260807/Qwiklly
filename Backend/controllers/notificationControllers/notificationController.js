@@ -18,7 +18,8 @@ const createNotification = async ({
   data = {},
   skipPush = false,
   pushData = {},
-  priority = null
+  priority = null,
+  skipSocket = false
 }) => {
   try {
     // ── DEDUP CHECK: Redis-first (< 1ms), DB fallback ──────────────────────
@@ -96,16 +97,16 @@ const createNotification = async ({
     // If User is Offline -> Send Push Notification
 
     // Override skipPush if user is online (to avoid double notification)
-    if (isOnline) {
+    if (isOnline && !skipSocket) {
       console.log(`[Notification] User ${room} is ONLINE. Sending Socket event.`);
       // Prevent duplicate notification on active device
-      // skipPush = true; // REVERTED: Causes missing notifications if mobile app is background
+      // Push remains enabled for background/mobile delivery; the frontend dedupes by notification id.
 
       // Emit Socket Event immediately
       if (io && room) {
         io.to(room).emit('notification', notification);
       }
-    } else {
+    } else if (!isOnline) {
       console.log(`[Notification] User ${room} is OFFLINE. Sending Push Notification.`);
       // Socket emit useless here, but safe to ignore
     }

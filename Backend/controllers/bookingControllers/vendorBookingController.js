@@ -1781,29 +1781,6 @@ const payWorker = async (req, res) => {
       relatedType: 'booking'
     });
 
-    // Send High Priority Push Notification to Worker
-    const worker = await Worker.findById(booking.workerId);
-    if (worker) {
-      const fcmTokens = [
-        ...(worker.fcmTokens || []),
-        ...(worker.fcmTokenMobile || [])
-      ];
-
-      if (fcmTokens.length > 0) {
-        const { sendPushNotification } = require('../../services/firebaseAdmin');
-        await sendPushNotification(fcmTokens, {
-          title: 'Payment Received! 💰',
-          body: `Vendor has released your payment for booking #${booking.bookingNumber}. check wallet for details.`,
-          data: {
-            type: 'payment_received',
-            bookingId: booking._id.toString(),
-            url: '/worker/wallet'
-          },
-          highPriority: true
-        });
-      }
-    }
-
     // Notify Vendor
     await createNotification({
       vendorId: vendorId,

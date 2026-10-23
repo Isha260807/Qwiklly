@@ -29,9 +29,7 @@ router.post('/save', authenticate, async (req, res) => {
     // Use atomic updates to prevent VersionError (Race Conditions)
 
     // 1. Remove token if it exists (to avoid duplicates)
-    const pullQuery = platform === 'mobile'
-      ? { $pull: { fcmTokenMobile: token } }
-      : { $pull: { fcmTokens: token } };
+    const pullQuery = { $pull: { fcmTokens: token, fcmTokenMobile: token } };
 
     await User.findByIdAndUpdate(userId, pullQuery);
 
@@ -62,26 +60,16 @@ router.post('/save', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    // Remove this token from Vendor and Worker collections to prevent cross-account notifications
-    // Remove this token from Vendor and Worker collections to prevent cross-account notifications
-    // COMMENTED OUT to allow testing on same device (e.g. localhost) without tokens getting deleted
-    /*
+    // A token belongs to one account only. Remove it from other roles and
+    // from the opposite platform array before the next notification is sent.
     try {
       await Vendor.updateMany(
         { $or: [{ fcmTokens: token }, { fcmTokenMobile: token }] },
         { $pull: { fcmTokens: token, fcmTokenMobile: token } }
       );
-
-      await Worker.updateMany(
-        { $or: [{ fcmTokens: token }, { fcmTokenMobile: token }] },
-        { $pull: { fcmTokens: token, fcmTokenMobile: token } }
-      );
     } catch (cleanupError) {
-      console.error('Error removing token from other collections:', cleanupError);
-      // Don't fail the request if cleanup fails
+      console.error('Error removing token from other accounts:', cleanupError);
     }
-    */
-
     res.json({ success: true, message: 'FCM token saved successfully' });
   } catch (error) {
     console.error('Error saving FCM token:', error);

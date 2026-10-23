@@ -381,7 +381,7 @@ const Dashboard = memo(() => {
     };
 
     // Ask for notification permission and register FCM
-    registerFCMToken('vendor', true).catch(err => console.error('FCM registration failed:', err));
+    registerFCMToken('vendor', false).catch(err => console.error('FCM registration failed:', err));
 
     // Listen for custom dashboard events from SocketContext
     const handleShowAlert = (e) => {
