@@ -327,8 +327,33 @@ function setupForegroundNotificationHandler(handler) {
     // Use notification fields first, then data fields as fallback (for data-only messages)
     const title = notification.title || data.title || 'New Notification';
     const body = notification.body || data.body || '';
-    const icon = notification.icon || data.icon || '/HomeBuddy-header-logo.png';
     const type = data.type || data.notificationType || 'default';
+
+    // FCM does not automatically show a browser tray notification while the
+    // page is active. Render one here so foreground and background delivery
+    // have the same visible behavior.
+    if (
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      window.Notification.permission === 'granted' &&
+      document.visibilityState === 'visible' &&
+      (title || body)
+    ) {
+      const foregroundNotification = new window.Notification(title, {
+        body,
+        ...(data.notificationId || data.bookingId
+          ? { tag: data.notificationId || data.bookingId }
+          : {})
+      });
+
+      foregroundNotification.onclick = () => {
+        window.focus();
+        if (data.link) {
+          window.location.assign(data.link);
+        }
+        foregroundNotification.close();
+      };
+    }
 
     // Call custom handler (e.g. for toast)
     if (handler) {

@@ -64,9 +64,6 @@ messaging.onBackgroundMessage((payload) => {
   // Default fallbacks if one is missing
   notificationTitle = notificationTitle || 'App Notification';
   notificationBody = notificationBody || 'You have a new update.';
-
-  let icon = data.icon || notification.icon || '/cleaning-expert-logo.png';
-  let badge = '/cleaning-expert-logo.png';
   // Stable per-notification tag so a repeated delivery of the same push replaces instead of stacking
   let tag = data.notificationId || data.bookingId || `notification-${Date.now()}`;
   let requireInteraction = false;
@@ -91,8 +88,8 @@ messaging.onBackgroundMessage((payload) => {
       requireInteraction = true; // Keep notification visible until user interacts
       vibrate = [500, 200, 500, 200, 500]; // Strong vibration pattern
       actions = [
-        { action: 'accept', title: '✓ Accept', icon: '/icons/accept.png' },
-        { action: 'reject', title: '✗ Decline', icon: '/icons/reject.png' }
+        { action: 'accept', title: '✓ Accept' },
+        { action: 'reject', title: '✗ Decline' }
       ];
       break;
 
@@ -103,7 +100,7 @@ messaging.onBackgroundMessage((payload) => {
       requireInteraction = true;
       vibrate = [500, 200, 500, 200, 500];
       actions = [
-        { action: 'accept', title: '✓ Accept Job', icon: '/icons/accept.png' },
+        { action: 'accept', title: '✓ Accept Job' },
         { action: 'view', title: '👁️ View Details' }
       ];
       break;
@@ -133,7 +130,7 @@ messaging.onBackgroundMessage((payload) => {
       requireInteraction = true;
       vibrate = [500, 200, 500];
       actions = [
-        { action: 'track', title: '📍 Track Arrival', icon: '/icons/track.png' }
+        { action: 'track', title: '📍 Track Arrival' }
       ];
       break;
 
@@ -169,8 +166,6 @@ messaging.onBackgroundMessage((payload) => {
 
   const notificationOptions = {
     body: notificationBody,
-    icon: icon,
-    badge: badge,
     tag: tag,
     sound: NOTIFICATION_SOUNDS[notificationType] || NOTIFICATION_SOUNDS.default,
     data: {

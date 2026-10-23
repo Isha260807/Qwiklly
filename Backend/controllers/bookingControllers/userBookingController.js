@@ -892,7 +892,7 @@ const notifyAssignedSlotVendor = async (booking) => {
     const userId = booking.userId?._id || booking.userId;
 
     if (paymentRequired && userId) {
-      const userMessage = `Your scheduled booking ${booking.bookingNumber || ''} has been assigned to a service provider. Please complete payment before the service can start.`;
+      const userMessage = `Your scheduled booking ${booking.bookingNumber || ''} has been assigned to a service provider. Please complete payment before the service can start, otherwise the booking will be cancelled automatically.`;
 
       await createNotification({
         userId,

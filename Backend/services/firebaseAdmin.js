@@ -57,7 +57,6 @@ initFirebase();
  * @param {string} payload.title - Notification title
  * @param {string} payload.body - Notification body
  * @param {Object} payload.data - Additional data (optional)
- * @param {string} payload.icon - Notification icon (optional)
  * @param {boolean} payload.highPriority - Send as high priority (default: true)
  * @returns {Promise<Object>} - Response with success/failure counts
  */
@@ -184,11 +183,6 @@ async function sendPushNotification(tokens, payload) {
 
       // iOS/APNs specific (Sound, Alert, Badge)
       message.apns.payload.aps.alert = {
-        title: notifTitle,
-        body: notifBody,
-      };
-      // iOS/APNs specific (Sound, Alert, Badge)
-      message.apns.payload.aps.alert = {
         title: notificationTitle,
         body: notificationBody,
       };
@@ -197,23 +191,15 @@ async function sendPushNotification(tokens, payload) {
       message.webpush.notification = {
         title: notificationTitle,
         body: notificationBody,
-        icon: payload.icon || '/Homster-logo.png',
-        badge: '/Homster-logo.png',
       };
     }
 
-    /*
-    if (payload.icon) {
-      message.notification.image = payload.icon;
-      message.android.notification.image = payload.icon;
-    }
-    */
+
 
     // Ensure critical fields are also in data for background handling
     // Use payload source directly since message.notification is disabled
     message.data.title = payload.title || 'App Notification';
     message.data.body = payload.body || 'New Update';
-    if (payload.icon) message.data.icon = payload.icon;
 
     // Log intent
     console.log('[FCM] Sending ' + (dataOnly ? 'data-only' : 'native') + ' notification to ' + uniqueTokens.length + ' tokens:', payload.title);
@@ -299,15 +285,30 @@ async function sendToPlatformTokens(webTokens = [], mobileTokens = [], payload =
 async function sendNotificationToUser(userId, payload, includeMobile = true) {
   try {
     const User = require('../models/User');
-    const user = await User.findById(userId);
+    let user = await User.findById(userId).select('fcmTokens fcmTokenMobile');
 
     if (!user) {
       console.log('[FCM] User not found for notification: ' + userId);
       return;
     }
 
-    const webTokens = user.fcmTokens || [];
-    const mobileTokens = includeMobile ? (user.fcmTokenMobile || []) : [];
+    let webTokens = user.fcmTokens || [];
+    let mobileTokens = includeMobile ? (user.fcmTokenMobile || []) : [];
+
+    // Login/token registration can finish a few hundred milliseconds after
+    // the booking notification is created. Retry the read before giving up.
+    if (webTokens.length === 0 && mobileTokens.length === 0) {
+      for (const delayMs of [250, 500, 1000]) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        user = await User.findById(userId).select('fcmTokens fcmTokenMobile');
+        if (!user) return;
+
+        webTokens = user.fcmTokens || [];
+        mobileTokens = includeMobile ? (user.fcmTokenMobile || []) : [];
+        if (webTokens.length > 0 || mobileTokens.length > 0) break;
+      }
+    }
+
     if (webTokens.length === 0 && mobileTokens.length === 0) {
       console.log('[FCM] No FCM tokens found for user: ' + userId);
       return;

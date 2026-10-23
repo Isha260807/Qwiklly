@@ -27,6 +27,10 @@ function getPlatformType() {
   return (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) ? 'mobile' : 'web';
 }
 
+function notifyUserSessionAuthenticated() {
+  window.dispatchEvent(new Event('user_session_authenticated'));
+}
+
 /**
  * User Authentication Service
  */
@@ -50,6 +54,7 @@ export const userAuthService = {
       localStorage.setItem('accessToken', response.data.accessToken);
       localStorage.setItem('refreshToken', response.data.refreshToken);
       localStorage.setItem('userData', JSON.stringify(response.data.user));
+      notifyUserSessionAuthenticated();
       notifyFlutterLogin(response.data);
       registerFCMToken('user', true).catch(console.error);
     }
@@ -63,6 +68,7 @@ export const userAuthService = {
       localStorage.setItem('accessToken', response.data.accessToken);
       localStorage.setItem('refreshToken', response.data.refreshToken);
       localStorage.setItem('userData', JSON.stringify(response.data.user));
+      notifyUserSessionAuthenticated();
       notifyFlutterLogin(response.data);
       registerFCMToken('user', true).catch(console.error);
     }
@@ -76,6 +82,7 @@ export const userAuthService = {
       localStorage.setItem('accessToken', response.data.accessToken);
       localStorage.setItem('refreshToken', response.data.refreshToken);
       localStorage.setItem('userData', JSON.stringify(response.data.user));
+      notifyUserSessionAuthenticated();
       notifyFlutterLogin(response.data);
       registerFCMToken('user', true).catch(console.error);
     }

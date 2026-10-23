@@ -60,16 +60,9 @@ router.post('/save', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    // A token belongs to one account only. Remove it from other roles and
-    // from the opposite platform array before the next notification is sent.
-    try {
-      await Vendor.updateMany(
-        { $or: [{ fcmTokens: token }, { fcmTokenMobile: token }] },
-        { $pull: { fcmTokens: token, fcmTokenMobile: token } }
-      );
-    } catch (cleanupError) {
-      console.error('Error removing token from other accounts:', cleanupError);
-    }
+    // A browser/device FCM token may be used by both the user and partner surfaces.
+    // Keep it in both account collections so a shared test device receives the
+    // correct notification for each active role. Logout removes the current role's token.
     res.json({ success: true, message: 'FCM token saved successfully' });
   } catch (error) {
     console.error('Error saving FCM token:', error);
@@ -148,15 +141,46 @@ router.delete('/remove-all', authenticate, async (req, res) => {
  */
 router.post('/test', authenticate, async (req, res) => {
   try {
-    // Test notification sending disabled
+    const account = await User.findById(req.user._id).select('fcmTokens fcmTokenMobile');
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const tokens = Array.from(new Set([
+      ...(account.fcmTokens || []),
+      ...(account.fcmTokenMobile || [])
+    ].filter(Boolean)));
+
+    if (tokens.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No FCM token is registered for this account. Login again and allow notifications.'
+      });
+    }
+
+    const result = await sendPushNotification(tokens, {
+      title: 'Test Notification',
+      body: 'Push notifications are working properly!',
+      data: {
+        type: 'test',
+        link: '/'
+      },
+      dataOnly: false
+    });
+
     res.json({
-      success: true,
-      message: 'Test notifications are disabled',
-      successCount: 0,
-      failureCount: 0
+      success: result.successCount > 0,
+      message: result.successCount > 0
+        ? 'Test notification sent successfully'
+        : 'FCM could not deliver the test notification',
+      successCount: result.successCount,
+      failureCount: result.failureCount
     });
   } catch (error) {
-    console.error('Error in test notification route:', error);
+    console.error('Error in user test notification route:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

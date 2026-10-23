@@ -211,10 +211,10 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('connect', () => {
       // console.log(`✅ ${userType.toUpperCase()} App Socket connected`);
 
-      // Register FCM token for push notifications (on page load/refresh)
+      // Re-register the current account token so backend ownership stays in sync after role switches.
       if (userType && token) {
         // console.log(`[SocketContext] Registering FCM token for ${userType}...`);
-        registerFCMToken(userType, false).then((fcmToken) => {
+        registerFCMToken(userType, true).then((fcmToken) => {
           if (fcmToken) {
             // console.log(`[SocketContext] ✅ FCM token registered for ${userType}`);
           } else {

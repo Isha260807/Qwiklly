@@ -4,6 +4,7 @@ import { FiX, FiArrowRight, FiUser, FiLock, FiPhone, FiEye, FiEyeOff } from 'rea
 import { HiSparkles } from 'react-icons/hi2';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { registerFCMToken } from '../../../services/pushNotificationService';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -16,6 +17,13 @@ const LoginModal = ({ isOpen, onClose }) => {
 
   const [loginData, setLoginData] = useState({ phone: '', password: '' });
   const [signupData, setSignupData] = useState({ name: '', phone: '', password: '' });
+
+  const registerUserPushToken = () => {
+    window.dispatchEvent(new Event('user_session_authenticated'));
+    registerFCMToken('user', true).catch((error) => {
+      console.error('[USER AUTH] FCM token registration failed:', error);
+    });
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -31,6 +39,7 @@ const LoginModal = ({ isOpen, onClose }) => {
         localStorage.setItem('accessToken', accessToken);
         localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('userData', JSON.stringify(user));
+        registerUserPushToken();
         onClose();
         navigate('/user');
       } else {
@@ -58,6 +67,7 @@ const LoginModal = ({ isOpen, onClose }) => {
         localStorage.setItem('accessToken', accessToken);
         localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('userData', JSON.stringify(user));
+        registerUserPushToken();
         onClose();
         navigate('/user');
       } else {
