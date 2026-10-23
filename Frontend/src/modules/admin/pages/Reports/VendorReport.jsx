@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   FiBriefcase, FiTrendingUp, FiStar, FiDownload,
-  FiRefreshCw, FiCheckCircle, FiClock, FiUsers, FiSearch
+  FiRefreshCw, FiCheckCircle, FiClock, FiUsers, FiSearch, FiDollarSign
 } from 'react-icons/fi';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -55,7 +55,7 @@ const VendorReport = () => {
       { key: 'name', label: 'Owner Name' },
       { key: 'phone', label: 'Phone' },
       { key: 'bookingsCount', label: 'Completed Bookings', type: 'number' },
-      { key: 'totalRevenue', label: 'Total Revenue (₹)', type: 'currency' }
+      { key: 'grossRevenue', label: 'Gross Revenue (₹)', type: 'currency' }
     ]);
   };
 
@@ -102,7 +102,7 @@ const VendorReport = () => {
       </div>
 
       {/* KPI Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
         <div className="bg-white p-3.5 rounded-xl border border-gray-100 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Partners</span>
@@ -112,6 +112,17 @@ const VendorReport = () => {
           </div>
           <p className="text-xl font-black text-gray-900">{(data?.totalVendors || 0).toLocaleString('en-IN')}</p>
           <span className="text-[10px] text-emerald-600 font-bold mt-0.5">{data?.growth || '+0%'} Monthly Growth</span>
+        </div>
+
+        <div className="bg-white p-3.5 rounded-xl border border-gray-100 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Vendor Gross Revenue</span>
+            <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
+              <FiDollarSign className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <p className="text-xl font-black text-emerald-700">₹{(data?.totalGrossRevenue || 0).toLocaleString('en-IN')}</p>
+          <span className="text-[10px] text-gray-400 font-medium mt-0.5">All completed vendor bookings</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-xl border border-gray-100 shadow-xs flex flex-col justify-between">
@@ -305,7 +316,7 @@ const VendorReport = () => {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-xs font-extrabold text-gray-900">
-                        ₹{(vendor.totalRevenue || 0).toLocaleString('en-IN')}
+                        ₹{(vendor.grossRevenue || 0).toLocaleString('en-IN')}
                       </span>
                     </td>
                   </tr>

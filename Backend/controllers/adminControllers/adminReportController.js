@@ -1,4 +1,5 @@
 const Booking = require('../../models/Booking');
+const VendorBill = require('../../models/VendorBill');
 const Vendor = require('../../models/Vendor');
 const User = require('../../models/User');
 const VendorSalaryEarning = require('../../models/VendorSalaryEarning');
@@ -197,28 +198,68 @@ exports.getVendorReport = async (req, res) => {
       growthRate = 100;
     }
 
+    // Gross revenue is the full amount charged to the customer. Prefer the
+    // finalized VendorBill total and fall back to Booking.finalAmount for
+    // older bookings that do not have a bill reference.
+    const revenueStatuses = [
+      BOOKING_STATUS.COMPLETED,
+      BOOKING_STATUS.WORK_DONE,
+      'final_settlement',
+      'paid'
+    ];
     const bookingStats = await Booking.aggregate([
-      { $match: { vendorId: { $ne: null } } },
+      {
+        $match: {
+          vendorId: { $ne: null },
+          status: { $in: revenueStatuses }
+        }
+      },
+      {
+        $lookup: {
+          from: VendorBill.collection.name,
+          localField: 'vendorBillId',
+          foreignField: '_id',
+          as: 'referencedBill'
+        }
+      },
+      {
+        $lookup: {
+          from: VendorBill.collection.name,
+          localField: '_id',
+          foreignField: 'bookingId',
+          as: 'bookingBill'
+        }
+      },
+      {
+        $project: {
+          vendorId: 1,
+          billTotal: {
+            $ifNull: [
+              { $arrayElemAt: ['$referencedBill.grandTotal', 0] },
+              {
+                $ifNull: [
+                  { $arrayElemAt: ['$bookingBill.grandTotal', 0] },
+                  { $ifNull: ['$finalAmount', 0] }
+                ]
+              }
+            ]
+          }
+        }
+      },
       {
         $group: {
           _id: '$vendorId',
           bookingsCount: { $sum: 1 },
-          completedCount: {
-            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
-          },
-          grossRevenue: {
-            $sum: {
-              $cond: [
-                { $eq: ['$status', 'completed'] },
-                { $ifNull: ['$finalAmount', 0] },
-                0
-              ]
-            }
-          }
+          completedCount: { $sum: 1 },
+          grossRevenue: { $sum: '$billTotal' }
         }
       }
     ]);
     const bookingStatsByVendor = new Map(bookingStats.map((item) => [String(item._id), item]));
+    const totalGrossRevenue = bookingStats.reduce(
+      (total, item) => total + (item.grossRevenue || 0),
+      0
+    );
 
     // Salary-based vendor earnings replace the old booking revenue/share metric.
     const salaryByVendor = await VendorSalaryEarning.aggregate([
@@ -299,6 +340,7 @@ exports.getVendorReport = async (req, res) => {
         name: item.name,
         phone: item.phone,
         bookingsCount: (bookingStatsByVendor.get(String(item._id)) || {}).bookingsCount || 0,
+        grossRevenue: (bookingStatsByVendor.get(String(item._id)) || {}).grossRevenue || 0,
         totalRevenue: (bookingStatsByVendor.get(String(item._id)) || {}).grossRevenue || 0,
         completedBookings: (bookingStatsByVendor.get(String(item._id)) || {}).completedCount || 0,
         salaryEarning: item.totalSalaryEarning || 0
@@ -311,6 +353,7 @@ exports.getVendorReport = async (req, res) => {
           name: v.name || 'Partner',
           phone: v.phone || '',
           bookingsCount: stats.bookingsCount || 0,
+          grossRevenue: stats.grossRevenue || 0,
           totalRevenue: stats.grossRevenue || 0,
           completedBookings: stats.completedCount || 0,
           salaryEarning: 0
@@ -319,7 +362,7 @@ exports.getVendorReport = async (req, res) => {
     ];
     
     // Sort by gross revenue descending and take top 10
-    allVendorEntries.sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0));
+    allVendorEntries.sort((a, b) => (b.grossRevenue || 0) - (a.grossRevenue || 0));
     const topVendors = allVendorEntries.slice(0, 10);
     const salaryTotals = salaryByVendor.reduce((totals, item) => ({
       totalEarning: totals.totalEarning + (item.totalSalaryEarning || 0),
@@ -399,6 +442,7 @@ exports.getVendorReport = async (req, res) => {
         approvedVendors,
         pendingVendors,
         totalBookings,
+        totalGrossRevenue,
         growth: `${growthRate > 0 ? '+' : ''}${growthRate}%`,
         topVendors,
         salarySummary: salaryTotals,
