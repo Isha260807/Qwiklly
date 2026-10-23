@@ -11,13 +11,34 @@ const User = require('../../models/User');
 const Vendor = require('../../models/Vendor');
 
 const MAX_TOKENS = 10; // Maximum tokens per platform
+// Keep this logger before authentication so PM2 shows requests that are
+// rejected by the auth middleware as well. Never log the token or auth header.
+const logFcmSaveRequest = (req, res, next) => {
+  const startedAt = Date.now();
+  const platform = req.body?.platform || 'web';
+  const hasToken = Boolean(req.body?.token);
+  const hasAuthorization = Boolean(req.headers.authorization);
+
+  console.log(
+    `[FCM] SAVE_REQUEST role=user path=${req.originalUrl} platform=${platform} ` +
+    `tokenPresent=${hasToken} authHeader=${hasAuthorization} origin=${req.get('origin') || 'none'}`
+  );
+
+  res.on('finish', () => {
+    console.log(
+      `[FCM] SAVE_RESPONSE role=user status=${res.statusCode} duration=${Date.now() - startedAt}ms`
+    );
+  });
+
+  next();
+};
 
 /**
  * @route   POST /api/users/fcm-tokens/save
  * @desc    Save FCM token for user
  * @access  Private
  */
-router.post('/save', authenticate, async (req, res) => {
+router.post('/save', logFcmSaveRequest, authenticate, async (req, res) => {
   try {
     const { token, platform = 'web' } = req.body;
     const userId = req.user._id;
