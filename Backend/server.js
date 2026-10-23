@@ -21,6 +21,14 @@ initRedis();
 
 // Initialize Express app
 const app = express();
+// Trust the production reverse proxy so Express and express-rate-limit can
+// safely resolve the client IP from X-Forwarded-For. Override with
+// TRUST_PROXY_HOPS when the deployment has more than one proxy hop.
+const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS || '1', 10);
+app.set(
+  'trust proxy',
+  Number.isInteger(trustProxyHops) && trustProxyHops >= 0 ? trustProxyHops : 1
+);
 
 // Security middleware - allow cross-origin resource loading (images) for user app
 app.use(helmet({
