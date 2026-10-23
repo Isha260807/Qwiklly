@@ -6,7 +6,7 @@ import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { vendorTheme as themeColors } from '../../../../theme';
 import { vendorAuthService } from '../../../../services/authService';
-import api from '../../../../services/api';
+import { testPushNotification } from '../../../../services/pushNotificationService';
 import { configService } from '../../../../services/configService';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
@@ -67,8 +67,8 @@ const Profile = () => {
     const toastId = toast.loading('Sending test notification...');
 
     try {
-      const response = await api.post('/vendors/fcm-tokens/test');
-      const result = response.data;
+      // Registers this device's token (asks permission on tap) before sending the test.
+      const result = await testPushNotification('vendor');
 
       if (!result?.success) {
         throw new Error(result?.error || result?.message || 'Test notification could not be sent.');

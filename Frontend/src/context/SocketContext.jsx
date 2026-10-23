@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { playNotificationSound, isSoundEnabled, playAlertRing } from '../utils/notificationSound';
-import { registerFCMToken } from '../services/pushNotificationService';
+import { registerFCMToken, registerFCMTokenOnNextGesture } from '../services/pushNotificationService';
 import { handleLogout } from '../services/api';
 import formatDistance from '../utils/formatDistance';
 
@@ -217,10 +217,9 @@ export const SocketProvider = ({ children }) => {
       if (userType && token) {
         // console.log(`[SocketContext] Registering FCM token for ${userType}...`);
         registerFCMToken(userType, true).then((fcmToken) => {
-          if (fcmToken) {
-            // console.log(`[SocketContext] ✅ FCM token registered for ${userType}`);
-          } else {
-            // console.log(`[SocketContext] ⚠️ FCM token registration returned null for ${userType}`);
+          if (!fcmToken) {
+            // Permission prompts need a tap on mobile Chrome; retry on the next tap.
+            registerFCMTokenOnNextGesture(userType);
           }
         }).catch((err) => {
           // console.error(`[SocketContext] ❌ FCM token registration failed for ${userType}:`, err);
