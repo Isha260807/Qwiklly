@@ -22,7 +22,9 @@ import StatsCards from './components/StatsCards';
 import PendingBookings from './components/PendingBookings';
 
 
-const SOCKET_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '') || 'http://localhost:5000';
+const SOCKET_URL = String(
+  import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_BASE_URL?.replace(/\/api$/, '') || ''
+).trim();
 
 const Dashboard = memo(() => {
   const navigate = useNavigate();
@@ -381,7 +383,7 @@ const Dashboard = memo(() => {
     };
 
     // Ask for notification permission and register FCM
-    registerFCMToken('vendor', false).catch(err => console.error('FCM registration failed:', err));
+    registerFCMToken('vendor', true).catch(err => console.error('FCM registration failed:', err));
 
     // Listen for custom dashboard events from SocketContext
     const handleShowAlert = (e) => {

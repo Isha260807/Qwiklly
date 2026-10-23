@@ -28,23 +28,10 @@ app.use(helmet({
 }));
 
 // CORS configuration
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'https://www.homster.in',
-  'https://homster.in',
-  'https://api.homster.in'
-];
-
-if (process.env.FRONTEND_URL) {
-  // Support comma-separated URLs in .env
-  const envOrigins = process.env.FRONTEND_URL.split(',').map(url => url.trim());
-  envOrigins.forEach(origin => {
-    if (!allowedOrigins.includes(origin)) {
-      allowedOrigins.push(origin);
-    }
-  });
-}
+const allowedOrigins = [process.env.FRONTEND_URL, process.env.SOCKET_CORS_ORIGIN]
+  .flatMap(value => String(value || '').split(','))
+  .map(origin => origin.trim())
+  .filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {

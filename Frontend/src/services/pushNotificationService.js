@@ -3,9 +3,37 @@
  * Handles FCM token registration and notification handling
  */
 
-import { messaging, getToken, onMessage } from '../firebase';
+import { messaging, firebaseConfig, getToken, onMessage } from '../firebase';
 
-const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+const VAPID_KEY = String(import.meta.env.VITE_FIREBASE_VAPID_KEY || '').trim();
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+
+function getConfiguredApiBaseUrl() {
+  if (!API_BASE_URL) {
+    throw new Error('[FCM] VITE_API_BASE_URL is missing from the frontend environment');
+  }
+  return API_BASE_URL;
+}
+
+function getFirebaseServiceWorkerUrl() {
+  const serviceWorkerUrl = new URL('/firebase-messaging-sw.js', window.location.origin);
+  const serviceWorkerConfig = {
+    apiKey: firebaseConfig.apiKey,
+    authDomain: firebaseConfig.authDomain,
+    projectId: firebaseConfig.projectId,
+    storageBucket: firebaseConfig.storageBucket,
+    messagingSenderId: firebaseConfig.messagingSenderId,
+    appId: firebaseConfig.appId,
+    measurementId: firebaseConfig.measurementId,
+    databaseURL: firebaseConfig.databaseURL
+  };
+
+  Object.entries(serviceWorkerConfig).forEach(([key, value]) => {
+    if (value) serviceWorkerUrl.searchParams.set(`firebase_${key}`, value);
+  });
+
+  return serviceWorkerUrl.href;
+}
 
 /**
  * Check if running inside Flutter WebView
@@ -30,7 +58,7 @@ function getPlatformType() {
 async function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     try {
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+      const registration = await navigator.serviceWorker.register(getFirebaseServiceWorkerUrl(), {
         updateViaCache: 'none' // Force fetch from network, don't use cache
       });
       // Force update to pick up any config changes
@@ -73,6 +101,11 @@ async function getFCMToken(retryCount = 0) {
   try {
     if (!messaging) {
       console.error('Firebase messaging not initialized');
+      return null;
+    }
+
+    if (!VAPID_KEY) {
+      console.error('[FCM] VITE_FIREBASE_VAPID_KEY is missing from the frontend environment');
       return null;
     }
 
@@ -126,14 +159,6 @@ async function registerFCMTokenInternal(userType = 'user', forceUpdate = false, 
   try {
     console.log(`[FCM] Starting registration for ${userType}, forceUpdate: ${forceUpdate}`);
 
-    // Check if already registered
-    const storageKey = 'fcm_token_' + userType + '_' + platform;
-    const savedToken = localStorage.getItem(storageKey);
-    if (savedToken && !forceUpdate) {
-      // console.log('[FCM] Token already registered in localStorage');
-      return savedToken;
-    }
-
     // Request permission
     console.log('[FCM] Requesting notification permission...');
     const hasPermission = await requestNotificationPermission();
@@ -174,19 +199,14 @@ async function registerFCMTokenInternal(userType = 'user', forceUpdate = false, 
     }
 
     // Get auth token
-    const authToken = localStorage.getItem(authTokenKey);
+    const authToken = localStorage.getItem(authTokenKey) || sessionStorage.getItem(authTokenKey);
     if (!authToken) {
       console.log(`[FCM] ❌ No auth token found for ${userType} (${authTokenKey}), skipping registration`);
       return null;
     }
 
-    // Check if token is already registered in localStorage
-    if (savedToken === token && !forceUpdate) {
-      return token;
-    }
-
     // Save to backend
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const baseUrl = getConfiguredApiBaseUrl();
     console.log(`[FCM] Saving to backend: ${baseUrl}${endpoint}`);
 
     const response = await fetch(`${baseUrl}${endpoint}`, {
@@ -204,7 +224,7 @@ async function registerFCMTokenInternal(userType = 'user', forceUpdate = false, 
     console.log(`[FCM] Backend response status: ${response.status}`);
 
     if (response.ok) {
-      localStorage.setItem(storageKey, token);
+      // Token is stored only by the backend against the authenticated account.
       console.log('[FCM] ✅ FCM token registered with backend successfully!');
       return token;
     } else {
@@ -249,11 +269,10 @@ async function removeFCMToken(userType = 'user') {
   try {
     // Detect platform automatically
     const platform = getPlatformType();
-    const storageKey = `fcm_token_${userType}_${platform}`;
-    const tokenToRemove = localStorage.getItem(storageKey);
-
+    // Read the current token from Firebase instead of a client-side cache.
+    const tokenToRemove = await getFCMToken();
     if (!tokenToRemove) {
-      // console.log('[FCM] No token found in localStorage to remove');
+      console.log('[FCM] No current Firebase token found for ' + userType);
       return;
     }
 
@@ -276,10 +295,10 @@ async function removeFCMToken(userType = 'user') {
         authTokenKey = 'accessToken';
     }
 
-    const authToken = localStorage.getItem(authTokenKey);
+    const authToken = localStorage.getItem(authTokenKey) || sessionStorage.getItem(authTokenKey);
     // If we have an auth token, try to remove from backend
     if (authToken) {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+      const baseUrl = getConfiguredApiBaseUrl();
 
       // Call remove endpoint with specific token
       await fetch(`${baseUrl}${endpoint}`, {
@@ -296,15 +315,8 @@ async function removeFCMToken(userType = 'user') {
       console.log(`[FCM] ✅ Token removed from backend`);
     }
 
-    // Always remove from local storage
-    localStorage.removeItem(storageKey);
-    console.log(`[FCM] Token cleared from localStorage`);
   } catch (error) {
     console.error('[FCM] Error removing FCM token:', error);
-    // Ensure local cleanup happens even on error
-    const platform = getPlatformType();
-    const storageKey = `fcm_token_${userType}_${platform}`;
-    localStorage.removeItem(storageKey);
   }
 }
 
@@ -447,7 +459,7 @@ async function testPushNotification(userType = 'user') {
       };
     }
 
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const baseUrl = getConfiguredApiBaseUrl();
     const endpoint = userType === 'vendor' ? '/vendors/fcm-tokens/test' : '/users/fcm-tokens/test';
 
     const response = await fetch(`${baseUrl}${endpoint}`, {

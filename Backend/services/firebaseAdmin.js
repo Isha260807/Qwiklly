@@ -4,33 +4,63 @@
  */
 
 const admin = require('firebase-admin');
+const fs = require('fs');
 const path = require('path');
 
 // Pushes that must wake the device and ring like a call (vendor booking request).
 const BOOKING_ALERT_TYPES = ['new_booking', 'booking_request'];
 const BOOKING_ALERT_TTL_MS = 2 * 60 * 1000;
 
-// Initialize Firebase Admin SDK
-// Initialize Firebase Admin SDK
-// Initialize Firebase Admin SDK
+function parseServiceAccount(rawConfig) {
+  if (!rawConfig) return null;
+
+  let normalized = String(rawConfig).trim();
+  if (normalized.length >= 2 && normalized.startsWith("'") && normalized.endsWith("'")) {
+    normalized = normalized.slice(1, -1);
+  }
+  if (normalized.length >= 2 && normalized.startsWith('"') && normalized.endsWith('"')) {
+    normalized = normalized.slice(1, -1);
+  }
+
+  const serviceAccount = JSON.parse(normalized);
+  if (serviceAccount.private_key) {
+    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+  }
+  return serviceAccount;
+}
+
+function readMultilineFirebaseConfigFromEnvFile() {
+  const envPath = path.resolve(__dirname, '..', '.env');
+  if (!fs.existsSync(envPath)) return null;
+
+  const envFile = fs.readFileSync(envPath, 'utf8');
+  const match = envFile.match(/^\s*FIREBASE_CONFIG\s*=\s*'([\s\S]*?)'\s*(?:\r?\n|$)/m);
+  return match ? parseServiceAccount(match[1]) : null;
+}
+
+// Initialize Firebase Admin SDK using deployment environment variables only.
 function initFirebase() {
   if (admin.apps.length) return true;
   try {
     let serviceAccount;
     if (process.env.FIREBASE_CONFIG) {
-      serviceAccount = typeof process.env.FIREBASE_CONFIG === 'string'
-        ? JSON.parse(process.env.FIREBASE_CONFIG)
-        : process.env.FIREBASE_CONFIG;
+      try {
+        serviceAccount = parseServiceAccount(process.env.FIREBASE_CONFIG);
+      } catch (error) {
+        // dotenv cannot parse a pretty-printed single-quoted JSON block. Read
+        // that same env value from the local env file without hardcoding creds.
+        serviceAccount = readMultilineFirebaseConfigFromEnvFile();
+        if (!serviceAccount) throw error;
+      }
     } else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-      serviceAccount = typeof process.env.FIREBASE_SERVICE_ACCOUNT_JSON === 'string'
-        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
-        : process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+      serviceAccount = parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
     } else {
-      const fs = require('fs');
-      const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './config/firebase-service-account.json';
-      const resolved = path.resolve(__dirname, '..', serviceAccountPath);
-      if (fs.existsSync(resolved)) {
-        serviceAccount = require(resolved);
+      const serviceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim();
+      if (serviceAccountPath) {
+        const resolved = path.resolve(__dirname, '..', serviceAccountPath);
+        if (fs.existsSync(resolved)) {
+          serviceAccount = parseServiceAccount(fs.readFileSync(resolved, 'utf8'));
+        }
       }
     }
 
@@ -135,7 +165,7 @@ async function sendPushNotification(tokens, payload) {
 
     // Android specific (Sound, Priority, Channel).
     // Delivered by the system even when the app is killed, so the channel and sound
-    // must match what the Flutter app created (see FCM_* vars in env.example).
+    // must match what the Flutter app created (see FCM_* environment variables).
     // A channelId the device does not know falls back to FCM's default channel.
     const pushType = String(payload.data?.type || '');
     const isBookingAlert = BOOKING_ALERT_TYPES.includes(pushType);
@@ -160,7 +190,7 @@ async function sendPushNotification(tokens, payload) {
 
       // Android specific (Sound, Priority, Channel).
       // Delivered by the system even when the app is killed, so the channel and sound
-      // must match what the Flutter app created (see FCM_* vars in env.example).
+      // must match what the Flutter app created (see FCM_* environment variables).
       const pushType = String(payload.data?.type || '');
       const isBookingAlert = BOOKING_ALERT_TYPES.includes(pushType);
       const channelId = isBookingAlert
@@ -332,15 +362,30 @@ async function sendNotificationToUser(userId, payload, includeMobile = true) {
 async function sendNotificationToVendor(vendorId, payload, includeMobile = true) {
   try {
     const Vendor = require('../models/Vendor');
-    const vendor = await Vendor.findById(vendorId);
+    let vendor = await Vendor.findById(vendorId).select('fcmTokens fcmTokenMobile');
 
     if (!vendor) {
       console.log('[FCM] Vendor not found for notification: ' + vendorId);
       return;
     }
 
-    const webTokens = vendor.fcmTokens || [];
-    const mobileTokens = includeMobile ? (vendor.fcmTokenMobile || []) : [];
+    let webTokens = vendor.fcmTokens || [];
+    let mobileTokens = includeMobile ? (vendor.fcmTokenMobile || []) : [];
+
+    // Vendor login/token registration can complete just after a booking event.
+    // Retry the DB read so a valid token saved during that race is not missed.
+    if (webTokens.length === 0 && mobileTokens.length === 0) {
+      for (const delayMs of [250, 500, 1000]) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        vendor = await Vendor.findById(vendorId).select('fcmTokens fcmTokenMobile');
+        if (!vendor) return;
+
+        webTokens = vendor.fcmTokens || [];
+        mobileTokens = includeMobile ? (vendor.fcmTokenMobile || []) : [];
+        if (webTokens.length > 0 || mobileTokens.length > 0) break;
+      }
+    }
+
     if (webTokens.length === 0 && mobileTokens.length === 0) {
       console.log('[FCM] No FCM tokens found for vendor: ' + vendorId);
       return;

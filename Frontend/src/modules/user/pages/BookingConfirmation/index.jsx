@@ -157,7 +157,8 @@ const BookingConfirmation = () => {
         return;
       }
 
-      const razorpayKey = paymentData.key || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_8sYbzHWidwe5Zw';
+      const razorpayKey = paymentData.key || String(import.meta.env.VITE_RAZORPAY_KEY_ID || '').trim();
+      if (!razorpayKey) throw new Error('VITE_RAZORPAY_KEY_ID is missing');
       if (!window.Razorpay || !razorpayKey) {
         toast.error('Payment gateway is not available right now. Please try again.');
         setPaying(false);

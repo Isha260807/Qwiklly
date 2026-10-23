@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
 import { userAuthService } from '../../../../services/authService';
+import api from '../../../../services/api';
 import { motion } from 'framer-motion';
 import {
   FiArrowLeft,
@@ -17,7 +18,8 @@ import {
   FiLogOut,
   FiGift,
   FiShield,
-  FiZap
+  FiZap,
+  FiBell
 } from 'react-icons/fi';
 import { MdAccountBalanceWallet } from 'react-icons/md';
 import NotificationBell from '../../components/common/NotificationBell';
@@ -57,6 +59,7 @@ const getStoredUserProfile = () => {
 const Account = () => {
   const navigate = useNavigate();
   const [userProfile, setUserProfile] = useState(getStoredUserProfile);
+  const [isSendingTestNotification, setIsSendingTestNotification] = useState(false);
 
   // Render the stored profile immediately, then refresh it silently in the background.
   useEffect(() => {
@@ -113,6 +116,37 @@ const Account = () => {
       localStorage.removeItem('userData');
       toast.success('Logged out successfully');
       navigate('/user/login');
+    }
+  };
+
+  const handleTestNotification = async () => {
+    if (isSendingTestNotification) return;
+
+    setIsSendingTestNotification(true);
+    const toastId = toast.loading('Sending test notification...');
+
+    try {
+      const response = await api.post('/users/fcm-tokens/test');
+      const result = response.data;
+
+      if (!result?.success) {
+        throw new Error(result?.error || result?.message || 'Test notification could not be sent.');
+      }
+
+      toast.success('Test notification sent. Check your notification tray.', {
+        id: toastId,
+        duration: 4000
+      });
+    } catch (error) {
+      toast.error(
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to send test notification.',
+        { id: toastId, duration: 5000 }
+      );
+    } finally {
+      setIsSendingTestNotification(false);
     }
   };
 
@@ -277,6 +311,25 @@ const Account = () => {
               />
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleTestNotification}
+            disabled={isSendingTestNotification}
+            className="w-full flex items-center gap-3 p-3 bg-white rounded-2xl border border-[#E8D9DF] shadow-sm hover:bg-[#FFF7FA] active:scale-[0.99] transition-all text-left disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <div className="w-8 h-8 rounded-xl bg-[#FFF7FA] text-[#720C3E] flex items-center justify-center shrink-0">
+              <FiBell className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-xs font-semibold text-gray-800 block">
+                {isSendingTestNotification ? 'Sending Test Notification...' : 'Send Test Notification'}
+              </span>
+              <span className="text-[10px] text-gray-500 block mt-0.5">
+                Test the saved push token for this account
+              </span>
+            </div>
+          </button>
 
           {/* Menu Card 3: Support & Legal */}
           <div>
@@ -619,11 +672,29 @@ const Account = () => {
                     </div>
                     <FiChevronRight className="text-slate-300 group-hover:text-[#720C3E] transition-colors shrink-0" />
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleTestNotification}
+                    disabled={isSendingTestNotification}
+                    className="p-4 bg-slate-50 hover:bg-[#FFF7FA] hover:border-[#E8D9DF] rounded-2xl border border-slate-100 transition-all cursor-pointer group flex items-center justify-between text-left disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-white text-[#720C3E] shadow-2xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <FiBell className="text-lg" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">
+                          {isSendingTestNotification ? 'Sending...' : 'Test Push Notification'}
+                        </h4>
+                        <p className="text-[11px] text-slate-500">Verify this account's saved FCM token</p>
+                      </div>
+                    </div>
+                    <FiChevronRight className="text-slate-300 group-hover:text-[#720C3E] transition-colors shrink-0" />
+                  </button>
                 </div>
               </div>
 
             </div>
-
           </div>
         </div>
       </div>

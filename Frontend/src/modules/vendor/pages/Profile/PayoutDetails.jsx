@@ -137,14 +137,8 @@ const PayoutDetails = () => {
     const formData = new FormData();
     formData.append('file', file);
 
-    let baseUrl = import.meta.env.VITE_API_BASE_URL || '';
-    if (!baseUrl) {
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        baseUrl = 'http://localhost:5000';
-      } else {
-        baseUrl = window.location.origin;
-      }
-    }
+    let baseUrl = String(import.meta.env.VITE_API_BASE_URL || '').trim();
+    if (!baseUrl) throw new Error('VITE_API_BASE_URL is missing');
     baseUrl = baseUrl.replace(/\/api$/, '');
     const response = await fetch(`${baseUrl}/api/image/upload`, {
       method: 'POST',

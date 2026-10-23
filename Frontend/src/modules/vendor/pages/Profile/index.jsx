@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiLayers, FiHeadphones, FiPhoneCall, FiX, FiClock } from 'react-icons/fi';
+import { FiUser, FiEdit2, FiMapPin, FiPhone, FiMail, FiBriefcase, FiStar, FiArrowRight, FiSettings, FiChevronRight, FiCreditCard, FiLogOut, FiTrash2, FiLayers, FiHeadphones, FiPhoneCall, FiX, FiClock, FiBell } from 'react-icons/fi';
 import { FaWallet, FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { vendorTheme as themeColors } from '../../../../theme';
 import { vendorAuthService } from '../../../../services/authService';
+import api from '../../../../services/api';
 import { configService } from '../../../../services/configService';
 import Header from '../../components/layout/Header';
 import BottomNav from '../../components/layout/BottomNav';
@@ -31,6 +32,7 @@ const Profile = () => {
     email: '',
     whatsapp: ''
   });
+  const [isSendingTestNotification, setIsSendingTestNotification] = useState(false);
 
   const menuItems = [
     { id: 'payout', label: 'Payout & Bank Details (QR / UPI)', icon: FiCreditCard, path: '/vendor/profile/payout' },
@@ -57,6 +59,37 @@ const Profile = () => {
       if (root) root.style.background = '';
     };
   }, []);
+
+  const handleTestNotification = async () => {
+    if (isSendingTestNotification) return;
+
+    setIsSendingTestNotification(true);
+    const toastId = toast.loading('Sending test notification...');
+
+    try {
+      const response = await api.post('/vendors/fcm-tokens/test');
+      const result = response.data;
+
+      if (!result?.success) {
+        throw new Error(result?.error || result?.message || 'Test notification could not be sent.');
+      }
+
+      toast.success('Test notification sent. Check your notification tray.', {
+        id: toastId,
+        duration: 4000
+      });
+    } catch (error) {
+      toast.error(
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to send test notification.',
+        { id: toastId, duration: 5000 }
+      );
+    } finally {
+      setIsSendingTestNotification(false);
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -350,6 +383,31 @@ const Profile = () => {
               </button>
             );
           })}
+        </div>
+
+        {/* Push Notification Test */}
+        <div className="px-4 mb-3">
+          <button
+            type="button"
+            onClick={handleTestNotification}
+            disabled={isSendingTestNotification}
+            className="w-full flex items-center justify-between p-2.5 bg-white rounded-xl shadow-xs hover:shadow-sm transition-all active:scale-[0.99] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-[#FCEBF3] text-[#720C3E]">
+                <FiBell className="w-3.5 h-3.5" />
+              </div>
+              <div className="text-left">
+                <span className="text-xs font-bold text-[#24151D] block">
+                  {isSendingTestNotification ? 'Sending Test Notification...' : 'Test Push Notification'}
+                </span>
+                <span className="text-[10px] text-gray-500 block mt-0.5">
+                  Uses this partner's saved FCM token
+                </span>
+              </div>
+            </div>
+            <FiChevronRight className="w-3.5 h-3.5 text-gray-400" />
+          </button>
         </div>
 
         {/* Logout Button */}

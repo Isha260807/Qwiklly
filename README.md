@@ -244,20 +244,18 @@ npm install
 
 #### 4. Environment Configuration
 
-Create environment files for both backend and frontend:
+Configure the actual environment files for both backend and frontend:
 
 **Backend (.env)**
 ```bash
 cd Backend
-cp env.example .env
-# Edit .env with your configuration
+# Edit the existing .env with your configuration
 ```
 
 **Frontend (.env)**
 ```bash
 cd Frontend
-cp .env.example .env
-# Edit .env with your configuration
+# Edit the existing .env with your configuration
 ```
 
 ---
@@ -477,7 +475,7 @@ appzeto/
 │   │
 │   ├── server.js               # Application entry point
 │   ├── package.json            # Dependencies
-│   └── env.example             # Environment template
+│   └── .env                    # Backend environment variables (local only)
 │
 ├── 📁 Frontend/
 │   ├── 📁 public/              # Static assets

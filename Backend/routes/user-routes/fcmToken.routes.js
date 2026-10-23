@@ -63,7 +63,14 @@ router.post('/save', authenticate, async (req, res) => {
     // A browser/device FCM token may be used by both the user and partner surfaces.
     // Keep it in both account collections so a shared test device receives the
     // correct notification for each active role. Logout removes the current role's token.
-    res.json({ success: true, message: 'FCM token saved successfully' });
+    console.log('[FCM] Saved ' + platform + ' token for user ' + userId + '. web=' + (user.fcmTokens?.length || 0) + ', mobile=' + (user.fcmTokenMobile?.length || 0));
+    res.json({
+      success: true,
+      message: 'FCM token saved successfully',
+      platform,
+      webTokenCount: user.fcmTokens?.length || 0,
+      mobileTokenCount: user.fcmTokenMobile?.length || 0
+    });
   } catch (error) {
     console.error('Error saving FCM token:', error);
     res.status(500).json({ success: false, error: 'Failed to save FCM token' });

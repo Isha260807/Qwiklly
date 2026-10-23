@@ -1064,13 +1064,13 @@ export default function BookingDetails() {
               {booking.workPhotos.map((photo, index) => (
                 <div key={index} className="aspect-square rounded-lg overflow-hidden bg-gray-100 border relative group">
                   <img
-                    src={photo.replace('/api/upload', 'http://localhost:5000/upload')}
+                    src={photo.replace('/api/upload', `${String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/?$/, '')}/upload`)}
                     alt={`Work evidence ${index + 1}`}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <button
-                      onClick={() => window.open(photo.replace('/api/upload', 'http://localhost:5000/upload'), '_blank')}
+                      onClick={() => window.open(photo.replace('/api/upload', `${String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/?$/, '')}/upload`), '_blank')}
                       className="bg-white text-gray-900 px-3 py-1 rounded-full text-xs font-bold"
                     >
                       View

@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { registerFCMToken } from '../../../services/pushNotificationService';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
 
 const LoginModal = ({ isOpen, onClose }) => {
   const navigate = useNavigate();

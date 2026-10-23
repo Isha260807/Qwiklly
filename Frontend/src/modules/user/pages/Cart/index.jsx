@@ -18,7 +18,7 @@ const toAssetUrl = (url) => {
   if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:') || clean.startsWith('blob:')) {
     return clean;
   }
-  const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/api\/?$/, '');
+  const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/?$/, '');
   return `${base}${clean.startsWith('/') ? '' : '/'}${clean}`;
 };
 

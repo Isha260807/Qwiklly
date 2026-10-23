@@ -58,11 +58,16 @@ const getAuthorizedTrackingBooking = async (socket, bookingId) => {
 };
 
 const initializeSocket = (server) => {
+  const allowedOrigins = [process.env.FRONTEND_URL, process.env.SOCKET_CORS_ORIGIN]
+    .flatMap(value => String(value || '').split(','))
+    .map(origin => origin.trim())
+    .filter(Boolean);
+
   io = new Server(server, {
     pingTimeout: 60000,
     pingInterval: 25000,
     cors: {
-      origin: [process.env.FRONTEND_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'].filter(Boolean),
+      origin: allowedOrigins,
       credentials: true,
       methods: ["GET", "POST"]
     },

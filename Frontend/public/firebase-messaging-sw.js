@@ -8,16 +8,32 @@
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-// Firebase configuration - Must match the app's Firebase config (qwiklly-ef8e3)
+// The service worker cannot read Vite's import.meta.env directly. The app
+// passes the same env-derived Firebase config in the registration URL.
+const serviceWorkerUrl = new URL(self.location.href);
 const firebaseConfig = {
-  apiKey: 'AIzaSyCUBJH4tLlB9Mq4dnYKjxp_1_b8gQbLbpE',
-  authDomain: 'qwiklly-ef8e3.firebaseapp.com',
-  projectId: 'qwiklly-ef8e3',
-  storageBucket: 'qwiklly-ef8e3.firebasestorage.app',
-  messagingSenderId: '24437145469',
-  appId: '1:24437145469:web:ec5d0cabcc9abfdacb9614',
-  measurementId: 'G-KC325GL3EE'
+  apiKey: serviceWorkerUrl.searchParams.get('firebase_apiKey') || '',
+  authDomain: serviceWorkerUrl.searchParams.get('firebase_authDomain') || '',
+  projectId: serviceWorkerUrl.searchParams.get('firebase_projectId') || '',
+  storageBucket: serviceWorkerUrl.searchParams.get('firebase_storageBucket') || '',
+  messagingSenderId: serviceWorkerUrl.searchParams.get('firebase_messagingSenderId') || '',
+  appId: serviceWorkerUrl.searchParams.get('firebase_appId') || '',
+  measurementId: serviceWorkerUrl.searchParams.get('firebase_measurementId') || '',
+  databaseURL: serviceWorkerUrl.searchParams.get('firebase_databaseURL') || ''
 };
+
+const missingFirebaseConfigKeys = [
+  'apiKey',
+  'authDomain',
+  'projectId',
+  'storageBucket',
+  'messagingSenderId',
+  'appId'
+].filter((key) => !firebaseConfig[key]);
+
+if (missingFirebaseConfigKeys.length > 0) {
+  throw new Error(`[SW] Missing Firebase config in service worker URL: ${missingFirebaseConfigKeys.join(', ')}`);
+}
 
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
