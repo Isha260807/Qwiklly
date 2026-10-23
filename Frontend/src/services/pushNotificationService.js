@@ -423,20 +423,30 @@ function setupForegroundNotificationHandler(handler) {
       document.visibilityState === 'visible' &&
       (title || body)
     ) {
-      const foregroundNotification = new window.Notification(title, {
+      // `new Notification()` throws "Illegal constructor" on Android Chrome, so
+      // go through the service worker registration, which works everywhere.
+      const foregroundOptions = {
         body,
+        icon: data.icon || '/Homster-logo.png',
+        data: { ...data, url: data.link || '/' },
         ...(data.notificationId || data.bookingId
           ? { tag: data.notificationId || data.bookingId }
           : {})
-      });
-
-      foregroundNotification.onclick = () => {
-        window.focus();
-        if (data.link) {
-          window.location.assign(data.link);
-        }
-        foregroundNotification.close();
       };
+
+      navigator.serviceWorker.getRegistration('/')
+        .then((registration) => {
+          if (registration?.showNotification) {
+            return registration.showNotification(title, foregroundOptions);
+          }
+          const fallback = new window.Notification(title, foregroundOptions);
+          fallback.onclick = () => {
+            window.focus();
+            if (data.link) window.location.assign(data.link);
+            fallback.close();
+          };
+        })
+        .catch((err) => console.warn('[FCM] Foreground notification failed:', err));
     }
 
     // Call custom handler (e.g. for toast)
