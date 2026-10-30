@@ -122,14 +122,47 @@ async function requestNotificationPermission() {
  * Get FCM token from Firebase
  * @returns {Promise<string|null>}
  */
+let lastFcmError = '';
+
+/**
+ * Last reason a web FCM token could not be obtained (shown to the user by the test button).
+ * @returns {string}
+ */
+function getLastFcmError() {
+  return lastFcmError;
+}
+
+/**
+ * Drop a stale browser push subscription (e.g. created earlier for another
+ * Firebase project/VAPID key) so Firebase can subscribe again cleanly.
+ */
+async function resetPushSubscription() {
+  try {
+    const registration = await navigator.serviceWorker.getRegistration('/');
+    const subscription = await registration?.pushManager?.getSubscription();
+    if (subscription) await subscription.unsubscribe();
+    if (typeof window !== 'undefined' && window.indexedDB) {
+      window.indexedDB.deleteDatabase('firebase-messaging-database');
+      window.indexedDB.deleteDatabase('firebase-installations-database');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  } catch (resetErr) {
+    console.warn('[FCM] Failed to reset push subscription:', resetErr);
+  }
+}
+
 async function getFCMToken(retryCount = 0) {
   try {
+    lastFcmError = '';
+
     if (!messaging) {
+      lastFcmError = 'Firebase is not configured on this site (missing env variables).';
       console.error('Firebase messaging not initialized');
       return null;
     }
 
     if (!VAPID_KEY) {
+      lastFcmError = 'Push key (VAPID) is missing on this site.';
       console.error('[FCM] VITE_FIREBASE_VAPID_KEY is missing from the frontend environment');
       return null;
     }
@@ -169,6 +202,13 @@ async function getFCMToken(retryCount = 0) {
         console.error('Failed to reset Firebase IndexedDB:', dbErr);
       }
     }
+    // A subscription made with an older VAPID key/project blocks a new subscribe().
+    if (retryCount === 0 && (error?.name === 'InvalidStateError' || error?.name === 'AbortError')) {
+      console.warn('⚠️ Stale push subscription detected. Resetting and retrying...');
+      await resetPushSubscription();
+      return await getFCMToken(1);
+    }
+    lastFcmError = error?.code || error?.name || error?.message || 'Unknown error while getting push token.';
     console.error('❌ Error getting FCM token:', error);
     return null;
   }
@@ -383,20 +423,30 @@ function setupForegroundNotificationHandler(handler) {
       document.visibilityState === 'visible' &&
       (title || body)
     ) {
-      const foregroundNotification = new window.Notification(title, {
+      // `new Notification()` throws "Illegal constructor" on Android Chrome, so
+      // go through the service worker registration, which works everywhere.
+      const foregroundOptions = {
         body,
+        icon: data.icon || '/Homster-logo.png',
+        data: { ...data, url: data.link || '/' },
         ...(data.notificationId || data.bookingId
           ? { tag: data.notificationId || data.bookingId }
           : {})
-      });
-
-      foregroundNotification.onclick = () => {
-        window.focus();
-        if (data.link) {
-          window.location.assign(data.link);
-        }
-        foregroundNotification.close();
       };
+
+      navigator.serviceWorker.getRegistration('/')
+        .then((registration) => {
+          if (registration?.showNotification) {
+            return registration.showNotification(title, foregroundOptions);
+          }
+          const fallback = new window.Notification(title, foregroundOptions);
+          fallback.onclick = () => {
+            window.focus();
+            if (data.link) window.location.assign(data.link);
+            fallback.close();
+          };
+        })
+        .catch((err) => console.warn('[FCM] Foreground notification failed:', err));
     }
 
     // Call custom handler (e.g. for toast)
@@ -404,6 +454,23 @@ function setupForegroundNotificationHandler(handler) {
       handler(payload);
     }
   });
+}
+
+/**
+ * Browsers (esp. Chrome on Android) ignore notification permission prompts that
+ * are not triggered by a tap. If registration at login could not get permission,
+ * retry once on the user's next tap.
+ * @param {string} userType - 'user', 'vendor', or 'worker'
+ */
+function registerFCMTokenOnNextGesture(userType = 'user') {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (isFlutterWebView() || Notification.permission !== 'default') return;
+
+  const handler = () => {
+    document.removeEventListener('click', handler, true);
+    registerFCMToken(userType, true).catch(console.error);
+  };
+  document.addEventListener('click', handler, true);
 }
 
 /**
@@ -483,6 +550,14 @@ async function testPushNotification(userType = 'user') {
       }
     }
 
+    // Without a registered token the backend has nothing to send to; report the real reason.
+    if (!token) {
+      const reason = platform === 'mobile'
+        ? 'Could not get the device push token from the app.'
+        : `Could not get a push token for this browser${lastFcmError ? ` (${lastFcmError})` : ''}.`;
+      return { success: false, error: reason };
+    }
+
     // 4. Send request to backend
     const authTokenKey = userType === 'vendor' ? 'vendorAccessToken' : 'accessToken';
     const authToken = localStorage.getItem(authTokenKey) || sessionStorage.getItem(authTokenKey);
@@ -535,6 +610,8 @@ async function testPushNotification(userType = 'user') {
 export {
   initializePushNotifications,
   registerFCMToken,
+  registerFCMTokenOnNextGesture,
+  getLastFcmError,
   removeFCMToken,
   setupForegroundNotificationHandler,
   requestNotificationPermission,

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { themeColors } from '../../../../theme';
 import { userAuthService } from '../../../../services/authService';
-import api from '../../../../services/api';
+import { testPushNotification } from '../../../../services/pushNotificationService';
 import { motion } from 'framer-motion';
 import {
   FiArrowLeft,
@@ -126,8 +126,8 @@ const Account = () => {
     const toastId = toast.loading('Sending test notification...');
 
     try {
-      const response = await api.post('/users/fcm-tokens/test');
-      const result = response.data;
+      // Registers this device's token (asks permission on tap) before sending the test.
+      const result = await testPushNotification('user');
 
       if (!result?.success) {
         throw new Error(result?.error || result?.message || 'Test notification could not be sent.');
