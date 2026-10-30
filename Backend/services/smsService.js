@@ -21,20 +21,23 @@ const sendSMS = async (phone, message) => {
       return { success: false, message: 'SMS configuration missing' };
     }
 
-    // Build parameters with multiple possible auth field names
+    // Build parameters for SMS India Hub
+    // Note: SMSIndiaHub accepts 'apikey' directly for authentication
+    const cleanPhone = phone.toString().replace(/[^0-9]/g, '').slice(-10); // Standardize to 10 digits
     const params = {
-      // Primary fields (as per docs)
-      user: process.env.SMS_INDIA_HUB_USERNAME,
-      password: process.env.SMS_INDIA_HUB_API_KEY,
-      // Fallback fields for compatibility
-      username: process.env.SMS_INDIA_HUB_USERNAME,
       apikey: process.env.SMS_INDIA_HUB_API_KEY,
-      msisdn: phone,
+      msisdn: cleanPhone,
       sid: process.env.SMS_INDIA_HUB_SENDER_ID,
       msg: message,
       fl: 0,
       gwid: 2,
     };
+
+    // If username is provided and needed
+    if (process.env.SMS_INDIA_HUB_USERNAME) {
+      params.user = process.env.SMS_INDIA_HUB_USERNAME;
+    }
+
     // Add DLT Template ID if available
     if (process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID) {
       params.TemplateId = process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID;
@@ -98,10 +101,12 @@ const sendSMS = async (phone, message) => {
  * @param {string} otp - OTP code
  */
 const sendOTP = async (phone, otp) => {
-  // DLT-compliant message format (must match registered template)
-  // Template: "Welcome to the ##var## powered by SMSINDIAHUB. Your OTP for registration is ##var##"
-  const appName = 'HOMECARE';
-  const message = `Welcome to the ${appName} powered by SMSINDIAHUB. Your OTP for registration is ${otp}`;
+  // DLT-compliant message format (must match registered template exactly, incl. spacing/punctuation)
+  // Template "App Login" (DLT ID 1077104580057767222):
+  // "Welcome to ##var##, powered by ##var##. Your OTP for registration ##var##. This OTP is valid for 10 minutes. Please do not share it with anyone.BGADPL"
+  const appName = process.env.SMS_APP_NAME || 'Qwiklly';
+  const poweredBy = process.env.SMS_POWERED_BY || 'Qwiklly';
+  const message = `Welcome to ${appName}, powered by ${poweredBy}. Your OTP for registration ${otp}. This OTP is valid for 10 minutes. Please do not share it with anyone.BGADPL`;
 
   console.log(`[SMS] Attempting to send OTP to ${phone}`);
   console.log(`[SMS] Message: ${message}`);
