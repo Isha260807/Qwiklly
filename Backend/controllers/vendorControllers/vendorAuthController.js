@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const Vendor = require('../../models/Vendor');
-const { generateOTP, hashOTP, storeOTP, verifyOTP, checkRateLimit } = require('../../utils/redisOtp.util');
+const { isDemoPhone, generateOTP, hashOTP, storeOTP, verifyOTP, checkRateLimit } = require('../../utils/redisOtp.util');
 const { generateTokenPair, verifyRefreshToken, generateVerificationToken, verifyVerificationToken } = require('../../utils/tokenService');
 const { sendOTP: sendSMSOTP } = require('../../services/smsService');
 const cloudinaryService = require('../../services/cloudinaryService');
@@ -84,7 +84,7 @@ const sendOTP = async (req, res) => {
     }
 
     // 2. Generate OTP
-    const otp = generateOTP();
+    const otp = generateOTP(phone, 'vendor');
     const otpHash = hashOTP(otp);
 
     // 3. Store OTP (Redis primary, MongoDB fallback)
@@ -93,15 +93,18 @@ const sendOTP = async (req, res) => {
     // 4. Trigger SMS delivery without blocking the API response.
     // OTP is already stored, so the vendor can open the OTP screen immediately
     // even if the SMS gateway is slow or temporarily unavailable.
-    void sendSMSOTP(phone, otp)
-      .then((smsResult) => {
-        if (!smsResult.success) {
-          console.warn(`[OTP] SMS failed for vendor ${phone}, but OTP stored`);
-        }
-      })
-      .catch((smsError) => {
-        console.error(`[OTP] SMS delivery error for vendor ${phone}:`, smsError.message);
-      });
+    // Skipped for the demo account to save SMS credits.
+    if (!isDemoPhone(phone, 'vendor')) {
+      void sendSMSOTP(phone, otp)
+        .then((smsResult) => {
+          if (!smsResult.success) {
+            console.warn(`[OTP] SMS failed for vendor ${phone}, but OTP stored`);
+          }
+        })
+        .catch((smsError) => {
+          console.error(`[OTP] SMS delivery error for vendor ${phone}:`, smsError.message);
+        });
+    }
 
     // Log OTP in development mode
     if (process.env.NODE_ENV === 'development' || process.env.USE_DEFAULT_OTP === 'true') {
@@ -251,7 +254,7 @@ const verifyPhoneChangeOTP = async (req, res) => {
       });
     }
 
-    const verification = await verifyOTP(phone, req.body.otp);
+    const verification = await verifyOTP(phone, req.body.otp, 'vendor');
     if (!verification.success) {
       return res.status(400).json({
         success: false,
@@ -309,7 +312,7 @@ const verifyLogin = async (req, res) => {
     const { phone, otp } = req.body;
 
     // 1. Verify OTP
-    const verification = await verifyOTP(phone, otp);
+    const verification = await verifyOTP(phone, otp, 'vendor');
     if (!verification.success) {
       return res.status(400).json({
         success: false,
@@ -418,7 +421,7 @@ const register = async (req, res) => {
     } else {
       // Fallback OTP
       if (!req.body.otp) return res.status(400).json({ success: false, message: 'Verification required.' });
-      const ver = await verifyOTP(phone, req.body.otp);
+      const ver = await verifyOTP(phone, req.body.otp, 'vendor');
       if (!ver.success) return res.status(400).json({ success: false, message: ver.message });
     }
 
@@ -552,7 +555,7 @@ const login = async (req, res) => {
     const { phone, otp } = req.body;
 
     // Verify OTP (checks Redis first, falls back to MongoDB)
-    const verification = await verifyOTP(phone, otp);
+    const verification = await verifyOTP(phone, otp, 'vendor');
     if (!verification.success) {
       return res.status(400).json({
         success: false,

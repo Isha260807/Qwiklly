@@ -1,6 +1,6 @@
 const User = require('../../models/User');
 const { generateTokenPair, verifyRefreshToken, generateVerificationToken, verifyVerificationToken } = require('../../utils/tokenService');
-const { generateOTP, hashOTP, storeOTP, verifyOTP, checkRateLimit } = require('../../utils/redisOtp.util');
+const { isDemoPhone, generateOTP, hashOTP, storeOTP, verifyOTP, checkRateLimit } = require('../../utils/redisOtp.util');
 const { sendOTP: sendSMSOTP } = require('../../services/smsService');
 const { sendOTPEmail, sendWelcomeEmail } = require('../../services/emailService');
 const { USER_ROLES } = require('../../utils/constants');
@@ -63,14 +63,16 @@ const sendOTP = async (req, res) => {
     }
 
     // 2. Generate OTP
-    const otp = generateOTP();
+    const otp = generateOTP(phone, 'user');
     const otpHash = hashOTP(otp);
 
     // 3. Store OTP (Redis primary, MongoDB fallback)
     await storeOTP(phone, otpHash);
 
-    // 4. Send OTP via SMS
-    const smsResult = await sendSMSOTP(phone, otp);
+    // 4. Send OTP via SMS (skipped for the demo account to save SMS credits)
+    const smsResult = isDemoPhone(phone, 'user')
+      ? { success: true, skipped: true }
+      : await sendSMSOTP(phone, otp);
 
     // Log OTP in development mode only (NEVER in production)
     if (process.env.NODE_ENV === 'development' || process.env.USE_DEFAULT_OTP === 'true') {
@@ -109,7 +111,7 @@ const verifyLogin = async (req, res) => {
     const { phone, otp } = req.body;
 
     // 1. Verify OTP
-    const verification = await verifyOTP(phone, otp);
+    const verification = await verifyOTP(phone, otp, 'user');
     if (!verification.success) {
       return res.status(400).json({
         success: false,
@@ -226,7 +228,7 @@ const register = async (req, res) => {
       if (!req.body.otp) {
         return res.status(400).json({ success: false, message: 'Verification token or OTP required.' });
       }
-      const verification = await verifyOTP(phone, req.body.otp);
+      const verification = await verifyOTP(phone, req.body.otp, 'user');
       if (!verification.success) {
         return res.status(400).json({ success: false, message: verification.message });
       }
@@ -332,7 +334,7 @@ const login = async (req, res) => {
     const { phone, otp } = req.body;
 
     // Verify OTP (checks Redis first, falls back to MongoDB)
-    const verification = await verifyOTP(phone, otp);
+    const verification = await verifyOTP(phone, otp, 'user');
     if (!verification.success) {
       return res.status(400).json({
         success: false,
