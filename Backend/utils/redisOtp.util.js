@@ -11,12 +11,23 @@ const MAX_ATTEMPTS = parseInt(process.env.OTP_MAX_ATTEMPTS) || 3;
 const RATE_LIMIT_COUNT = parseInt(process.env.OTP_RATE_LIMIT) || 3;
 const RATE_LIMIT_WINDOW = parseInt(process.env.OTP_RATE_WINDOW) || 600;
 
+// Demo accounts (seeded via scripts/seedCredentials.js) that always use the default OTP, per side
+const DEFAULT_OTP = '123456';
+const DEMO_PHONES = {
+  user: '8817921168',
+  vendor: '8817921167'
+};
+
+const isDemoPhone = (phone, role) => Boolean(role && DEMO_PHONES[role] === phone);
+
 /**
  * Generate 6-digit OTP
+ * @param {string} phone - Phone number
+ * @param {'user'|'vendor'} role - Side requesting the OTP (enables demo OTP for that side's demo phone)
  */
-const generateOTP = () => {
-  if (process.env.USE_DEFAULT_OTP === 'true') {
-    return '123456';
+const generateOTP = (phone = null, role = null) => {
+  if (process.env.USE_DEFAULT_OTP === 'true' || isDemoPhone(phone, role)) {
+    return DEFAULT_OTP;
   }
   return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
 };
@@ -100,13 +111,12 @@ const storeOTP = async (phone, otpHash) => {
  * Verify OTP (Redis Primary -> MongoDB Fallback)
  * Returns: { success: true/false, message: string }
  */
-const verifyOTP = async (phone, plainOtp) => {
+const verifyOTP = async (phone, plainOtp, role = null) => {
   console.log(`[OTP] Verifying OTP for phone: ${phone}, OTP: ${plainOtp}`);
 
-  // Default OTP only when explicitly enabled for testing
-  const defaultOtp = '123456';
-  if (plainOtp === defaultOtp && process.env.USE_DEFAULT_OTP === 'true') {
-    console.log(`[OTP] ✅ Default OTP ${defaultOtp} accepted for phone: ${phone}`);
+  // Default OTP for test mode or the demo phone of this side
+  if (plainOtp === DEFAULT_OTP && (process.env.USE_DEFAULT_OTP === 'true' || isDemoPhone(phone, role))) {
+    console.log(`[OTP] ✅ Default OTP ${DEFAULT_OTP} accepted for phone: ${phone}`);
     return { success: true };
   }
 
@@ -215,6 +225,7 @@ const verifyOTP = async (phone, plainOtp) => {
 };
 
 module.exports = {
+  isDemoPhone,
   generateOTP,
   hashOTP,
   checkRateLimit,
