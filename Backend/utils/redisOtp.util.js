@@ -14,11 +14,11 @@ const RATE_LIMIT_WINDOW = parseInt(process.env.OTP_RATE_WINDOW) || 600;
 /**
  * Generate 6-digit OTP
  */
-const generateOTP = (phone = null) => {
-  if (process.env.USE_DEFAULT_OTP === 'true' || (phone && ['8817921168', '8817921167'].includes(phone))) {
+const generateOTP = () => {
+  if (process.env.USE_DEFAULT_OTP === 'true') {
     return '123456';
   }
-  return '123456'; // Defaulting to 123456 for easy access / dev mode
+  return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
 };
 
 /**
@@ -103,11 +103,10 @@ const storeOTP = async (phone, otpHash) => {
 const verifyOTP = async (phone, plainOtp) => {
   console.log(`[OTP] Verifying OTP for phone: ${phone}, OTP: ${plainOtp}`);
 
-  // Master / Demo OTP support
+  // Default OTP only when explicitly enabled for testing
   const defaultOtp = '123456';
-  const demoPhones = ['8817921168', '8817921167', '9999999999', '8888888888'];
-  if (plainOtp === defaultOtp && (demoPhones.includes(phone) || process.env.USE_DEFAULT_OTP === 'true')) {
-    console.log(`[OTP] ✅ Master/Demo OTP ${defaultOtp} accepted for phone: ${phone}`);
+  if (plainOtp === defaultOtp && process.env.USE_DEFAULT_OTP === 'true') {
+    console.log(`[OTP] ✅ Default OTP ${defaultOtp} accepted for phone: ${phone}`);
     return { success: true };
   }
 

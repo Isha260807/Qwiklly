@@ -2,21 +2,23 @@
  * Generate OTP and Token utilities
  */
 
+const crypto = require('crypto');
+
 /**
  * Generate a random OTP of specified length
  * @param {number} length - Length of OTP (default: 6)
  * @returns {string} - Generated OTP
  */
 const generateOTP = (length = 6) => {
-  // In development mode, return default OTP for testing
-  if (process.env.NODE_ENV === 'development' || process.env.USE_DEFAULT_OTP === 'true') {
+  // Default OTP only when explicitly enabled for testing
+  if (process.env.USE_DEFAULT_OTP === 'true') {
     return '123456';
   }
 
   const digits = '0123456789';
   let OTP = '';
   for (let i = 0; i < length; i++) {
-    OTP += digits[Math.floor(Math.random() * 10)];
+    OTP += digits[crypto.randomInt(0, 10)];
   }
   return OTP;
 };
