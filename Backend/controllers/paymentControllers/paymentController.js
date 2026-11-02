@@ -1,10 +1,9 @@
 const Booking = require('../../models/Booking');
 const User = require('../../models/User');
-const Settings = require('../../models/Settings');
 const Plan = require('../../models/Plan');
 const { validationResult } = require('express-validator');
 const { PAYMENT_STATUS, BOOKING_STATUS } = require('../../utils/constants');
-const { createOrder, verifyPayment, verifyWebhookSignature, refundPayment } = require('../../services/razorpayService');
+const { createOrder, verifyPayment, refundPayment } = require('../../services/razorpayService');
 const { createNotification } = require('../notificationControllers/notificationController');
 const { recordBookingEarning } = require('../../services/earningTrackerService');
 const { creditSalaryEarningForBooking } = require('../../services/salaryEarningService');
@@ -489,55 +488,7 @@ const verifyPaymentWebhook = async (req, res) => {
   }
 };
 
-/**
- * Razorpay webhook (server-to-server) — the authoritative source of payment truth,
- * independent of whether the client stayed online long enough to call /verify.
- */
-const handleRazorpayWebhook = async (req, res) => {
-  try {
-    const signature = req.headers['x-razorpay-signature'];
-    const settings = await Settings.findOne({ type: 'global' }).select('razorpayWebhookSecret').lean();
-    const secret = settings?.razorpayWebhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET;
-
-    if (!secret) {
-      console.error('[RazorpayWebhook] No webhook secret configured — rejecting.');
-      return res.status(400).json({ success: false, message: 'Webhook not configured' });
-    }
-
-    const isValid = verifyWebhookSignature(req.rawBody, signature, secret);
-    if (!isValid) {
-      console.warn('[RazorpayWebhook] Invalid signature received.');
-      return res.status(400).json({ success: false, message: 'Invalid signature' });
-    }
-
-    const event = req.body?.event;
-    const paymentEntity = req.body?.payload?.payment?.entity;
-
-    if ((event === 'payment.captured' || event === 'order.paid') && paymentEntity?.order_id) {
-      const booking = await Booking.findOne({ razorpayOrderId: paymentEntity.order_id });
-      if (booking) {
-        await finalizePaymentSuccess(booking, paymentEntity.id);
-      } else {
-        // Not the primary booking payment — check if this is an hourly-service extra-time order
-        const extraBooking = await Booking.findOne({ 'hourlyTracking.extraRazorpayOrderId': paymentEntity.order_id });
-        if (extraBooking) {
-          const { finalizeExtraPaymentSuccess } = require('../bookingControllers/hourlyPaymentController');
-          await finalizeExtraPaymentSuccess(extraBooking, paymentEntity.id);
-        } else {
-          console.warn(`[RazorpayWebhook] No booking found for order ${paymentEntity.order_id}`);
-        }
-      }
-    }
-
-    // Always ack quickly — Razorpay retries on non-200
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('[RazorpayWebhook] Error:', error);
-    // Still ack so Razorpay doesn't hammer retries for a local bug; the payment
-    // remains reconcilable via getPaymentDetails/admin tooling if needed.
-    res.status(200).json({ success: false });
-  }
-};
+// Razorpay webhook handling lives in razorpayWebhookController.js (raw-body route mounted in server.js).
 
 /**
  * Process wallet payment
@@ -1056,7 +1007,7 @@ module.exports = {
   createPaymentOrder,
   getPaymentBreakdown,
   verifyPaymentWebhook,
-  handleRazorpayWebhook,
+  finalizePaymentSuccess,
   processWalletPayment,
   processRefund,
   getPaymentHistory,

@@ -94,14 +94,16 @@ const verifyPayment = (razorpay_order_id, razorpay_payment_id, razorpay_signatur
  * Verify a Razorpay webhook's signature (server-to-server events, independent of the client)
  */
 const verifyWebhookSignature = (rawBody, signature, secret) => {
-  if (!rawBody || !signature || !secret) return false;
+  if (!rawBody || !signature || !secret || typeof signature !== 'string') return false;
   const crypto = require('crypto');
-  const generated_signature = crypto
+  const expected = crypto
     .createHmac('sha256', secret)
     .update(rawBody)
-    .digest('hex');
+    .digest();
 
-  return generated_signature === signature;
+  // Razorpay sends a hex digest; decode and compare in constant time.
+  if (!/^[0-9a-fA-F]{64}$/.test(signature)) return false;
+  return crypto.timingSafeEqual(expected, Buffer.from(signature, 'hex'));
 };
 
 /**
