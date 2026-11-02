@@ -63,6 +63,15 @@ app.use(cors({
 
 // CORS configuration finished above
 
+// Razorpay webhook: must receive the RAW body (HMAC is computed over the exact bytes), so it is
+// mounted before express.json(). Authenticated by signature, not by user session.
+// /api/payments/webhook is the legacy path kept so an existing dashboard config keeps working.
+app.post(
+  ['/api/payment/razorpay/webhook', '/api/payments/webhook'],
+  express.raw({ type: 'application/json', limit: '1mb' }),
+  require('./controllers/paymentControllers/razorpayWebhookController').handleRazorpayWebhook
+);
+
 // Body parser middleware
 // The `verify` callback stashes the raw request bytes on req.rawBody — needed to
 // validate the Razorpay webhook's HMAC signature, which is computed over the raw body.

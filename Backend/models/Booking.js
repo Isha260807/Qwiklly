@@ -277,6 +277,25 @@ const bookingSchema = new mongoose.Schema({
     default: null,
     index: true
   },
+  // Gateway-confirmed capture details, written only by the Razorpay webhook.
+  razorpayCapture: {
+    amount: { type: Number, default: null }, // paise, as reported by Razorpay
+    currency: { type: String, default: null },
+    method: { type: String, default: null },
+    capturedAt: { type: Date, default: null },
+    eventId: { type: String, default: null }
+  },
+  // Last gateway-reported payment failure (retry-able; cleared by a later success).
+  paymentFailure: {
+    razorpayPaymentId: { type: String, default: null },
+    code: { type: String, default: null },
+    reason: { type: String, default: null },
+    description: { type: String, default: null },
+    step: { type: String, default: null },
+    source: { type: String, default: null },
+    failedAt: { type: Date, default: null },
+    eventId: { type: String, default: null }
+  },
   // Cash Collection Details
   cashCollected: {
     type: Boolean,

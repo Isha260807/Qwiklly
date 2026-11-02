@@ -7,7 +7,6 @@ const {
   createPaymentOrder,
   getPaymentBreakdown,
   verifyPaymentWebhook,
-  handleRazorpayWebhook,
   processWalletPayment,
   processRefund,
   getPaymentHistory,
@@ -41,8 +40,8 @@ const refundValidation = [
 router.post('/breakdown', authenticate, isUser, createOrderValidation, getPaymentBreakdown);
 router.post('/create-order', authenticate, isUser, createOrderValidation, createPaymentOrder);
 router.post('/verify', authenticate, isUser, verifyPaymentValidation, verifyPaymentWebhook);
-// Razorpay calls this directly (server-to-server) — signature verification is the auth, no user session exists.
-router.post('/webhook', handleRazorpayWebhook);
+// NOTE: the Razorpay webhook is NOT here. It needs the raw body, so it is mounted in server.js
+// before express.json() at /api/payment/razorpay/webhook (legacy alias: /api/payments/webhook).
 router.post('/wallet', authenticate, isUser, walletPaymentValidation, processWalletPayment);
 router.post('/refund', authenticate, isUser, refundValidation, processRefund);
 router.get('/history', authenticate, isUser, getPaymentHistory);
