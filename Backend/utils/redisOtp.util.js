@@ -112,7 +112,7 @@ const storeOTP = async (phone, otpHash) => {
  * Returns: { success: true/false, message: string }
  */
 const verifyOTP = async (phone, plainOtp, role = null) => {
-  console.log(`[OTP] Verifying OTP for phone: ${phone}, OTP: ${plainOtp}`);
+  console.log(`[OTP] Verifying OTP for phone: ${phone}`);
 
   // Default OTP for test mode or the demo phone of this side
   if (plainOtp === DEFAULT_OTP && (process.env.USE_DEFAULT_OTP === 'true' || isDemoPhone(phone, role))) {

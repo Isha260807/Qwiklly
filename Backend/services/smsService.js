@@ -10,14 +10,14 @@ const sendSMS = async (phone, message) => {
   try {
     // Check for Test Mode
     if (process.env.USE_DEFAULT_OTP === 'true') {
-      console.log(`[SMS MOCK] To: ${phone}, Msg: ${message}`);
+      console.log(`[SMS MOCK] To: ${phone}`);
       return { success: true, data: 'Mock Success' };
     }
 
     // Check if SMS credentials are configured
     if (!process.env.SMS_INDIA_HUB_API_KEY || !process.env.SMS_INDIA_HUB_SENDER_ID) {
       console.warn('[SMS] SMS credentials missing in .env. SMS not sent.');
-      console.log(`[SMS MOCK] To: ${phone}, Msg: ${message}`);
+      console.log(`[SMS MOCK] To: ${phone}`);
       return { success: false, message: 'SMS configuration missing' };
     }
 
@@ -45,16 +45,11 @@ const sendSMS = async (phone, message) => {
 
     // Use HTTPS for secure transmission
     const baseUrl = process.env.SMS_BASE_URL || 'https://cloud.smsindiahub.in/vendorsms/pushsms.aspx';
-    console.log('[SMS] Sending request to (HTTPS):', baseUrl);
-    console.log('[SMS] Params (masked):', { ...params, password: '***', apikey: '***' });
 
     // SMS gateways can leave a request open for minutes when unavailable.
     // Keep the provider call bounded so it can never block OTP delivery flow.
     const timeoutMs = Number.parseInt(process.env.SMS_TIMEOUT_MS, 10) || 10000;
     const response = await axios.get(baseUrl, { params, timeout: timeoutMs });
-
-    console.log('[SMS] Response status:', response.status);
-    console.log('[SMS] Response data:', response.data);
 
     // Check for successful response
     // SMS India Hub can return JSON object OR string
@@ -78,7 +73,9 @@ const sendSMS = async (phone, message) => {
       console.log(`[SMS] ✅ SMS sent successfully to ${phone}`);
       return { success: true, data: response.data };
     } else {
-      console.error(`[SMS] ❌ SMS Provider Error:`, JSON.stringify(response.data));
+      // Failure responses can echo the message text (incl. OTP), so keep only the status fields
+      const { ErrorCode, ErrorMessage } = typeof data === 'object' && data !== null ? data : {};
+      console.error(`[SMS] ❌ SMS Provider Error:`, typeof data === 'object' ? JSON.stringify({ ErrorCode, ErrorMessage }) : String(data).slice(0, 100));
       // Parse common string errors if it is a string
       if (typeof data === 'string' && data.includes('Invalid Login')) {
         console.error('[SMS] ⚠️  Authentication failed - check SMS_INDIA_HUB_USERNAME and SMS_INDIA_HUB_API_KEY');
@@ -108,13 +105,10 @@ const sendOTP = async (phone, otp) => {
   const poweredBy = process.env.SMS_POWERED_BY || 'Qwiklly';
   const message = `Welcome to ${appName}, powered by ${poweredBy}. Your OTP for registration ${otp}. This OTP is valid for 10 minutes. Please do not share it with anyone.BGADPL`;
 
-  console.log(`[SMS] Attempting to send OTP to ${phone}`);
-  console.log(`[SMS] Message: ${message}`);
-
   const result = await sendSMS(phone, message);
 
   if (!result.success) {
-    console.error(`[SMS] Failed to send OTP to ${phone}:`, result.error);
+    console.error(`[SMS] Failed to send OTP to ${phone}`);
   }
 
   return result;
